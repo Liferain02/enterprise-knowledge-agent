@@ -16,6 +16,7 @@ from core.mcp_client import init_mcp, close_mcp
 settings = get_settings()
 
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
