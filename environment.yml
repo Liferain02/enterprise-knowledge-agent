@@ -1,0 +1,49 @@
+name: agent-demo
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Python
+  - python=3.12
+  
+  # 基础工具 (conda 可用)
+  - pip
+  - numpy>=1.24.0
+  - httpx>=0.27.0
+  - beautifulsoup4>=4.12.0
+  - lxml>=4.9.0
+  - pypdf>=4.0.0
+  - python-docx>=1.0.0
+  - aiofiles>=23.0.0
+  
+  # FastAPI Web框架
+  - fastapi>=0.115.0
+  - uvicorn>=0.30.0
+  - sse-starlette>=2.0.0
+  
+  # 数据验证和序列化
+  - pydantic>=2.0.0
+  - pydantic-settings>=2.0.0
+  - python-dotenv>=1.0.0
+  
+  # 向量数据库
+  - chromadb>=0.4.0
+  
+  # pip 管理的包 (LangChain/LangGraph 相关包在 conda 中版本不全)
+  - pip:
+    # LangChain 核心 (>=0.3版本，实际包含1.0+功能)
+    - langchain>=0.3.0
+    - langchain-core>=0.3.0
+    - langchain-openai>=0.2.0
+    - langchain-chroma>=0.1.0
+    - langchain-text-splitters>=0.3.0
+    
+    # LangGraph 工作流编排
+    - langgraph>=0.2.0
+    - langgraph-prebuilt>=0.1.0
+    
+    # MCP (Model Context Protocol)
+    - mcp>=1.0.0
+    
+    # 其他 pip 包
+    - tiktoken>=0.7.0
