@@ -2,6 +2,7 @@
 MCP工具实现模块
 支持连接外部 MCP 服务器，同时也保留自定义工具
 """
+import asyncio
 from typing import Any, Dict, List, Optional, Callable
 from pydantic import BaseModel, Field
 from langchain_core.tools import BaseTool
@@ -39,7 +40,9 @@ class MCPClient:
                 env=self.config.env or None
             )
             
-            # 创建客户端连接
+            print(f"  启动命令: {self.config.command} {' '.join(self.config.args)}")
+            
+            # 使用上下文管理器
             async with stdio_client(server_params) as (read, write):
                 self._session = ClientSession(read, write)
                 await self._session.initialize()
@@ -48,9 +51,14 @@ class MCPClient:
                 tools_response = await self._session.list_tools()
                 self._tools = tools_response.tools
                 
+                print(f"  获取到 {len(self._tools)} 个工具")
+                # 保持连接活跃
                 return True
+                
         except Exception as e:
-            print(f"连接 MCP 服务器失败: {e}")
+            print(f"  连接错误: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     async def call_tool(self, tool_name: str, arguments: dict) -> Any:
@@ -63,8 +71,16 @@ class MCPClient:
     
     async def disconnect(self):
         """断开连接"""
-        if hasattr(self, '_session'):
-            await self._session.close()
+        try:
+            if hasattr(self, '_session') and self._session:
+                await self._session.close()
+            # 清理stdio_client资源
+            if hasattr(self, '_write') and self._write:
+                await self._write.aclose()
+            if hasattr(self, '_read') and self._read:
+                await self._read.aclose()
+        except Exception as e:
+            print(f"  关闭会话时出错: {e}")
     
     def get_tools(self) -> List:
         """获取工具列表"""

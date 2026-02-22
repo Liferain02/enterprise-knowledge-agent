@@ -23,10 +23,16 @@ class MCPConnectionManager:
         if not MCPConnectionManager._initialized:
             self.tool_manager: Optional[MCPToolManager] = None
             self.mcp_clients: Dict[str, MCPClient] = {}
+            self._initialized_connect = False
             MCPConnectionManager._initialized = True
     
     async def initialize(self):
-        """初始化 MCP 连接"""
+        """初始化 MCP 连接（懒加载模式）"""
+        # 如果已经初始化过，直接返回
+        if self._initialized_connect:
+            return
+        
+        self._initialized_connect = True
         settings = get_settings()
         
         # 如果未启用 MCP，直接返回
@@ -50,6 +56,7 @@ class MCPConnectionManager:
                 server_config = MCPServerConfig(**config)
                 print(f"正在连接 MCP 服务器: {server_config.name}...")
                 
+                # 直接调用连接
                 success = await self.tool_manager.connect_mcp_server(server_config)
                 
                 if success:

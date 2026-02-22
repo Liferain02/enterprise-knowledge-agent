@@ -1,6 +1,7 @@
 """
 企业知识库智能助手 - 主入口
 """
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,21 +17,28 @@ from core.mcp_client import init_mcp, close_mcp
 settings = get_settings()
 
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    # 启动时连接 MCP 服务器
+    # 启动时初始化 MCP 服务器
     print("=" * 50)
-    print("正在初始化 MCP 服务器连接...")
-    await init_mcp()
+    print("正在初始化 MCP 服务器...")
+    
+    try:
+        await init_mcp()
+    except Exception as e:
+        print(f"MCP 初始化出错（不影响运行）: {e}")
+    
     print("=" * 50)
     
     yield
     
     # 关闭时断开 MCP 连接
     print("正在关闭 MCP 服务器连接...")
-    await close_mcp()
+    try:
+        await close_mcp()
+    except Exception as e:
+        print(f"关闭 MCP 出错: {e}")
 
 
 # 创建FastAPI应用
