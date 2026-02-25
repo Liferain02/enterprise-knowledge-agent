@@ -6,14 +6,36 @@ from typing import List, Optional, Dict, Any
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain.chains import create_stuff_documents_chain, create_retrieval_chain
+# LangChain 1.0+ 导入路径
+from langchain.chains import create_stuff_documents_chain
+from langchain.chains.retrieval import create_retrieval_chain
 
 from core.llm import get_llm
 from core.embeddings import get_embeddings
 from rag.vectorstore import get_vectorstore
 from rag.retriever import get_retriever_manager
-from config.prompts import RAG_SYSTEM_PROMPT, RAG_QUESTION_PROMPT
 from config.settings import get_settings
+
+
+# ==================== RAG 提示词 ====================
+
+RAG_SYSTEM_PROMPT = """你是一个企业知识库助手。你的任务是根据给定的上下文信息回答用户的问题。
+
+要求：
+1. 只根据提供的上下文信息回答，不要编造信息
+2. 如果上下文中没有相关信息，请明确告知用户
+3. 在答案中标注信息来源
+4. 保持回答简洁准确
+"""
+
+RAG_QUESTION_PROMPT = """请根据以下上下文信息回答用户的问题。
+
+上下文信息：
+{context}
+
+用户问题：{input}
+
+请给出答案："""
 
 
 class RAGPipeline:
@@ -185,4 +207,3 @@ def run_rag_query(query: str) -> Dict[str, Any]:
     """运行 RAG 查询的便捷函数"""
     pipeline = get_rag_pipeline()
     return pipeline.invoke_with_sources(query)
-

@@ -176,29 +176,59 @@ class MCPClient:
     async def connect(self) -> bool:
         """连接 MCP 服务器"""
         try:
-            from mcp import ClientSession, StdioServerParameters
-            from mcp.client.stdio import stdio_client
-            from contextlib import AsyncExitStack
+            # 尝试导入 MCP 1.x 新版本 API
+            try:
+                from mcp import ClientSession
+                from mcp.client.stdio import StdioClient
+            except ImportError:
+                # 回退到旧版本 API
+                from mcp import ClientSession, StdioServerParameters
+                from mcp.client.stdio import stdio_client
             
-            server_params = StdioServerParameters(
-                command=self.config.command,
-                args=self.config.args,
-                env=self.config.env or None
-            )
+            # 构建服务器参数
+            import inspect
+            if 'StdioServerParameters' in dir():
+                server_params = StdioServerParameters(
+                    command=self.config.command,
+                    args=self.config.args,
+                    env=self.config.env or None
+                )
+            else:
+                # MCP 1.6+ 新 API
+                server_params = {
+                    "command": self.config.command,
+                    "args": self.config.args,
+                    "env": self.config.env or {}
+                }
             
-            stdio_ctx = stdio_client(server_params)
-            read, write = await stdio_ctx.__aenter__()
-            
-            session_ctx = ClientSession(read, write)
-            self._session = await session_ctx.__aenter__()
-            
-            await self._session.initialize()
-            
-            tools_response = await self._session.list_tools()
-            self._tools = tools_response.tools
+            # 创建客户端连接
+            if 'StdioClient' in dir():
+                # MCP 1.6+ 新 API
+                async with StdioClient(**server_params) as (read, write):
+                    session = ClientSession(read, write)
+                    async with session:
+                        await session.initialize()
+                        tools_response = await session.list_tools()
+                        self._tools = tools_response.tools
+            else:
+                # 旧版 API
+                stdio_ctx = stdio_client(server_params)
+                read, write = await stdio_ctx.__aenter__()
+                
+                session_ctx = ClientSession(read, write)
+                self._session = await session_ctx.__aenter__()
+                
+                await self._session.initialize()
+                
+                tools_response = await self._session.list_tools()
+                self._tools = tools_response.tools
             
             return True
             
+        except NotImplementedError as e:
+            print(f"连接错误: MCP 服务器未实现或缺少依赖 (Node.js 模块)")
+            print(f"详情: {e}")
+            return False
         except Exception as e:
             print(f"连接错误: {type(e).__name__}: {e}")
             return False
@@ -213,9 +243,12 @@ class MCPClient:
     
     async def disconnect(self):
         """断开连接"""
-        if self._session:
-            await self._session.__aexit__(None, None, None)
-            self._session = None
+        try:
+            if self._session:
+                await self._session.__aexit__(None, None, None)
+                self._session = None
+        except Exception as e:
+            print(f"断开连接时出错: {e}")
     
     def get_tools(self) -> List:
         """获取工具列表"""
