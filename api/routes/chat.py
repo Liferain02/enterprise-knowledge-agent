@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage
-from agent.graph import run_agent
+from agent.graph import run_agent, get_agent_graph
 from config.settings import get_settings
 
 
@@ -74,20 +74,17 @@ async def get_history(session_id: str):
     """
     获取会话历史
     
-    注意：现在通过 LangGraph Checkpointer 管理历史
+    注意：通过 LangGraph Checkpointer 管理历史
     """
-    from langgraph.checkpoint.memory import MemorySaver
-    from langchain_core.messages import messages_from_dict
-    
     try:
-        # 创建 checkpointer
-        checkpointer = MemorySaver()
+        # 获取全局唯一的 graph 实例
+        graph = get_agent_graph()
         
-        # 获取历史
+        # 通过 graph 的 checkpointer 获取历史
         config = {"configurable": {"thread_id": session_id}}
         
         # 检查是否有历史
-        checkpoint = checkpointer.get(config)
+        checkpoint = graph.checkpointer.get(config)
         
         if checkpoint is None:
             return {
