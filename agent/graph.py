@@ -1,168 +1,217 @@
 """
-LangGraph 图定义模块
-定义 Agent 的工作流图
+LangGraph Multi-Agent 工作流图
+重构后的完整 Agent 架构
 """
-from typing import Dict, Any, TypedDict
+from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import MessagesState
+from langchain_core.messages import HumanMessage, AIMessage
 
 from agent.nodes import (
-    planning_node,
-    memory_node,
-    tool_selection_node,
-    tool_execution_node,
-    generation_node,
-    check_completion_node,
-    error_handling_node
+    supervisor_node,
+    knowledge_agent_node,
+    operation_agent_node,
+    general_agent_node,
+    route_to_agent,
 )
 
 
-# LangGraph 0.2+ 使用 TypedDict 定义状态
-class GraphState(TypedDict):
-    """图状态定义"""
-    input: str
-    session_id: str
-    use_rag: bool
-    iteration: int
-    messages: list
-    tool_results: dict
-    plan: str | None
-    selected_tools: list
-    context: str
-    final_answer: str | None
-    is_done: bool
-    error: str | None
+# ==================== 状态定义 ====================
 
-
-def create_agent_graph():
+class AgentState(MessagesState):
     """
-    创建 Agent 工作流图
+    Agent 状态定义
+    继承 MessagesState 以支持自动消息管理
+    """
+    # 路由决策
+    next_agent: str
+    supervisor_reasoning: str
+    supervisor_reason: str
+    
+    # 执行结果
+    final_answer: str
+    sources: str
+    used_agent: str
+
+
+# ==================== 图创建函数 ====================
+
+def create_multi_agent_graph() -> StateGraph:
+    """
+    创建 Multi-Agent 工作流图
     
     工作流程：
-    1. 规划 (Planning) - 分析问题并制定计划
-    2. 记忆 (Memory) - 检索相关上下文
-    3. 工具选择 (Tool Selection) - 决定使用哪些工具
-    4. 工具执行 (Tool Execution) - 执行选定的工具
-    5. 生成 (Generation) - 生成最终答案
+    1. 接收用户消息
+    2. Supervisor 分析意图并路由
+    3. 根据路由选择对应的 Worker Agent
+    4. Worker Agent 生成答案
+    5. 返回最终答案
     """
     
-    # 创建图 - 使用 GraphState
-    workflow = StateGraph(GraphState)
+    # 创建图
+    workflow = StateGraph(AgentState)
     
     # 添加节点
-    workflow.add_node("planning", planning_node)
-    workflow.add_node("memory", memory_node)
-    workflow.add_node("tool_selection", tool_selection_node)
-    workflow.add_node("tool_execution", tool_execution_node)
-    workflow.add_node("generation", generation_node)
-    workflow.add_node("check_completion", check_completion_node)
-    workflow.add_node("error_handling", error_handling_node)
+    workflow.add_node("supervisor", supervisor_node)
+    workflow.add_node("knowledge_agent", knowledge_agent_node)
+    workflow.add_node("operation_agent", operation_agent_node)
+    workflow.add_node("general_agent", general_agent_node)
     
     # 设置入口点
-    workflow.set_entry_point("memory")
+    workflow.set_entry_point("supervisor")
     
-    # 添加边
-    workflow.add_edge("memory", "generation")
-    workflow.add_edge("generation", "check_completion")
-    
-    # 条件边 - 检查完成状态
+    # 添加条件边 - 根据 Supervisor 决策路由
     workflow.add_conditional_edges(
-        "check_completion",
-        lambda x: "end" if x.get("is_done", False) else "planning",
+        "supervisor",
+        route_to_agent,
         {
-            "end": END,
-            "planning": "planning"
+            "knowledge_agent": "knowledge_agent",
+            "operation_agent": "operation_agent",
+            "general_agent": "general_agent"
         }
     )
     
-    workflow.add_edge("planning", "tool_selection")
-    workflow.add_edge("tool_selection", "tool_execution")
-    workflow.add_edge("tool_execution", "generation")
+    # 所有 Agent 节点都指向 END
+    workflow.add_edge("knowledge_agent", END)
+    workflow.add_edge("operation_agent", END)
+    workflow.add_edge("general_agent", END)
     
-    # 编译图
-    checkpointer = MemorySaver()
-    compiled_graph = workflow.compile(checkpointer=checkpointer)
-    
-    return compiled_graph
-def create_simple_agent_graph() -> StateGraph:
+    return workflow
+
+
+# ==================== 编译图 ====================
+
+def compile_graph(checkpointer: MemorySaver = None) -> StateGraph:
     """
-    创建简化的 Agent 工作流图
+    编译并返回可执行的图
     
-    简化流程：
-    1. 记忆 (Memory) - 检索相关上下文
-    2. 生成 (Generation) - 生成最终答案
+    Args:
+        checkpointer: 状态持久化检查点，默认使用 MemorySaver
+        
+    Returns:
+        编译后的 LangGraph
     """
+    if checkpointer is None:
+        checkpointer = MemorySaver()
     
-    # 创建图 - 使用 GraphState
-    workflow = StateGraph(GraphState)
+    workflow = create_multi_agent_graph()
+    compiled = workflow.compile(checkpointer=checkpointer)
     
-    # 添加节点
-    workflow.add_node("memory", memory_node)
-    workflow.add_node("generation", generation_node)
-    
-    # 设置入口点
-    workflow.set_entry_point("memory")
-    
-    # 添加边
-    workflow.add_edge("memory", "generation")
-    workflow.add_edge("generation", END)
-    
-    # 编译图
-    checkpointer = MemorySaver()
-    compiled_graph = workflow.compile(checkpointer=checkpointer)
-    
-    return compiled_graph
-# 全局图实例
+    return compiled
+
+
+# ==================== 全局图实例 ====================
+
 _agent_graph = None
-_simple_agent_graph = None
+
+
 def get_agent_graph() -> StateGraph:
-    """获取 Agent 图实例"""
+    """
+    获取 Agent 图实例（单例模式）
+    
+    Returns:
+        编译后的 LangGraph
+    """
     global _agent_graph
     if _agent_graph is None:
-        _agent_graph = create_agent_graph()
+        _agent_graph = compile_graph()
     return _agent_graph
-def get_simple_agent_graph() -> StateGraph:
-    """获取简化版 Agent 图实例"""
-    global _simple_agent_graph
-    if _simple_agent_graph is None:
-        _simple_agent_graph = create_simple_agent_graph()
-    return _simple_agent_graph
+
+
+# ==================== 执行入口函数 ====================
+
 def run_agent(
     input_text: str,
     session_id: str = "default",
-    use_rag: bool = True,
     config: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
-    运行 Agent
+    运行 Agent 的入口函数
+    
+    Args:
+        input_text: 用户输入
+        session_id: 会话ID（用于状态持久化）
+        config: 额外配置
+        
+    Returns:
+        包含 final_answer 的字典
+    """
+    # 获取图
+    graph = get_agent_graph()
+    
+    # 构建配置（包含 thread_id 用于状态持久化）
+    run_config = config or {}
+    if "configurable" not in run_config:
+        run_config["configurable"] = {}
+    run_config["configurable"]["thread_id"] = session_id
+    
+    # 构建初始状态
+    initial_state = {
+        "messages": [HumanMessage(content=input_text)]
+    }
+    
+    # 执行图
+    try:
+        result = graph.invoke(initial_state, run_config)
+        
+        # 提取最终答案
+        final_answer = result.get("final_answer", "抱歉，无法生成答案。")
+        sources = result.get("sources", "")
+        used_agent = result.get("used_agent", "unknown")
+        
+        return {
+            "final_answer": final_answer,
+            "sources": sources,
+            "used_agent": used_agent,
+            "messages": result.get("messages", [])
+        }
+        
+    except Exception as e:
+        print(f"Agent 执行出错: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        return {
+            "final_answer": f"处理请求时出错: {str(e)}",
+            "sources": "",
+            "used_agent": "error",
+            "messages": []
+        }
+
+
+# ==================== 流式执行 ====================
+
+def run_agent_stream(
+    input_text: str,
+    session_id: str = "default",
+    config: Dict[str, Any] = None
+):
+    """
+    流式运行 Agent
     
     Args:
         input_text: 用户输入
         session_id: 会话ID
-        use_rag: 是否使用RAG
-        config: 配置
-    
-    Returns:
-        Agent 执行结果
+        config: 额外配置
+        
+    Yields:
+        流式输出
     """
-    graph = get_agent_graph() if use_rag else get_simple_agent_graph()
+    # 获取图
+    graph = get_agent_graph()
     
+    # 构建配置
+    run_config = config or {}
+    if "configurable" not in run_config:
+        run_config["configurable"] = {}
+    run_config["configurable"]["thread_id"] = session_id
+    
+    # 构建初始状态
     initial_state = {
-        "input": input_text,
-        "session_id": session_id,
-        "use_rag": use_rag,
-        "iteration": 0,
-        "messages": [],
-        "tool_results": {}
+        "messages": [HumanMessage(content=input_text)]
     }
     
-    # LangGraph 需要 config 中包含 thread_id
-    config = config or {}
-    if "configurable" not in config:
-        config["configurable"] = {}
-    config["configurable"]["thread_id"] = session_id
-    
-    result = graph.invoke(initial_state, config)
-    
-    return result
-
+    # 流式执行
+    for chunk in graph.stream(initial_state, run_config):
+        yield chunk

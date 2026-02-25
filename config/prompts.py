@@ -46,7 +46,7 @@ ReAct 工作流程：
 
 请按照以下格式回答：
 Thought: [你的思考]
-Action: [工具名称]|[参数]
+Action: [工具名称]|{"参数键": "参数值"}
 Observation: [工具返回的结果]
 ... (可能多轮)
 Thought: [最终思考]
@@ -54,6 +54,7 @@ Final Answer: [最终答案]
 
 注意：
 - 每轮只能使用一个工具
+- Action 的参数必须是合法的 JSON 格式！例如：write_file|{"path": "./data/knowledge/test.txt", "content": "hello"}
 - 如果工具返回空结果，尝试使用其他工具
 - 最终必须给出 Final Answer
 """

@@ -3,14 +3,19 @@
   "servers": [
     {
       "name": "filesystem",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "./data/knowledge"],
+      "command": "node",
+      "args": [
+        "./node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+        "./data/knowledge"
+      ],
       "env": {}
     },
     {
       "name": "sequential-thinking",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "command": "node",
+      "args": [
+        "./node_modules/@modelcontextprotocol/server-sequential-thinking/dist/index.js"
+      ],
       "env": {}
     }
   ]
