@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage
-from agent.graph import run_agent, get_agent_graph
+from agents.graph import run_agent, get_agent_graph
 from config.settings import get_settings
 
 
