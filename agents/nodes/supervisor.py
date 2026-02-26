@@ -51,6 +51,17 @@ def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
 用户问题：{last_user_message}
 
+## Agent 职责说明
+- **knowledge_agent**: 回答企业知识库相关问题（规章制度、技术文档、FAQ等），从向量数据库检索答案
+- **operation_agent**: 执行操作类任务，包括：时间日期查询、数学计算、调用外部工具（如文件系统 MCP 工具）
+- **general_agent**: 通用对话、闲聊、意图不明确的问题
+
+## 路由规则
+- 询问"现在几点"、"今天日期"、"当前时间"等 → operation_agent（它有时间工具）
+- 需要数学计算（"计算"、"多少"）→ operation_agent
+- 询问公司制度、政策、文档内容 → knowledge_agent
+- 问候、闲聊、无法归类 → general_agent
+
 请严格按照以下 JSON 格式输出：
 {{
   "reasoning": "你的分析理由",
@@ -98,7 +109,7 @@ def fallback_routing(question: str) -> tuple:
         return "operation_agent", "检测到计算相关关键词"
     
     # 需要获取时间的问题
-    time_keywords = ["时间", "日期", "现在几点", "今天几号", "当前时间"]
+    time_keywords = ["时间", "日期", "现在几点", "几点", "几点了", "今天几号", "当前时间", "星期几", "年", "月", "日"]
     if any(k in question_lower for k in time_keywords):
         return "operation_agent", "检测到时间相关关键词"
     

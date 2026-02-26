@@ -22,7 +22,7 @@ def _get_operation_agent(tools):
         llm = get_llm()
         checkpointer = MemorySaver()
         _agent_cache[cache_key] = create_react_agent(
-            llm=llm,
+            model=llm,
             tools=tools,
             prompt=OPERATION_AGENT_SYSTEM_PROMPT,
             checkpointer=checkpointer
