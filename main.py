@@ -2,6 +2,12 @@
 企业知识库智能助手 - 主入口
 """
 import asyncio
+import sys
+
+# Windows 环境下启用 ProactorEventLoop 以支持子进程 - 必须在任何异步导入之前设置
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +17,6 @@ import uvicorn
 from config.settings import get_settings
 from api.routes import chat, knowledge
 from core.mcp_client import init_mcp, close_mcp
-
 
 # 初始化设置
 settings = get_settings()
@@ -26,8 +31,12 @@ async def lifespan(app: FastAPI):
     
     try:
         await init_mcp()
+    except asyncio.CancelledError:
+        print("MCP 初始化被取消")
     except Exception as e:
         print(f"MCP 初始化出错（不影响运行）: {e}")
+        import traceback
+        traceback.print_exc()
     
     print("=" * 50)
     
@@ -314,10 +323,12 @@ async def health_check():
 
 
 if __name__ == "__main__":
+    # Windows 下禁用 reload 模式，避免子进程事件循环问题
     uvicorn.run(
         "main:app",
         host=settings.api_host,
         port=settings.api_port,
-        reload=settings.debug
+        reload=False
     )
+
 

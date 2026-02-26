@@ -1,11 +1,28 @@
 """
 MCP 工具适配器
 将 MCP 工具转换为 LangChain BaseTool 格式
+支持异步执行，避免 asyncio.new_event_loop 反模式
 """
 from typing import List, Any, Optional, Type
 from pydantic import BaseModel, Field, create_model
-from langchain_core.tools import BaseTool, StructuredTool
-from langchain_core.callbacks import CallbackManagerForToolRun
+from langchain_core.tools import BaseTool
+
+
+# 全局事件循环（延迟初始化）
+_loop: Optional[Any] = None
+
+
+def get_event_loop():
+    """获取或创建事件循环"""
+    global _loop
+    try:
+        import asyncio
+        if _loop is None or _loop.is_closed():
+            _loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(_loop)
+        return _loop
+    except Exception:
+        return None
 
 
 def convert_mcp_tools(mcp_tools: List[Any]) -> List[BaseTool]:
@@ -41,14 +58,79 @@ def convert_single_mcp_tool(mcp_tool: Any) -> Optional[BaseTool]:
     Returns:
         LangChain BaseTool 或 None
     """
+    from langchain_core.tools import StructuredTool
+    
     # 获取工具名称和描述
     tool_name = getattr(mcp_tool, 'name', None)
     tool_description = getattr(mcp_tool, 'description', 'MCP 工具')
     
+    # 增强工具描述，避免 LLM 选错工具
+    if tool_name == 'list_directory':
+        tool_description = "列出指定目录下的所有文件和子目录（类似 ls 命令）。参数：path（必填）：要列出的目录路径，例如 './data/knowledge'"
+    elif tool_name == 'list_allowed_directories':
+        tool_description = "查询系统允许访问的目录白名单列表（不是列出目录内容）。无参数。用于检查哪些目录可以被访问。"
+    elif tool_name == 'read_file':
+        tool_description = "读取单个文件的内容（文本文件）。参数：path（必填）：文件的完整路径"
+    elif tool_name == 'read_text_file':
+        tool_description = "读取文本文件内容（功能同 read_file）。参数：path（必填）：文件的完整路径"
+    elif tool_name == 'write_file':
+        tool_description = "写入内容到文件（会覆盖原文件）。参数：path（必填）：文件路径，content（必填）：要写入的内容"
+    elif tool_name == 'create_directory':
+        tool_description = "创建新目录。参数：path（必填）：要创建的目录路径"
+    elif tool_name == 'search_files':
+        tool_description = "在目录中搜索文件名包含关键词的文件。参数：path（必填）：搜索目录，pattern（必填）：搜索关键词"
+    
     if not tool_name:
         return None
     
-    # 获取输入模式
+    # 预先保存工具名称供内部函数使用
+    _tool_name = tool_name
+    
+    def execute_tool(**kwargs) -> str:
+        """执行 MCP 工具（同步包装）"""
+        import asyncio
+        import concurrent.futures
+        from core.mcp_client import mcp_manager
+        
+        async def _async_execute():
+            try:
+                tool_manager = mcp_manager.tool_manager
+                if tool_manager is None:
+                    raise RuntimeError("MCP 工具管理器未初始化")
+                
+                # 查找工具所在的服务器
+                server_name = None
+                for s_name, client in tool_manager._mcp_servers.items():
+                    for t in client.get_tools():
+                        if t.name == _tool_name:
+                            server_name = s_name
+                            break
+                    if server_name:
+                        break
+                
+                if not server_name:
+                    raise RuntimeError(f"未找到工具 {_tool_name} 所在的服务器")
+                
+                result = await tool_manager.call_mcp_tool(server_name, _tool_name, kwargs)
+                return format_mcp_result(result)
+                
+            except Exception as e:
+                return f"MCP 工具执行错误: {str(e)}"
+        
+        # 使用线程池执行异步函数，避免嵌套事件循环问题
+        try:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    future = executor.submit(loop.run_until_complete, _async_execute())
+                    return future.result(timeout=30)
+                finally:
+                    loop.close()
+        except Exception as e:
+            return f"执行工具失败: {str(e)}"
+    
+    # 获取输入模式用于描述参数
     input_schema = getattr(mcp_tool, 'inputSchema', {})
     if isinstance(input_schema, dict):
         properties = input_schema.get('properties', {})
@@ -57,65 +139,21 @@ def convert_single_mcp_tool(mcp_tool: Any) -> Optional[BaseTool]:
         properties = {}
         required = []
     
-    # 创建 Pydantic 模型
+    # 构建参数描述
     args_schema = create_pydantic_model(tool_name, properties, required)
     
-    # 创建工具类
-    class MCPToolWrapper(BaseTool):
-        """MCP 工具包装器"""
-        
-        name: str = tool_name
-        description: str = tool_description
-        args_schema: Type[BaseModel] = args_schema
-        _mcp_tool: Any = mcp_tool
-        
-        def _run(
-            self,
-            **kwargs
-        ) -> str:
-            """执行 MCP 工具（同步版本）"""
-            import asyncio
-            from core.mcp_client import mcp_manager
-            
-            try:
-                # 在新事件循环中运行异步调用
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    result = loop.run_until_complete(
-                        self._async_call_tool(kwargs)
-                    )
-                    return format_mcp_result(result)
-                finally:
-                    loop.close()
-            except Exception as e:
-                return f"MCP 工具执行错误: {str(e)}"
-        
-        async def _async_call_tool(self, arguments: dict) -> Any:
-            """异步调用 MCP 工具"""
-            from core.mcp_client import mcp_manager
-            
-            # 查找工具所在的服务器
-            tool_manager = mcp_manager.tool_manager
-            if tool_manager is None:
-                raise RuntimeError("MCP 工具管理器未初始化")
-            
-            # 查找工具所在的服务器
-            server_name = None
-            for s_name, client in tool_manager._mcp_servers.items():
-                for t in client.get_tools():
-                    if t.name == tool_name:
-                        server_name = s_name
-                        break
-                if server_name:
-                    break
-            
-            if not server_name:
-                raise RuntimeError(f"未找到工具 {tool_name} 所在的服务器")
-            
-            return await tool_manager.call_mcp_tool(server_name, tool_name, arguments)
-    
-    return MCPToolWrapper()
+    try:
+        return StructuredTool.from_function(
+            func=execute_tool,  # 使用 func 而不是 coroutine
+            name=tool_name,
+            description=tool_description,
+            args_schema=args_schema,
+        )
+    except Exception as e:
+        print(f"使用 StructuredTool 创建失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 
 def create_pydantic_model(
@@ -162,7 +200,7 @@ def create_pydantic_model(
     
     # 如果没有属性，添加一个任意类型字段
     if not field_definitions:
-        field_definitions['__input'] = (str, Field(default=""))
+        field_definitions['input'] = (str, Field(default="", description="输入参数"))
     
     model_name = f"{tool_name.replace('-', '_').title()}Input"
     return create_model(model_name, **field_definitions)
@@ -207,4 +245,3 @@ def get_mcp_tools_as_langchain() -> List[BaseTool]:
     except Exception as e:
         print(f"获取 MCP 工具失败: {e}")
         return []
-

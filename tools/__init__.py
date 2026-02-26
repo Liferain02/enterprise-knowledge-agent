@@ -166,23 +166,33 @@ def get_knowledge_tool() -> BaseTool:
     return KnowledgeSearchTool()
 
 
-def get_calculator_tool() -> BaseTool:
-    """获取计算器工具"""
-    return CalculatorTool()
+# ==================== 工具缓存 ====================
+
+_tools_cache = None
 
 
-def get_datetime_tool() -> BaseTool:
-    """获取日期时间工具"""
-    return DateTimeTool()
+def _get_tools_cache() -> List[BaseTool]:
+    """获取工具缓存（带懒加载）"""
+    global _tools_cache
+    if _tools_cache is None:
+        _tools_cache = _load_all_tools()
+    return _tools_cache
 
 
-def get_base_tools() -> List[BaseTool]:
-    """获取所有基础工具（不含 MCP 工具）"""
+def _load_all_tools() -> List[BaseTool]:
+    """加载所有工具（不含 MCP 工具）"""
     return [
-        get_knowledge_tool(),
-        get_calculator_tool(),
-        get_datetime_tool(),
+        KnowledgeSearchTool(),
+        CalculatorTool(),
+        DateTimeTool(),
     ]
+
+
+def _reload_tools():
+    """重新加载工具（清除缓存）"""
+    global _tools_cache
+    _tools_cache = None
+    return _get_tools_cache()
 
 
 # ==================== 统一工具获取 ====================
@@ -190,19 +200,20 @@ def get_base_tools() -> List[BaseTool]:
 def get_all_agent_tools() -> List[BaseTool]:
     """
     获取所有 Agent 可用工具
-    包含基础工具 + MCP 工具
+    包含基础工具 + MCP 工具（带缓存）
     """
     from core.mcp_client import mcp_manager
     
-    tools = get_base_tools()
+    # 基础工具
+    tools = _get_tools_cache().copy()
     
     # 添加 MCP 工具
     try:
         mcp_tools = mcp_manager.get_tools()
-        # MCP 工具需要转换为 LangChain BaseTool 格式
-        from tools.mcp_adapter import convert_mcp_tools
-        mcp_langchain_tools = convert_mcp_tools(mcp_tools)
-        tools.extend(mcp_langchain_tools)
+        if mcp_tools:
+            from tools.mcp_adapter import convert_mcp_tools
+            mcp_langchain_tools = convert_mcp_tools(mcp_tools)
+            tools.extend(mcp_langchain_tools)
     except Exception as e:
         print(f"加载 MCP 工具失败: {e}")
     
@@ -221,12 +232,9 @@ def get_tool_by_name(name: str) -> Optional[BaseTool]:
 
 __all__ = [
     "KnowledgeSearchTool",
-    "CalculatorTool",
+    "CalculatorTool", 
     "DateTimeTool",
     "get_knowledge_tool",
-    "get_calculator_tool",
-    "get_datetime_tool",
-    "get_base_tools",
     "get_all_agent_tools",
     "get_tool_by_name",
 ]

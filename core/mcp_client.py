@@ -3,7 +3,13 @@ MCP 客户端连接管理模块
 负责连接外部 MCP 服务器并管理工具
 """
 import asyncio
+import sys
 from typing import List, Optional, Dict, Any
+
+# Windows 下必须在导入 anyio/mcp 之前设置事件循环
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from config.settings import get_settings
 
 
@@ -60,14 +66,20 @@ class MCPConnectionManager:
                 else:
                     print(f"✗ MCP 服务器 '{server_config.name}' 连接失败")
                     
+            except asyncio.CancelledError:
+                print(f"连接 MCP 服务器 '{config.get('name', 'unknown')}' 被取消")
+                break
             except Exception as e:
                 print(f"连接 MCP 服务器 '{config.get('name', 'unknown')}' 时出错: {e}")
     
     def get_tools(self) -> List:
         """获取所有 MCP 工具"""
         if self.tool_manager is None:
+            print("[DEBUG] tool_manager 未初始化")
             return []
-        return self.tool_manager.get_all_tools()
+        tools = self.tool_manager.get_all_tools()
+        print(f"[DEBUG] MCP Manager 返回 {len(tools)} 个工具")
+        return tools
     
     async def close(self):
         """关闭所有 MCP 连接"""
@@ -226,11 +238,14 @@ class MCPClient:
             return True
             
         except NotImplementedError as e:
-            print(f"连接错误: MCP 服务器未实现或缺少依赖 (Node.js 模块)")
-            print(f"详情: {e}")
+            import traceback
+            print(f"连接错误: NotImplementedError - {e}")
+            print(f"完整堆栈:\n{traceback.format_exc()}")
             return False
         except Exception as e:
-            print(f"连接错误: {type(e).__name__}: {e}")
+            import traceback
+            print(f"连接错误: {type(e).__name__} - {e}")
+            print(f"完整堆栈:\n{traceback.format_exc()}")
             return False
     
     async def call_tool(self, tool_name: str, arguments: dict) -> Any:

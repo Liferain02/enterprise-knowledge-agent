@@ -2,10 +2,10 @@
 General Agent 节点
 负责通用回答（问候、寒暄等）
 """
-from typing import Dict, Any, List, Optional
-from langchain_core.messages import HumanMessage
+from typing import Dict, Any
 from core.llm import get_llm
 from agents.prompts import GENERAL_AGENT_SYSTEM_PROMPT
+from agents.nodes.utils import get_last_user_message
 
 
 def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -18,7 +18,7 @@ def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     
     # 获取用户最新消息
     messages = state.get("messages", [])
-    last_user_message = _get_last_user_message(messages)
+    last_user_message = get_last_user_message(messages)
     
     if not last_user_message:
         return {
@@ -42,12 +42,4 @@ def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         "final_answer": response.content,
         "used_agent": "general_agent"
     }
-
-
-def _get_last_user_message(messages: List) -> Optional[str]:
-    """获取最后一条用户消息"""
-    for msg in reversed(messages):
-        if isinstance(msg, HumanMessage):
-            return msg.content
-    return None
 
