@@ -51,36 +51,114 @@
 5. **流式响应** - 支持Server-Sent Events
 6. **Vue 3前端** - 现代化聊天界面
 
-## 🚀 快速开始
+## 🚀 快速开始（Linux + Git）
 
-### 1. 安装依赖
+下面以 Linux 环境为例，说明从 `git clone` 到可以访问系统的完整步骤。
+
+### 1. 环境准备
+
+- **Conda**: 建议使用 Miniconda / Anaconda 管理 Python 环境
+- **Python**: 建议 Python 3.10+（通过 Conda 创建）
+- **Node.js & npm**: 建议 Node 18+/20+（如 `node --version`、`npm --version`）
+- **Git**: 已安装 `git`
+- **uv**: 高性能 Python 包管理工具（安装方式见下方）
+
+> **uv 安装**（如果尚未安装）：
+> ```bash
+> # 方式一：使用 pip 安装
+> pip install uv
+>
+> # 方式二：使用官方安装脚本（Linux/macOS）
+> curl -LsSf https://astral.sh/uv/install.sh | sh
+> ```
+
+### 2. 克隆项目
 
 ```bash
-pip install -r requirements.txt
-cd frontend && npm install
+git clone https://your.git.repo.url/enterprise-knowledge-agent.git
+cd enterprise-knowledge-agent
 ```
 
-### 2. 配置环境变量
+将上面的地址替换成你自己的 Git 仓库地址。
+
+### 3. 使用 Conda 创建并激活环境（推荐）
 
 ```bash
-# 编辑 config/.env 文件，填入你的 API Key
+# 创建名为 enterprise-agent 的 Conda 环境（Python 版本可按需调整）
+conda create -n enterprise-agent python=3.11 -y
+
+# 激活环境
+conda activate enterprise-agent
+
+# 使用 uv 升级 pip（可选，uv 不依赖 pip）
+uv pip install --upgrade pip
 ```
 
-### 3. 启动服务
+> 提示：如果你仍然选择使用 `python -m venv`，`.venv/` 等虚拟环境目录也已经在 `.gitignore` 中忽略。
+
+### 4. 安装后端依赖（使用 uv）
 
 ```bash
-# 启动后端 (会自动嵌入知识库)
+uv pip install -r requirements.txt
+```
+
+### 5. 配置环境变量
+
+```bash
+# 复制模板
+cp config/env.template config/.env
+
+# 编辑 .env，填入你的 API Key（至少配置千问或 OpenAI 其中一种）
+vim config/.env
+```
+
+关键变量示例（在 `config/.env` 中）：
+
+```bash
+DASHSCOPE_API_KEY=你的千问APIKey
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+DASHSCOPE_MODEL=qwen-plus
+
+# 或者使用 OpenAI：
+# OPENAI_API_KEY=...
+# OPENAI_BASE_URL=https://api.openai.com/v1
+# OPENAI_MODEL=gpt-4o-mini
+```
+
+> `.env` 文件已经在 `.gitignore` 中配置为忽略，**不要**把真实 Key 提交到 Git。
+
+### 6. 安装前端依赖
+
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+### 7. 启动后端服务（Linux）
+
+```bash
+# 确保在项目根目录，虚拟环境已激活
 python main.py
-
-# 启动前端 (新终端)
-cd frontend && npm run dev
 ```
 
-### 4. 访问
+- 默认监听地址：`http://127.0.0.1:8000`
+- 首次启动会自动检查并嵌入 `data/knowledge/` 中的文档到 `chroma_db/`
 
-- 后端: http://localhost:8000
-- 前端: http://localhost:3000
-- API文档: http://localhost:8000/docs
+### 8. 启动前端（新终端窗口）
+
+```bash
+cd enterprise-knowledge-agent/frontend
+npm run dev
+```
+
+默认访问地址：`http://localhost:3000`
+
+### 9. 访问与调试
+
+- **后端**: `http://localhost:8000`
+- **前端**: `http://localhost:3000`
+- **API 文档 (Swagger)**: `http://localhost:8000/docs`
 
 ## 📁 项目结构
 
@@ -207,9 +285,9 @@ GET /health
 
 ## 📝 注意
 
-1. 需要阿里千问 API Key (config/.env)
-2. 首次启动会自动嵌入知识库
-3. Chroma 数据库保存在 `./chroma_db`
+1. 推荐在 **Linux** 环境下运行（当前说明默认以 Linux/Bash 为准）。
+2. 需要在 `config/.env` 中配置阿里千问或 OpenAI 的 API Key。
+3. 首次启动会自动嵌入知识库，向量数据保存在 `./chroma_db` 目录下（已在 `.gitignore` 中忽略）。
 
 ## 📄 License
 

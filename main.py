@@ -4,10 +4,6 @@
 import asyncio
 import sys
 
-# Windows 环境下启用 ProactorEventLoop 以支持子进程 - 必须在任何异步导入之前设置
-if sys.platform == 'win32':
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -353,12 +349,12 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    # Windows 下禁用 reload 模式，避免子进程事件循环问题
+    # Linux 下启用 reload 模式方便开发
     uvicorn.run(
         "main:app",
         host=settings.api_host,
         port=settings.api_port,
-        reload=False
+        reload=True
     )
 
 

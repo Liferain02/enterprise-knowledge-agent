@@ -6,10 +6,6 @@ import asyncio
 import sys
 from typing import List, Optional, Dict, Any
 
-# Windows 下必须在导入 anyio/mcp 之前设置事件循环
-if sys.platform == 'win32':
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-
 from config.settings import get_settings
 
 

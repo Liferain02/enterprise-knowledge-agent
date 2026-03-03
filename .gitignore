@@ -21,8 +21,8 @@ env/
 ENV/
 conda_env/
 
-# 环境变量（包含敏感信息）
-# .env
+# 环境变量（包含敏感信息）- 必须忽略！
+.env
 .env.local
 .env.*.local
 
@@ -46,11 +46,18 @@ logs/
 .coverage
 htmlcov/
 
-# Node.js (MCP 服务器)
-node_modules/
+# Node.js MCP 服务器（保留 package.json 但忽略锁文件）
+package-lock.json
+
+# 前端
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/package-lock.json
 
 # 临时文件
 tmp/
 temp/
 *.tmp
 
+node_modules/
