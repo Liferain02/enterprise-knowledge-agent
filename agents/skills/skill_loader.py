@@ -107,11 +107,14 @@ class SkillLoader:
             skill_dir = self.skills_dir / skill_name
             full_module_path = f"agents.skills.{skill_name}.{module_path}"
             
+            # 将 "scripts.tools" 转换为 "scripts/tools.py"
+            module_file_path = skill_dir / f"{module_path.replace('.', '/')}.py"
+            
             try:
                 # 动态导入模块
                 spec = importlib.util.spec_from_file_location(
                     module_path,
-                    skill_dir / f"{module_path}.py"
+                    module_file_path
                 )
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)

@@ -41,4 +41,3 @@ tiktoken==0.8.0           # 可选保留，如果还想用 OpenAI tokenizer 做 
 
 python-multipart==0.0.12
 python-frontmatter==1.1.0
-python-frontmatter>=1.1.0

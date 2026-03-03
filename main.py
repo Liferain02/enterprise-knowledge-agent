@@ -17,14 +17,44 @@ import uvicorn
 from config.settings import get_settings
 from api.routes import chat, knowledge
 from core.mcp_client import init_mcp, close_mcp
+from rag.vectorstore import get_vectorstore_manager
 
 # 初始化设置
 settings = get_settings()
 
 
+def check_and_ingest_knowledge_base():
+    """启动时检查并嵌入知识库"""
+    try:
+        vectorstore_manager = get_vectorstore_manager()
+        info = vectorstore_manager.get_collection_info()
+        doc_count = info.get("count", 0)
+        
+        if doc_count == 0:
+            print("=" * 50)
+            print("⚠️  知识库为空，正在自动嵌入文档...")
+            print("=" * 50)
+            
+            # 导入并运行嵌入脚本
+            from scripts.ingest import ingest_knowledge_base
+            ingest_knowledge_base(reset=False)
+            
+            print("✅ 知识库嵌入完成！")
+        else:
+            print(f"✅ 知识库已就绪，当前包含 {doc_count} 个文档块")
+    except Exception as e:
+        print(f"⚠️  检查知识库时出错: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    # 启动时检查并嵌入知识库
+    print("=" * 50)
+    print("正在检查知识库状态...")
+    check_and_ingest_knowledge_base()
+    print("=" * 50)
+    
     # 启动时初始化 MCP 服务器
     print("=" * 50)
     print("正在初始化 MCP 服务器...")

@@ -93,8 +93,8 @@ class Settings(BaseSettings):
         description="检索返回的top k结果数"
     )
     similarity_threshold: float = Field(
-        default=0.7,
-        description="相似度阈值"
+        default=0.3,
+        description="相似度阈值 (0-1，越低越宽松)"
     )
     chunk_size: int = Field(
         default=1000,

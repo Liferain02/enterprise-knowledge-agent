@@ -28,11 +28,11 @@ class RetrieverManager:
         """获取检索器实例"""
         if self._retriever is None:
             vectorstore = get_vectorstore(self.collection_name)
+            # 使用更宽松的检索配置
             self._retriever = vectorstore.as_retriever(
-                search_type="similarity_score_threshold",
+                search_type="similarity",  # 使用简单的相似度检索
                 search_kwargs={
-                    "k": self.top_k,
-                    "score_threshold": self.similarity_threshold
+                    "k": self.top_k
                 }
             )
         return self._retriever
