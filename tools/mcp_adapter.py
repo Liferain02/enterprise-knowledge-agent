@@ -68,16 +68,16 @@ def convert_single_mcp_tool(mcp_tool: Any) -> Optional[BaseTool]:
     
     # 预先保存工具名称供内部函数使用
     _tool_name = tool_name
-    
+
     async def execute_tool_async(**kwargs) -> str:
         """执行 MCP 工具（异步实现）"""
         from core.mcp_client import mcp_manager
-        
+
         try:
             tool_manager = mcp_manager.tool_manager
             if tool_manager is None:
                 raise RuntimeError("MCP 工具管理器未初始化")
-            
+
             # 查找工具所在的服务器
             server_name = None
             for s_name, client in tool_manager._mcp_servers.items():
@@ -87,13 +87,13 @@ def convert_single_mcp_tool(mcp_tool: Any) -> Optional[BaseTool]:
                         break
                 if server_name:
                     break
-            
+
             if not server_name:
                 raise RuntimeError(f"未找到工具 {_tool_name} 所在的服务器")
-            
+
             result = await tool_manager.call_mcp_tool(server_name, _tool_name, kwargs)
             return format_mcp_result(result)
-            
+
         except Exception as e:
             return f"MCP 工具执行错误: {str(e)}"
     
@@ -110,15 +110,16 @@ def convert_single_mcp_tool(mcp_tool: Any) -> Optional[BaseTool]:
     args_schema = create_pydantic_model(tool_name, properties, required)
     
     try:
-        return StructuredTool.from_function(
-            func=None,
+        # LangGraph 异步节点只需要异步函数
+        langchain_tool = StructuredTool.from_function(
             coroutine=execute_tool_async,
             name=tool_name,
             description=tool_description,
             args_schema=args_schema,
         )
+        return langchain_tool
     except Exception as e:
-        print(f"使用 StructuredTool 创建失败: {e}")
+        print(f"创建工具失败: {e}")
         import traceback
         traceback.print_exc()
         return None

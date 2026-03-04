@@ -134,11 +134,17 @@
           <button
             class="send-btn"
             @click="sendMessage"
-            :disabled="!inputMessage.trim() || loading"
+            :disabled="!inputMessage.trim() && !loading"
+            :class="{ 'is-loading': loading }"
           >
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- 发送图标 -->
+            <svg v-if="!loading" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <!-- 停止图标 -->
+            <svg v-else viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>
             </svg>
           </button>
         </div>
@@ -171,6 +177,9 @@ const loading = ref(false)
 const currentAgent = ref('supervisor')
 const apiConnected = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
+
+// 用于取消请求
+let abortController: AbortController | null = null
 
 const chatTitle = computed(() => {
   const session = sessionId.value || 'default'
@@ -224,8 +233,26 @@ const scrollToBottom = () => {
 }
 
 const sendMessage = async () => {
+  // 如果正在加载，点击按钮则取消请求
+  if (loading.value) {
+    if (abortController) {
+      abortController.abort()
+      abortController = null
+    }
+    loading.value = false
+    messages.value.push({
+      role: 'assistant',
+      content: '⏹️ 已手动取消回答',
+      agent: currentAgent.value
+    })
+    return
+  }
+
   const text = inputMessage.value.trim()
-  if (!text || loading.value) return
+  if (!text) return
+
+  // 创建新的 AbortController
+  abortController = new AbortController()
 
   // 添加用户消息
   messages.value.push({ role: 'user', content: text })
@@ -238,6 +265,8 @@ const sendMessage = async () => {
     const response = await axios.post(`${API_BASE}/chat`, {
       session_id: sessionId.value,
       message: text
+    }, {
+      signal: abortController.signal
     })
 
     const data = response.data
@@ -251,6 +280,11 @@ const sendMessage = async () => {
     
     currentAgent.value = data.used_agent || 'supervisor'
   } catch (error: any) {
+    // 判断是否是主动取消
+    if (axios.isCancel(error)) {
+      console.log('请求已取消')
+      return
+    }
     console.error('请求失败:', error)
     messages.value.push({
       role: 'assistant',
@@ -259,6 +293,7 @@ const sendMessage = async () => {
     })
   } finally {
     loading.value = false
+    abortController = null
     scrollToBottom()
   }
 }

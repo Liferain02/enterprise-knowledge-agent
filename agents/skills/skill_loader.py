@@ -50,20 +50,23 @@ class SkillLoader:
         skill_md_path = skill_dir / "Skill.md"
         if not skill_md_path.exists():
             raise ValueError(f"Skill.md 不存在: {skill_md_path}")
-        
+
         with open(skill_md_path, 'r', encoding='utf-8') as f:
             post = frontmatter.parse(f.read())
-        
-        # 统一获取 content 和 metadata
+
+        # frontmatter.parse 返回 (metadata, content) 元组
+        # 注意：顺序是 metadata 在前，content 在后
         if isinstance(post, tuple) and len(post) == 2:
-            content, metadata = post
-            prompt = content if isinstance(content, str) else ""
-            metadata_dict = metadata if isinstance(metadata, dict) else {}
+            metadata_raw, content_raw = post
+            # metadata 可能是字符串（YAML格式）或字典
+            metadata_dict = metadata_raw if isinstance(metadata_raw, dict) else {}
+            # content 应该是字符串
+            prompt = content_raw if isinstance(content_raw, str) else ""
         else:
             prompt = getattr(post, 'content', '') or ''
             raw_metadata = getattr(post, 'metadata', {}) or {}
             metadata_dict = raw_metadata if isinstance(raw_metadata, dict) else {}
-        
+
         name = metadata_dict.get('name', skill_name)
         description = metadata_dict.get('description', '')
         

@@ -486,6 +486,16 @@ body {
   flex-shrink: 0;
 }
 
+.send-btn.is-loading {
+  background: linear-gradient(135deg, #ef4444, #f97316);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
 .send-btn:hover:not(:disabled) {
   transform: scale(1.05);
   box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);

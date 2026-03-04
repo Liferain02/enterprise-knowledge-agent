@@ -181,6 +181,9 @@ class MCPClient:
         self._session = None
         self._tools = []
         self._stdio_client = None
+        # 旧版 API 需要保存上下文管理器
+        self._stdio_ctx = None
+        self._session_ctx = None
     
     async def connect(self) -> bool:
         """连接 MCP 服务器"""
@@ -193,7 +196,7 @@ class MCPClient:
                 # 回退到旧版本 API
                 from mcp import ClientSession, StdioServerParameters
                 from mcp.client.stdio import stdio_client
-            
+
             # 构建服务器参数
             import inspect
             if 'StdioServerParameters' in dir():
@@ -209,31 +212,33 @@ class MCPClient:
                     "args": self.config.args,
                     "env": self.config.env or {}
                 }
-            
-            # 创建客户端连接 (避免使用 async with 以兼容 uvicorn reload)
+
+            # 根据 MCP 版本选择连接方式
             if 'StdioClient' in dir():
                 # MCP 1.6+ 新 API - 手动管理上下文
                 stdio_client_instance = StdioClient(**server_params)
-                read, write = await stdio_client_instance.__aenter__()
                 try:
+                    read, write = await stdio_client_instance.__aenter__()
                     session = ClientSession(read, write)
                     await session.initialize()
                     tools_response = await session.list_tools()
                     self._tools = tools_response.tools
-                    # 保存引用以便后续使用
                     self._session = session
                     self._stdio_client = stdio_client_instance
                     return True
                 except Exception as e:
-                    await stdio_client_instance.__aexit__(None, None, None)
+                    try:
+                        await stdio_client_instance.__aexit__(type(e), e, e.__traceback__)
+                    except Exception:
+                        pass
                     raise
             else:
-                # 旧版 API
-                stdio_ctx = stdio_client(server_params)
-                read, write = await stdio_ctx.__aenter__()
+                # 旧版 API - 使用上下文管理器
+                self._stdio_ctx = stdio_client(server_params)
+                read, write = await self._stdio_ctx.__aenter__()
                 
-                session_ctx = ClientSession(read, write)
-                self._session = await session_ctx.__aenter__()
+                self._session_ctx = ClientSession(read, write)
+                self._session = await self._session_ctx.__aenter__()
                 
                 await self._session.initialize()
                 
@@ -265,14 +270,19 @@ class MCPClient:
         """断开连接"""
         try:
             if self._session:
-                await self._session.__aexit__(None, None, None)
+                try:
+                    await self._session.__aexit__(None, None, None)
+                except (asyncio.CancelledError, RuntimeError):
+                    pass
                 self._session = None
-            if hasattr(self, '_stdio_client') and self._stdio_client:
-                await self._stdio_client.__aexit__(None, None, None)
+
+            # 正确关闭 stdio_client
+            if hasattr(self, '_stdio_client') and self._stdio_client is not None:
+                try:
+                    await self._stdio_client.__aexit__(None, None, None)
+                except (asyncio.CancelledError, RuntimeError):
+                    pass
                 self._stdio_client = None
-        except (asyncio.CancelledError, RuntimeError) as e:
-            # 忽略 uvicorn 关闭时的取消/作用域错误
-            pass
         except Exception as e:
             print(f"断开连接时出错: {e}")
     

@@ -26,6 +26,16 @@ class ChatResponse(BaseModel):
     used_agent: str = Field(description="使用的Agent类型")
 
 
+@router.get("/health")
+async def health_check():
+    """健康检查"""
+    return {
+        "status": "ok",
+        "service": "enterprise-knowledge-assistant",
+        "version": "1.0.0"
+    }
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
