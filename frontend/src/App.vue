@@ -205,8 +205,8 @@ interface Session {
   message_count: number
 }
 
-// 生产环境使用后端服务器地址
-const API_BASE = 'http://202.117.249.16:8000/api/v1'
+// 后端 API 基础路径（通过 Vite 代理到后端）
+const API_BASE = '/api/v1'
 
 const sessionId = ref('default')
 const inputMessage = ref('')
