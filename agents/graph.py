@@ -124,7 +124,7 @@ def run_agent(
     config: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
-    运行 Agent 的入口函数
+    运行 Agent 的入口函数（同步版本）
     
     Args:
         input_text: 用户输入
@@ -151,6 +151,68 @@ def run_agent(
     # 执行图
     try:
         result = graph.invoke(initial_state, run_config)
+        
+        # 提取最终答案
+        final_answer = result.get("final_answer", "抱歉，无法生成答案。")
+        sources = result.get("sources", "")
+        used_agent = result.get("used_agent", "unknown")
+        
+        return {
+            "final_answer": final_answer,
+            "sources": sources,
+            "used_agent": used_agent,
+            "messages": result.get("messages", [])
+        }
+        
+    except Exception as e:
+        print(f"Agent 执行出错: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        return {
+            "final_answer": f"处理请求时出错: {str(e)}",
+            "sources": "",
+            "used_agent": "error",
+            "messages": []
+        }
+
+
+async def arun_agent(
+    input_text: str,
+    session_id: str = "default",
+    config: Dict[str, Any] = None
+) -> Dict[str, Any]:
+    """
+    运行 Agent 的入口函数（异步版本）
+    
+    使用 ainvoke 在主事件循环中运行
+    避免跨事件循环导致的 MCP 死锁
+    
+    Args:
+        input_text: 用户输入
+        session_id: 会话ID（用于状态持久化）
+        config: 额外配置
+        
+    Returns:
+        包含 final_answer 的字典
+    """
+    # 获取图
+    graph = get_agent_graph()
+    
+    # 构建配置（包含 thread_id 用于状态持久化）
+    run_config = config or {}
+    if "configurable" not in run_config:
+        run_config["configurable"] = {}
+    run_config["configurable"]["thread_id"] = session_id
+    
+    # 构建初始状态
+    initial_state = {
+        "messages": [HumanMessage(content=input_text)]
+    }
+    
+    # 执行图（异步版本）
+    try:
+        result = await graph.ainvoke(initial_state, run_config)
         
         # 提取最终答案
         final_answer = result.get("final_answer", "抱歉，无法生成答案。")

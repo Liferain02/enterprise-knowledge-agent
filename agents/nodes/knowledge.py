@@ -8,11 +8,13 @@ from agents.skills import get_skill_loader
 from agents.nodes.utils import get_last_user_message
 
 
-def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
+async def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Knowledge Agent 节点 - 负责知识检索和回答
     
     使用 Skill Loader 动态加载 Skill.md 定义
+    
+    改为 async def，与其他节点保持一致
     """
     # 获取用户最新消息
     messages = state.get("messages", [])
@@ -31,8 +33,8 @@ def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # 构建配置
         config = {"configurable": {"thread_id": "knowledge_agent"}}
         
-        # 执行 Agent
-        result = agent.invoke(
+        # 执行 Agent（使用 ainvoke）
+        result = await agent.ainvoke(
             {"messages": [last_user_message]},
             config
         )

@@ -3,7 +3,7 @@
 """
 import logging
 from typing import Dict, Any
-from agents.graph import run_agent, get_agent_graph
+from agents.graph import run_agent, arun_agent, get_agent_graph
 from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ class ChatService:
 
     def chat(self, message: str, session_id: str) -> Dict[str, Any]:
         """
-        处理聊天请求
+        处理聊天请求（同步版本）
 
         Args:
             message: 用户消息
@@ -29,6 +29,44 @@ class ChatService:
         logger.info(f"收到聊天请求 - session: {session_id}, message: {message[:50]}...")
 
         result = run_agent(
+            input_text=message,
+            session_id=session_id
+        )
+
+        answer = result.get("final_answer", "抱歉，无法生成答案。")
+        sources = result.get("sources", "")
+        used_agent = result.get("used_agent", "unknown")
+
+        # 格式化来源
+        sources_list = []
+        if sources and isinstance(sources, str):
+            sources_list = [{"content": sources[:200], "metadata": {}}]
+
+        logger.info(f"聊天请求完成 - agent: {used_agent}, answer_length: {len(answer)}")
+
+        return {
+            "answer": answer,
+            "sources": sources_list,
+            "used_agent": used_agent
+        }
+
+    async def achat(self, message: str, session_id: str) -> Dict[str, Any]:
+        """
+        处理聊天请求（异步版本）
+
+        使用 ainvoke 在主事件循环中运行
+        避免跨事件循环导致的 MCP 死锁
+
+        Args:
+            message: 用户消息
+            session_id: 会话ID
+
+        Returns:
+            包含 answer, sources, used_agent 的字典
+        """
+        logger.info(f"收到聊天请求(异步) - session: {session_id}, message: {message[:50]}...")
+
+        result = await arun_agent(
             input_text=message,
             session_id=session_id
         )

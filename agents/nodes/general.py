@@ -8,11 +8,13 @@ from agents.prompts import GENERAL_AGENT_SYSTEM_PROMPT
 from agents.nodes.utils import get_last_user_message
 
 
-def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
+async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     General Agent 节点 - 负责通用回答
     
     处理问候、寒暄、一般性闲聊
+    
+    改为 async def，与其他节点保持一致
     """
     llm = get_llm()
     
@@ -33,8 +35,8 @@ def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
 请给出友好、简洁的回答。
 """
     
-    # 调用 LLM 生成答案
-    response = llm.invoke(prompt)
+    # 调用 LLM 生成答案（LangChain 的 invoke 支持 await）
+    response = await llm.ainvoke(prompt)
     
     print(f"[General Agent] 生成答案长度: {len(response.content)} 字符")
     
@@ -42,4 +44,3 @@ def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         "final_answer": response.content,
         "used_agent": "general_agent"
     }
-

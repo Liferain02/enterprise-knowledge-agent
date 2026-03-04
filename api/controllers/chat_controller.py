@@ -44,9 +44,12 @@ async def chat(request: ChatRequest):
     1. 接收用户的 session_id 和 message
     2. 调用 ChatService 处理业务逻辑
     3. 返回结果
+
+    注意：使用 async def + await 调用异步版本
+    让 MCP 工具调用在主事件循环中执行，避免死锁
     """
     try:
-        result = chat_service.chat(
+        result = await chat_service.achat(
             message=request.message,
             session_id=request.session_id
         )

@@ -16,12 +16,14 @@ class RouteDecision(BaseModel):
     reason: str = Field(description="选择该 Agent 的原因")
 
 
-def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
+async def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Supervisor 节点 - 负责路由决策
     
     分析用户问题，决定将任务路由到哪个 Worker Agent
     使用 with_structured_output 强制输出结构化 JSON
+    
+    改为 async def，与其他节点保持一致
     """
     llm = get_llm()
     
@@ -73,7 +75,8 @@ def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
     # 使用 with_structured_output 强制结构化输出
     try:
         llm_structured = llm.with_structured_output(RouteDecision)
-        decision: RouteDecision = llm_structured.invoke(prompt)
+        # 使用 ainvoke
+        decision: RouteDecision = await llm_structured.ainvoke(prompt)
         
         next_agent = decision.next_agent
         reasoning = decision.reasoning
@@ -136,4 +139,3 @@ def route_to_agent(state: Dict[str, Any]) -> str:
     # 降级到 general_agent
     print(f"[route_to_agent] 无效的 agent: {next_agent}，降级到 general_agent")
     return "general_agent"
-
