@@ -290,6 +290,49 @@ GET /health
 2. 需要在 `config/.env` 中配置阿里千问或 OpenAI 的 API Key。
 3. 首次启动会自动嵌入知识库，向量数据保存在 `./chroma_db` 目录下（已在 `.gitignore` 中忽略）。
 
+## 🚢 部署指南
+
+### 直接部署
+
+```bash
+# 1. 进入项目目录
+cd /share/home/lifr/workspace/code/enterprise-knowledge-agent
+
+# 2. 激活 Python 环境
+conda activate enterprise-agent
+
+# 3. 安装依赖
+pip install -r requirements.txt
+cd frontend && npm install && cd ..
+
+# 4. 配置环境变量
+cp config/env.template config/.env
+vim config/.env   # 填入 DASHSCOPE_API_KEY
+
+# 5. 启动后端（后台运行）
+nohup python main.py > server.log 2>&1 &
+echo $! > backend.pid
+
+# 6. 启动前端
+cd frontend && nohup npm run dev > frontend.log 2>&1 &
+
+# 7. 访问
+# 前端: http://your-server-ip:3000
+# 后端: http://your-server-ip:8000
+```
+
+### 部署架构
+
+```
+用户浏览器 → Frontend (Vite:3000) → Backend (uvicorn:8000) → AI API
+```
+
+### 生产环境注意事项
+
+1. **API Key 安全**: 使用环境变量管理，不要提交到代码仓库
+2. **防火墙**: 开放 3000（前端）和 8000（后端）端口
+3. **数据持久化**: `chroma_db` 和 `data` 目录建议定期备份
+
 ## 📄 License
 
 MIT
