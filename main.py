@@ -17,6 +17,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from config.settings import get_settings
+
+# 清空 LLM 缓存，确保代理配置生效
+from core.llm import reset_llm
+reset_llm()
+
 from api.controllers import chat_router, knowledge_router
 from core.mcp_client import mcp_manager as global_mcp_manager
 from rag.vectorstore import get_vectorstore_manager

@@ -3,6 +3,7 @@ LLM 初始化模块
 支持 OpenAI 兼容的 API 和阿里千问 (Qwen)
 使用 functools.lru_cache 实现简单缓存
 """
+import os
 from functools import lru_cache
 from typing import Optional
 from langchain_openai import ChatOpenAI
@@ -46,6 +47,17 @@ def get_llm(
     model = model or default_model
     
     # 创建新实例
+    # 直接设置环境变量，让 HTTPX 自动使用代理
+    # 这样比通过 model_kwargs 更可靠
+    import os as _os
+    http_proxy = _os.environ.get("http_proxy") or _os.environ.get("HTTP_PROXY")
+    https_proxy = _os.environ.get("https_proxy") or _os.environ.get("HTTPS_PROXY")
+
+    if http_proxy and not _os.environ.get("HTTP_PROXY"):
+        _os.environ["HTTP_PROXY"] = http_proxy
+    if https_proxy and not _os.environ.get("HTTPS_PROXY"):
+        _os.environ["HTTPS_PROXY"] = https_proxy
+
     return ChatOpenAI(
         model=model,
         temperature=temperature if temperature is not None else settings.agent_temperature,

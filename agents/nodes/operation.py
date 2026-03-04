@@ -18,7 +18,8 @@ from agents.nodes.utils import get_last_user_message
 _agent_cache = {}
 
 # 操作超时设置（秒）
-OPERATION_TIMEOUT = 120
+# 10 分钟：用于处理较慢的工具调用/多轮推理
+OPERATION_TIMEOUT = 600
 
 # 线程池执行器
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
@@ -84,7 +85,8 @@ def operation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         
         # 使用线程池执行异步 agent（在新事件循环中）
         future = _executor.submit(_run_agent_sync, agent, [last_user_message], config)
-        result = future.result(timeout=OPERATION_TIMEOUT + 5)
+        # 给线程池的等待时间稍微加一点缓冲
+        result = future.result(timeout=OPERATION_TIMEOUT + 10)
         
         # 获取最终回复
         final_answer = result["messages"][-1].content

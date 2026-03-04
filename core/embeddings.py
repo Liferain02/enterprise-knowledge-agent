@@ -101,6 +101,13 @@ def get_embeddings(
     # 根据提供商创建不同的 Embeddings 实例
     if llm_provider == "qwen":
         # 使用 Qwen 的 dashscope SDK
+        # 设置代理（dashscope 使用 HTTPX，需要设置环境变量）
+        import os
+        http_proxy = os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY")
+        if http_proxy:
+            os.environ['DASHSCOPE_SDK_HTTP_PROXY'] = http_proxy
+            os.environ['DASHSCOPE_SDK_HTTPS_PROXY'] = http_proxy
+
         _embeddings_instance = DashScopeEmbeddings(
             model=model or "text-embedding-v2",
             api_key=settings.dashscope_api_key
@@ -108,12 +115,22 @@ def get_embeddings(
     else:
         # 使用 OpenAI 兼容的 API
         from langchain_openai import OpenAIEmbeddings
-        
+
+        http_proxy = os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY")
+        https_proxy = os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY")
+
+        model_kwargs = {}
+        if http_proxy:
+            model_kwargs["http_proxy"] = http_proxy
+        if https_proxy:
+            model_kwargs["https_proxy"] = https_proxy
+
         _embeddings_instance = OpenAIEmbeddings(
             model=model or "text-embedding-3-small",
             dimensions=dimensions,
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
+            **model_kwargs,
             **kwargs
         )
     
