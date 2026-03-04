@@ -205,7 +205,8 @@ interface Session {
   message_count: number
 }
 
-const API_BASE = '/api/v1'
+// 生产环境使用后端服务器地址
+const API_BASE = 'http://202.117.249.16:8000/api/v1'
 
 const sessionId = ref('default')
 const inputMessage = ref('')

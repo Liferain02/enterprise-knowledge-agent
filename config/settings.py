@@ -61,7 +61,7 @@ class Settings(BaseSettings):
 
     # FastAPI 配置
     api_host: str = Field(
-        default="127.0.0.1",
+        default="0.0.0.0",
         description="API服务主机"
     )
     api_port: int = Field(
