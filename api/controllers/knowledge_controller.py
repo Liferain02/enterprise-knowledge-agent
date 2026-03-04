@@ -3,10 +3,11 @@
 """
 import logging
 from typing import Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from pydantic import BaseModel, Field
 
 from api.services import knowledge_service
+from api.security import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ class SearchRequest(BaseModel):
 
 
 @router.post("/add")
-async def add_document(request: AddDocumentRequest):
+async def add_document(request: AddDocumentRequest, _: dict = Depends(get_current_user)):
     """
     添加文档到知识库
     """
@@ -44,7 +45,8 @@ async def add_document(request: AddDocumentRequest):
 @router.post("/add/file")
 async def add_document_from_file(
     file: UploadFile = File(...),
-    category: str = Form(default="general")
+    category: str = Form(default="general"),
+    _: dict = Depends(get_current_user),
 ):
     """
     从文件添加文档
@@ -63,7 +65,7 @@ async def add_document_from_file(
 
 
 @router.post("/search")
-async def search_knowledge(request: SearchRequest):
+async def search_knowledge(request: SearchRequest, _: dict = Depends(get_current_user)):
     """
     搜索知识库
     """
@@ -79,7 +81,7 @@ async def search_knowledge(request: SearchRequest):
 
 
 @router.get("/stats")
-async def get_knowledge_stats():
+async def get_knowledge_stats(_: dict = Depends(get_current_user)):
     """
     获取知识库统计信息
     """
@@ -92,7 +94,7 @@ async def get_knowledge_stats():
 
 
 @router.delete("/clear")
-async def clear_knowledge():
+async def clear_knowledge(_: dict = Depends(get_current_user)):
     """
     清空知识库
     """

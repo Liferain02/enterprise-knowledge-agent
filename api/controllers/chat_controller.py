@@ -2,10 +2,11 @@
 聊天 Controller
 """
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from api.services import chat_service
+from api.security import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ async def health_check():
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, _: dict = Depends(get_current_user)):
     """
     聊天接口
 
@@ -76,7 +77,7 @@ async def chat(request: ChatRequest):
 
 
 @router.get("/history/{session_id}")
-async def get_history(session_id: str):
+async def get_history(session_id: str, _: dict = Depends(get_current_user)):
     """
     获取会话历史
 
@@ -87,7 +88,7 @@ async def get_history(session_id: str):
 
 
 @router.delete("/history/{session_id}")
-async def clear_history(session_id: str):
+async def clear_history(session_id: str, _: dict = Depends(get_current_user)):
     """
     清空会话历史
 
@@ -98,7 +99,7 @@ async def clear_history(session_id: str):
 
 
 @router.get("/sessions")
-async def get_sessions():
+async def get_sessions(_: dict = Depends(get_current_user)):
     """
     获取所有会话列表
 
@@ -109,7 +110,7 @@ async def get_sessions():
 
 
 @router.post("/sessions")
-async def create_session(request: CreateSessionRequest):
+async def create_session(request: CreateSessionRequest, _: dict = Depends(get_current_user)):
     """
     创建新会话
 
@@ -124,7 +125,7 @@ async def create_session(request: CreateSessionRequest):
 
 
 @router.get("/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session(session_id: str, _: dict = Depends(get_current_user)):
     """
     获取指定会话信息
     """
@@ -135,7 +136,7 @@ async def get_session(session_id: str):
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str):
+async def delete_session(session_id: str, _: dict = Depends(get_current_user)):
     """
     删除指定会话
     """
@@ -146,7 +147,7 @@ async def delete_session(session_id: str):
 
 
 @router.put("/sessions/{session_id}/title")
-async def update_session_title(session_id: str, request: UpdateTitleRequest):
+async def update_session_title(session_id: str, request: UpdateTitleRequest, _: dict = Depends(get_current_user)):
     """
     更新会话标题
     """

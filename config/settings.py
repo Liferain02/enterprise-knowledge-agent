@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # OpenAI API 配置 (备用)
     openai_api_key: str = Field(
-        default="sk-f74df7dc93df4e0ab282668c72a834f1",
+        default="your-openai-api-key-here",
         description="OpenAI API Key"
     )
     openai_base_url: str = Field(
@@ -71,6 +71,28 @@ class Settings(BaseSettings):
     debug: bool = Field(
         default=True,
         description="调试模式"
+    )
+
+    # Auth 配置（单用户）
+    auth_enabled: bool = Field(
+        default=True,
+        description="是否启用登录鉴权"
+    )
+    admin_username: str = Field(
+        default="admin",
+        description="管理员用户名"
+    )
+    admin_password: str = Field(
+        default="change-me",
+        description="管理员密码（请在 config/.env 中设置）"
+    )
+    jwt_secret_key: str = Field(
+        default="change-me-secret",
+        description="JWT 签名密钥（请在 config/.env 中设置）"
+    )
+    jwt_expire_minutes: int = Field(
+        default=720,
+        description="JWT 过期时间（分钟）"
     )
 
     # Agent 配置

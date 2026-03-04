@@ -24,7 +24,7 @@ from config.settings import get_settings
 from core.llm import reset_llm
 reset_llm()
 
-from api.controllers import chat_router, knowledge_router
+from api.controllers import chat_router, knowledge_router, auth_router
 from core.mcp_client import mcp_manager as global_mcp_manager
 from rag.vectorstore import get_vectorstore_manager
 
@@ -104,6 +104,7 @@ if os.path.exists(FRONTEND_DIST):
 # 注册路由
 app.include_router(chat_router)
 app.include_router(knowledge_router)
+app.include_router(auth_router)
 
 
 @app.get("/health")

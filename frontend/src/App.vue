@@ -17,7 +17,7 @@
       <div class="session-list">
         <div class="session-list-header">
           <span>会话历史</span>
-          <button class="btn-new-session" @click="createNewSession" title="新建会话">
+          <button class="btn-new-session" :disabled="!isAuthed" @click="createNewSession" title="新建会话">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
@@ -90,10 +90,24 @@
           <span class="connection-status" :class="{ connected: apiConnected }">
             {{ apiConnected ? '🟢 已连接' : '🔴 未连接' }}
           </span>
+          <button v-if="isAuthed" class="btn-logout" @click="logout">退出</button>
         </div>
       </header>
       
-      <div class="messages-container" ref="messagesContainer">
+      <div v-if="!isAuthed" class="login-view">
+        <div class="login-card">
+          <h2>登录</h2>
+          <p class="login-desc">请输入账号密码后开始对话</p>
+          <div class="login-form">
+            <input v-model="loginUsername" class="login-input" placeholder="用户名" autocomplete="username" />
+            <input v-model="loginPassword" class="login-input" placeholder="密码" type="password" autocomplete="current-password" />
+            <button class="login-btn" @click="login">登录</button>
+            <div v-if="loginError" class="login-error">{{ loginError }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="messages-container" ref="messagesContainer">
         <div v-if="messages.length === 0" class="empty-state">
           <div class="empty-icon">💬</div>
           <h2>欢迎使用企业知识助手</h2>
@@ -152,7 +166,7 @@
         </div>
       </div>
       
-      <footer class="input-area">
+      <footer v-if="isAuthed" class="input-area">
         <div class="input-container">
           <textarea
             v-model="inputMessage"
@@ -207,6 +221,53 @@ interface Session {
 
 // 后端 API 基础路径（通过 Vite 代理到后端）
 const API_BASE = '/api/v1'
+
+// 登录态
+const token = ref<string>(localStorage.getItem('eka_token') || '')
+const loginUsername = ref('')
+const loginPassword = ref('')
+const loginError = ref('')
+
+const isAuthed = computed(() => token.value.length > 0)
+
+const applyAuthHeader = () => {
+  if (token.value) {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token.value}`
+  } else {
+    delete axios.defaults.headers.common['Authorization']
+  }
+}
+applyAuthHeader()
+
+const login = async () => {
+  loginError.value = ''
+  try {
+    const resp = await axios.post<{ access_token: string; token_type: string }>('/api/v1/auth/login', {
+      username: loginUsername.value,
+      password: loginPassword.value
+    })
+    token.value = resp.data.access_token
+    localStorage.setItem('eka_token', token.value)
+    applyAuthHeader()
+    loginPassword.value = ''
+    await checkConnection()
+    await loadSessions()
+    if (sessionId.value) {
+      await loadHistory(sessionId.value)
+    }
+  } catch (e: any) {
+    loginError.value = e?.response?.data?.detail || '登录失败'
+  }
+}
+
+const logout = () => {
+  token.value = ''
+  localStorage.removeItem('eka_token')
+  applyAuthHeader()
+  apiConnected.value = false
+  messages.value = []
+  sessions.value = []
+}
 
 const sessionId = ref('default')
 const inputMessage = ref('')
@@ -427,6 +488,10 @@ const sendMessage = async () => {
 }
 
 const checkConnection = async () => {
+  if (!isAuthed.value) {
+    apiConnected.value = false
+    return
+  }
   try {
     await axios.get(`${API_BASE}/health`, { timeout: 3000 })
     apiConnected.value = true
@@ -436,12 +501,12 @@ const checkConnection = async () => {
 }
 
 onMounted(async () => {
-  await checkConnection()
-  await loadSessions()
-  // 加载当前会话的历史记录
-  await loadHistory(sessionId.value)
-  // 定期检查连接状态
-  setInterval(checkConnection, 30000)
+  if (isAuthed.value) {
+    await checkConnection()
+    await loadSessions()
+    await loadHistory(sessionId.value)
+    setInterval(checkConnection, 30000)
+  }
 })
 
 // 监听 session 变化，重新加载历史

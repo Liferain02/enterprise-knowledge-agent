@@ -117,6 +117,17 @@ DASHSCOPE_MODEL=qwen-plus
 # OPENAI_API_KEY=...
 # OPENAI_BASE_URL=https://api.openai.com/v1
 # OPENAI_MODEL=gpt-4o-mini
+
+# 对外提供服务（远程机器可访问）
+API_HOST=0.0.0.0
+API_PORT=8000
+
+# 登录鉴权（单用户）
+AUTH_ENABLED=true
+ADMIN_USERNAME=你的用户名
+ADMIN_PASSWORD=你的密码
+JWT_SECRET_KEY=请换成一个长随机字符串
+JWT_EXPIRE_MINUTES=720
 ```
 
 > `.env` 文件已经在 `.gitignore` 中配置为忽略，**不要**把真实 Key 提交到 Git。
@@ -136,7 +147,8 @@ cd ..
 python main.py
 ```
 
-- 默认监听地址：`http://127.0.0.1:8000`
+- 默认监听地址：`http://0.0.0.0:8000`
+- 如需其他机器访问，请确保 `API_HOST=0.0.0.0`，并在服务器防火墙/安全组放通端口 `8000`（后端）和 `3000`（前端）。
 - 首次启动会自动检查并嵌入 `data/knowledge/` 中的文档到 `chroma_db/`
 
 ### 8. 启动前端（新终端窗口）
@@ -307,7 +319,7 @@ cd frontend && npm install && cd ..
 
 # 4. 配置环境变量
 cp config/env.template config/.env
-vim config/.env   # 填入 DASHSCOPE_API_KEY
+vim config/.env   # 填入 DASHSCOPE_API_KEY / ADMIN_USERNAME / ADMIN_PASSWORD / JWT_SECRET_KEY
 
 # 5. 启动后端（后台运行）
 nohup python main.py > server.log 2>&1 &
