@@ -116,6 +116,11 @@ def fallback_routing(question: str) -> tuple:
     if any(k in question_lower for k in time_keywords):
         return "operation_agent", "检测到时间相关关键词"
     
+    # 回溯历史/上下文相关问题
+    history_keywords = ["上一", "之前", "之前的问题", "之前的对话", "前一次", "刚才", "历史"]
+    if any(k in question_lower for k in history_keywords):
+        return "operation_agent", "检测到历史查询关键词"
+    
     # 默认路由到知识库
     return "knowledge_agent", "默认路由到知识库"
 

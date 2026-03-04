@@ -15,6 +15,8 @@ if not os.environ.get("http_proxy") and not os.environ.get("HTTP_PROXY"):
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import uvicorn
 from config.settings import get_settings
 
@@ -88,6 +90,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 挂载前端静态文件
+import os
+FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+if os.path.exists(FRONTEND_DIST):
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIST), name="static")
+
+    @app.get("/")
+    async def serve_index():
+        return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
 
 # 注册路由
 app.include_router(chat_router)

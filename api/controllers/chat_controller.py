@@ -26,6 +26,16 @@ class ChatResponse(BaseModel):
     used_agent: str = Field(description="使用的Agent类型")
 
 
+class CreateSessionRequest(BaseModel):
+    """创建会话请求"""
+    title: str = Field(default=None, description="会话标题（可选）")
+
+
+class UpdateTitleRequest(BaseModel):
+    """更新标题请求"""
+    title: str = Field(description="新标题")
+
+
 @router.get("/health")
 async def health_check():
     """健康检查"""
@@ -70,7 +80,7 @@ async def get_history(session_id: str):
     """
     获取会话历史
 
-    通过 LangGraph Checkpointer 管理历史
+    通过数据库获取历史消息
     """
     result = chat_service.get_history(session_id)
     return result
@@ -81,7 +91,7 @@ async def clear_history(session_id: str):
     """
     清空会话历史
 
-    注意：MemorySaver 不支持直接删除，可以通过创建新的 session_id 来开始新的会话
+    会删除整个会话（包括所有消息）
     """
     result = chat_service.clear_history(session_id)
     return result
@@ -90,9 +100,55 @@ async def clear_history(session_id: str):
 @router.get("/sessions")
 async def get_sessions():
     """
-    获取所有会话
+    获取所有会话列表
 
-    注意：MemorySaver 不提供直接列出所有会话的接口
+    返回按更新时间倒序的所有会话
     """
     result = chat_service.get_sessions()
+    return result
+
+
+@router.post("/sessions")
+async def create_session(request: CreateSessionRequest):
+    """
+    创建新会话
+
+    返回新会话的 session_id，前端需要使用这个 ID
+    """
+    try:
+        result = chat_service.create_session(request.title)
+        return result
+    except Exception as e:
+        logger.exception(f"创建会话失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"创建会话失败: {str(e)}")
+
+
+@router.get("/sessions/{session_id}")
+async def get_session(session_id: str):
+    """
+    获取指定会话信息
+    """
+    session = chat_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return session
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """
+    删除指定会话
+    """
+    result = chat_service.delete_session(session_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return result
+
+
+@router.put("/sessions/{session_id}/title")
+async def update_session_title(session_id: str, request: UpdateTitleRequest):
+    """
+    更新会话标题
+    """
+    result = chat_service.update_session_title(session_id, request.title)
     return result

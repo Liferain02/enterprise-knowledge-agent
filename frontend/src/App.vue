@@ -12,17 +12,47 @@
         </div>
         <span>企业知识助手</span>
       </div>
-      
-      <div class="session-controls">
-        <div class="session-selector">
-          <label>会话ID</label>
-          <input v-model="sessionId" type="text" placeholder="default" />
+
+      <!-- 会话列表 -->
+      <div class="session-list">
+        <div class="session-list-header">
+          <span>会话历史</span>
+          <button class="btn-new-session" @click="createNewSession" title="新建会话">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
         </div>
-        <button class="btn-clear" @click="clearHistory" :disabled="loading">
-          🗑️ 清空对话
-        </button>
+        <div class="sessions">
+          <div
+            v-for="session in sessions"
+            :key="session.session_id"
+            class="session-item"
+            :class="{ active: session.session_id === sessionId }"
+            @click="switchSession(session.session_id)"
+          >
+            <div class="session-title">{{ session.title }}</div>
+            <div class="session-time">{{ formatTime(session.updated_at) }}</div>
+            <div class="session-actions">
+              <button class="btn-rename-session" @click.stop="renameSession(session.session_id, session.title)" title="重命名">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button class="btn-delete-session" @click.stop="deleteSession(session.session_id)" title="删除会话">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div v-if="sessions.length === 0" class="no-sessions">
+            暂无会话
+          </div>
+        </div>
       </div>
-      
+
       <div class="agent-status">
         <div class="status-title">当前 Agent</div>
         <div class="status-item" :class="{ active: currentAgent === 'supervisor' }">
@@ -42,7 +72,7 @@
           闲聊问答
         </div>
       </div>
-      
+
       <div class="quick-prompts">
         <div class="quick-title">💡 快捷问题</div>
         <button @click="sendQuick('请介绍一下公司的发展历程')">公司历史</button>
@@ -160,12 +190,19 @@
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import axios from 'axios'
 import { marked } from 'marked'
-import hljs from 'highlight.js'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
   agent?: string
+}
+
+interface Session {
+  session_id: string
+  title: string
+  created_at: string
+  updated_at: string
+  message_count: number
 }
 
 const API_BASE = '/api/v1'
@@ -177,13 +214,17 @@ const loading = ref(false)
 const currentAgent = ref('supervisor')
 const apiConnected = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
+const sessions = ref<Session[]>([])
 
 // 用于取消请求
 let abortController: AbortController | null = null
 
 const chatTitle = computed(() => {
-  const session = sessionId.value || 'default'
-  return session === 'default' ? '默认会话' : `会话: ${session}`
+  const session = sessions.value.find(s => s.session_id === sessionId.value)
+  if (session) {
+    return session.title
+  }
+  return sessionId.value === 'default' ? '默认会话' : `会话: ${sessionId.value}`
 })
 
 const getAgentName = (agent?: string) => {
@@ -206,21 +247,105 @@ const getAgentBadge = (agent: string) => {
   return map[agent] || agent
 }
 
+const formatTime = (isoString: string) => {
+  const date = new Date(isoString)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const dayMs = 24 * 60 * 60 * 1000
+
+  if (diff < dayMs) {
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  } else if (diff < 2 * dayMs) {
+    return '昨天'
+  } else {
+    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  }
+}
+
+const loadSessions = async () => {
+  try {
+    const response = await axios.get<{ sessions: Session[] }>(`${API_BASE}/sessions`)
+    sessions.value = response.data.sessions || []
+  } catch (error) {
+    console.error('加载会话列表失败:', error)
+  }
+}
+
+const loadHistory = async (sid: string) => {
+  try {
+    const response = await axios.get(`${API_BASE}/history/${sid}`)
+    if (response.data.messages) {
+      messages.value = response.data.messages.map((m: any) => ({
+        role: m.role,
+        content: m.content,
+        agent: m.metadata?.agent || m.agent
+      }))
+    } else {
+      messages.value = []
+    }
+  } catch (error) {
+    console.log('获取历史失败或无历史记录')
+    messages.value = []
+  }
+}
+
+const createNewSession = async () => {
+  try {
+    const response = await axios.post(`${API_BASE}/sessions`, {})
+    const newSession = response.data
+    sessionId.value = newSession.session_id
+    messages.value = []
+    await loadSessions()
+  } catch (error) {
+    console.error('创建会话失败:', error)
+  }
+}
+
+const switchSession = async (sid: string) => {
+  if (sid === sessionId.value) return
+  sessionId.value = sid
+}
+
+const deleteSession = async (sid: string) => {
+  if (!confirm('确定要删除这个会话吗？')) return
+
+  try {
+    await axios.delete(`${API_BASE}/sessions/${sid}`)
+    await loadSessions()
+
+    // 如果删除的是当前会话，切换到第一个会话或创建新会话
+    if (sid === sessionId.value) {
+      if (sessions.value.length > 0) {
+        sessionId.value = sessions.value[0].session_id
+      } else {
+        await createNewSession()
+      }
+    }
+  } catch (error) {
+    console.error('删除会话失败:', error)
+  }
+}
+
+const renameSession = async (sid: string, currentTitle: string) => {
+  const newTitle = prompt('请输入新标题:', currentTitle)
+  if (!newTitle || newTitle.trim() === '' || newTitle === currentTitle) return
+
+  try {
+    await axios.put(`${API_BASE}/sessions/${sid}/title`, { title: newTitle.trim() })
+    await loadSessions()
+  } catch (error) {
+    console.error('重命名会话失败:', error)
+    alert('重命名失败，请重试')
+  }
+}
+
 const sendQuick = (text: string) => {
   inputMessage.value = text
   sendMessage()
 }
 
 const renderMarkdown = (content: string) => {
-  // 配置 marked
-  marked.setOptions({
-    highlight: function(code, lang) {
-      if (lang && hljs.getLanguage(lang)) {
-        return hljs.highlight(code, { language: lang }).value
-      }
-      return hljs.highlightAuto(code).value
-    }
-  })
+  // 使用 marked 解析 markdown
   return marked.parse(content)
 }
 
@@ -279,6 +404,8 @@ const sendMessage = async () => {
     })
     
     currentAgent.value = data.used_agent || 'supervisor'
+    // 刷新会话列表（更新标题和消息数）
+    await loadSessions()
   } catch (error: any) {
     // 判断是否是主动取消
     if (axios.isCancel(error)) {
@@ -298,19 +425,6 @@ const sendMessage = async () => {
   }
 }
 
-const clearHistory = async () => {
-  if (!confirm('确定要清空对话历史吗？')) return
-  
-  try {
-    await axios.delete(`${API_BASE}/history`, {
-      data: { session_id: sessionId.value }
-    })
-    messages.value = []
-  } catch (error: any) {
-    console.error('清空历史失败:', error)
-  }
-}
-
 const checkConnection = async () => {
   try {
     await axios.get(`${API_BASE}/health`, { timeout: 3000 })
@@ -320,27 +434,18 @@ const checkConnection = async () => {
   }
 }
 
-onMounted(() => {
-  checkConnection()
+onMounted(async () => {
+  await checkConnection()
+  await loadSessions()
+  // 加载当前会话的历史记录
+  await loadHistory(sessionId.value)
   // 定期检查连接状态
   setInterval(checkConnection, 30000)
 })
 
 // 监听 session 变化，重新加载历史
-watch(sessionId, async () => {
-  messages.value = []
-  try {
-    const response = await axios.get(`${API_BASE}/history/${sessionId.value}`)
-    if (response.data.messages) {
-      messages.value = response.data.messages.map((m: any) => ({
-        role: m.role,
-        content: m.content,
-        agent: m.agent
-      }))
-    }
-  } catch (error) {
-    console.log('获取历史失败或无历史记录')
-  }
+watch(sessionId, async (newSid) => {
+  await loadHistory(newSid)
 })
 </script>
 

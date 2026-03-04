@@ -138,6 +138,150 @@ body {
   cursor: not-allowed;
 }
 
+/* ===== 会话列表 ===== */
+.session-list {
+  margin-bottom: 16px;
+}
+
+.session-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+  margin-bottom: 12px;
+}
+
+.session-list-header span {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-new-session {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-new-session:hover {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.btn-new-session svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sessions {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.session-item {
+  position: relative;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  background: var(--bg-card);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.session-item:hover {
+  border-color: var(--border-color);
+}
+
+.session-item.active {
+  background: rgba(79, 70, 229, 0.15);
+  border-color: var(--primary-color);
+}
+
+.session-title {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 24px;
+}
+
+.session-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.session-actions {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.session-item:hover .session-actions {
+  opacity: 1;
+}
+
+.session-item:hover .btn-delete-session {
+  opacity: 1;
+}
+
+.btn-rename-session,
+.btn-delete-session {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-rename-session:hover {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.btn-delete-session:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.btn-rename-session svg,
+.btn-delete-session svg {
+  width: 12px;
+  height: 12px;
+}
+
+.no-sessions {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 /* ===== Agent 状态 ===== */
 .agent-status {
   background: var(--bg-card);

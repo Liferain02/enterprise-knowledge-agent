@@ -14,6 +14,18 @@ from agents.nodes.operation import operation_agent_node
 from agents.nodes.general import general_agent_node
 
 
+# ==================== Checkpointer 实例 ====================
+
+def get_checkpointer() -> MemorySaver:
+    """
+    获取 Memory Saver
+    
+    注意：LangGraph 的状态持久化使用内存
+    会话元数据由 session_store.py 管理
+    """
+    return MemorySaver()
+
+
 # ==================== 状态定义 ====================
 
 class AgentState(MessagesState):
@@ -30,6 +42,9 @@ class AgentState(MessagesState):
     final_answer: str
     sources: str
     used_agent: str
+    
+    # 会话ID（用于在各节点中维护历史）
+    session_id: str
 
 
 # ==================== 图创建函数 ====================
@@ -84,13 +99,13 @@ def compile_graph(checkpointer: MemorySaver = None) -> StateGraph:
     编译并返回可执行的图
     
     Args:
-        checkpointer: 状态持久化检查点，默认使用 MemorySaver
+        checkpointer: 状态持久化检查点，默认使用 SQLite 持久化
         
     Returns:
         编译后的 LangGraph
     """
     if checkpointer is None:
-        checkpointer = MemorySaver()
+        checkpointer = get_checkpointer()
     
     workflow = create_multi_agent_graph()
     compiled = workflow.compile(checkpointer=checkpointer)
@@ -143,9 +158,10 @@ def run_agent(
         run_config["configurable"] = {}
     run_config["configurable"]["thread_id"] = session_id
     
-    # 构建初始状态
+    # 构建初始状态（包含 session_id 供各节点使用）
     initial_state = {
-        "messages": [HumanMessage(content=input_text)]
+        "messages": [HumanMessage(content=input_text)],
+        "session_id": session_id  # 传递 session_id 到状态中
     }
     
     # 执行图
@@ -205,9 +221,10 @@ async def arun_agent(
         run_config["configurable"] = {}
     run_config["configurable"]["thread_id"] = session_id
     
-    # 构建初始状态
+    # 构建初始状态（包含 session_id 供各节点使用）
     initial_state = {
-        "messages": [HumanMessage(content=input_text)]
+        "messages": [HumanMessage(content=input_text)],
+        "session_id": session_id  # 传递 session_id 到状态中
     }
     
     # 执行图（异步版本）

@@ -15,10 +15,16 @@ async def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     使用 Skill Loader 动态加载 Skill.md 定义
     
     改为 async def，与其他节点保持一致
+    
+    注意：不使用 Agent 自己的 checkpointer，
+    历史由主图统一管理
     """
     # 获取用户最新消息
     messages = state.get("messages", [])
     last_user_message = get_last_user_message(messages)
+    
+    # 获取 session_id
+    session_id = state.get("session_id", "default")
     
     if not last_user_message:
         return {
@@ -30,24 +36,28 @@ async def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         loader = get_skill_loader()
         agent = loader.create_agent("knowledge")
         
-        # 构建配置
-        config = {"configurable": {"thread_id": "knowledge_agent"}}
+        # 传递完整的 messages（包含历史）
+        config = {"configurable": {"thread_id": session_id}}
         
-        # 执行 Agent（使用 ainvoke）
+        # 执行 Agent（传递完整历史）
         result = await agent.ainvoke(
-            {"messages": [last_user_message]},
+            {"messages": messages},
             config
         )
         
+        # 获取 Agent 返回的所有消息
+        agent_messages = result.get("messages", [])
+        
         # 获取最终回复
-        final_answer = result["messages"][-1].content
+        final_answer = agent_messages[-1].content
         
         print(f"[Knowledge Agent] 生成答案长度: {len(final_answer)} 字符")
         
         return {
             "final_answer": final_answer,
             "sources": "knowledge_base",
-            "used_agent": "knowledge_agent"
+            "used_agent": "knowledge_agent",
+            "messages": agent_messages
         }
         
     except Exception as e:
