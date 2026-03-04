@@ -61,16 +61,6 @@
 - **Python**: 建议 Python 3.10+（通过 Conda 创建）
 - **Node.js & npm**: 建议 Node 18+/20+（如 `node --version`、`npm --version`）
 - **Git**: 已安装 `git`
-- **uv**: 高性能 Python 包管理工具（安装方式见下方）
-
-> **uv 安装**（如果尚未安装）：
-> ```bash
-> # 方式一：使用 pip 安装
-> pip install uv
->
-> # 方式二：使用官方安装脚本（Linux/macOS）
-> curl -LsSf https://astral.sh/uv/install.sh | sh
-> ```
 
 ### 2. 克隆项目
 
@@ -90,19 +80,23 @@ conda create -n enterprise-agent python=3.11 -y
 # 激活环境
 conda activate enterprise-agent
 
-# 使用 uv 升级 pip（可选，uv 不依赖 pip）
-uv pip install --upgrade pip
-```
 
 > 提示：如果你仍然选择使用 `python -m venv`，`.venv/` 等虚拟环境目录也已经在 `.gitignore` 中忽略。
 
-### 4. 安装后端依赖（使用 uv）
+### 4. 安装 Python 依赖
 
 ```bash
-uv pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-### 5. 配置环境变量
+### 5. 安装 MCP 服务器依赖（npm）
+
+```bash
+# 在项目根目录安装 MCP 服务器所需的 Node 依赖
+npm install
+```
+
+### 6. 配置环境变量
 
 ```bash
 # 复制模板
@@ -148,7 +142,7 @@ python main.py
 ### 8. 启动前端（新终端窗口）
 
 ```bash
-cd enterprise-knowledge-agent/frontend
+cd frontend
 npm run dev
 ```
 
@@ -166,17 +160,17 @@ npm run dev
 enterprise-knowledge-agent/
 ├── main.py                      # 主入口 (FastAPI + 启动时自动嵌入知识库)
 ├── requirements.txt             # Python 依赖
-├── package.json                 # MCP 服务器依赖
+├── package.json                  # MCP 服务器依赖 (npm install)
 │
-├── config/                      # 配置
-│   ├── settings.py              # Pydantic Settings 配置
+├── config/                       # 配置
+│   ├── settings.py               # Pydantic Settings 配置
 │   ├── mcp_servers.json         # MCP 服务器配置
 │   └── .env                     # 环境变量
 │
 ├── core/                        # 核心模块
 │   ├── llm.py                   # LLM 初始化 (千问/OpenAI)
 │   ├── embeddings.py            # 向量嵌入模型
-│   └── mcp_client.py            # MCP 客户端
+│   └── mcp_client.py             # MCP 客户端
 │
 ├── rag/                         # RAG 模块
 │   ├── vectorstore.py           # Chroma 向量存储
@@ -186,30 +180,34 @@ enterprise-knowledge-agent/
 │
 ├── tools/                       # 工具模块 (Operation Agent 用)
 │   ├── __init__.py              # 基础工具 (知识搜索/计算器/时间)
-│   └── mcp_adapter.py           # MCP 工具适配器
+│   └── mcp_adapter.py            # MCP 工具适配器
 │
 ├── agents/                      # Agent 模块
 │   ├── graph.py                 # LangGraph 工作流定义
 │   ├── prompts.py               # Agent 系统提示词
 │   ├── nodes/                   # Agent 节点
-│   │   ├── supervisor.py        # 路由决策节点
-│   │   ├── knowledge.py          # 知识库问答节点
+│   │   ├── supervisor.py       # 路由决策节点
+│   │   ├── knowledge.py         # 知识库问答节点
 │   │   ├── operation.py         # 操作执行节点
-│   │   ├── general.py            # 通用问答节点
-│   │   └── utils.py              # 节点工具函数
+│   │   ├── general.py           # 通用问答节点
+│   │   └── utils.py             # 节点工具函数
 │   └── skills/                  # Agent Skills (声明式技能)
-│       ├── skill_loader.py       # 技能加载器
-│       ├── knowledge/            # 知识检索技能
-│       │   ├── Skill.md          # 技能定义
+│       ├── skill_loader.py      # 技能加载器
+│       ├── knowledge/           # 知识检索技能
+│       │   ├── Skill.md         # 技能定义
 │       │   └── scripts/tools.py  # 技能工具
-│       ├── calculator/           # 计算器技能
-│       ├── datetime/             # 日期时间技能
+│       ├── calculator/          # 计算器技能
+│       ├── datetime/            # 日期时间技能
 │       └── file_operation/      # 文件操作技能
 │
-├── api/                         # API 模块
-│   └── routes/
-│       ├── chat.py               # 聊天 API
-│       └── knowledge.py          # 知识管理 API
+├── api/                         # API 模块 (Controller + Service 分层)
+│   ├── controllers/             # Controller 层 (接收请求)
+│   │   ├── chat_controller.py   # 聊天 API
+│   │   └── knowledge_controller.py  # 知识管理 API
+│   ├── services/                 # Service 层 (业务逻辑)
+│   │   ├── chat_service.py
+│   │   └── knowledge_service.py
+│   └── dependencies.py          # 依赖注入
 │
 ├── scripts/                     # 脚本
 │   └── ingest.py                # 知识库嵌入脚本
@@ -221,9 +219,9 @@ enterprise-knowledge-agent/
 │
 └── frontend/                    # Vue 3 前端
     ├── src/
-    │   ├── App.vue               # 主组件
-    │   ├── main.ts               # 入口
-    │   └── style.css             # 样式
+    │   ├── App.vue              # 主组件
+    │   ├── main.ts              # 入口
+    │   └── style.css            # 样式
     ├── package.json             # 前端依赖
     └── vite.config.ts           # Vite 配置
 ```

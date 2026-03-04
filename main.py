@@ -66,12 +66,9 @@ async def lifespan(app: FastAPI):
     
     yield
     
-    # 关闭时断开 MCP 连接
-    print("正在关闭 MCP 服务器连接...")
-    try:
-        await close_mcp()
-    except Exception as e:
-        print(f"关闭 MCP 出错: {e}")
+    # 注意：不主动断开 MCP 连接，让进程自然退出
+    # 避免 uvicorn 关闭时因任务取消导致的 asyncio cancel scope 冲突
+    print("应用关闭，MCP 连接将在进程退出时自动关闭")
 
 
 # 创建FastAPI应用
@@ -107,12 +104,12 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    # Linux 下启用 reload 模式方便开发
+    # Linux 下禁用 reload 模式，避免 MCP stdio 连接在重载时出现 asyncio 取消作用域冲突
     uvicorn.run(
         "main:app",
         host=settings.api_host,
         port=settings.api_port,
-        reload=True
+        reload=False
     )
 
 

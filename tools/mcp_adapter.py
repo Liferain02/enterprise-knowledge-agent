@@ -1,28 +1,11 @@
 """
 MCP 工具适配器
 将 MCP 工具转换为 LangChain BaseTool 格式
-支持异步执行，避免 asyncio.new_event_loop 反模式
+使用异步 coroutine 实现，优化性能
 """
 from typing import List, Any, Optional, Type
 from pydantic import BaseModel, Field, create_model
 from langchain_core.tools import BaseTool
-
-
-# 全局事件循环（延迟初始化）
-_loop: Optional[Any] = None
-
-
-def get_event_loop():
-    """获取或创建事件循环"""
-    global _loop
-    try:
-        import asyncio
-        if _loop is None or _loop.is_closed():
-            _loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(_loop)
-        return _loop
-    except Exception:
-        return None
 
 
 def convert_mcp_tools(mcp_tools: List[Any]) -> List[BaseTool]:
@@ -86,49 +69,33 @@ def convert_single_mcp_tool(mcp_tool: Any) -> Optional[BaseTool]:
     # 预先保存工具名称供内部函数使用
     _tool_name = tool_name
     
-    def execute_tool(**kwargs) -> str:
-        """执行 MCP 工具（同步包装）"""
-        import asyncio
-        import concurrent.futures
+    async def execute_tool_async(**kwargs) -> str:
+        """执行 MCP 工具（异步实现）"""
         from core.mcp_client import mcp_manager
         
-        async def _async_execute():
-            try:
-                tool_manager = mcp_manager.tool_manager
-                if tool_manager is None:
-                    raise RuntimeError("MCP 工具管理器未初始化")
-                
-                # 查找工具所在的服务器
-                server_name = None
-                for s_name, client in tool_manager._mcp_servers.items():
-                    for t in client.get_tools():
-                        if t.name == _tool_name:
-                            server_name = s_name
-                            break
-                    if server_name:
-                        break
-                
-                if not server_name:
-                    raise RuntimeError(f"未找到工具 {_tool_name} 所在的服务器")
-                
-                result = await tool_manager.call_mcp_tool(server_name, _tool_name, kwargs)
-                return format_mcp_result(result)
-                
-            except Exception as e:
-                return f"MCP 工具执行错误: {str(e)}"
-        
-        # 使用线程池执行异步函数，避免嵌套事件循环问题
         try:
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    future = executor.submit(loop.run_until_complete, _async_execute())
-                    return future.result(timeout=30)
-                finally:
-                    loop.close()
+            tool_manager = mcp_manager.tool_manager
+            if tool_manager is None:
+                raise RuntimeError("MCP 工具管理器未初始化")
+            
+            # 查找工具所在的服务器
+            server_name = None
+            for s_name, client in tool_manager._mcp_servers.items():
+                for t in client.get_tools():
+                    if t.name == _tool_name:
+                        server_name = s_name
+                        break
+                if server_name:
+                    break
+            
+            if not server_name:
+                raise RuntimeError(f"未找到工具 {_tool_name} 所在的服务器")
+            
+            result = await tool_manager.call_mcp_tool(server_name, _tool_name, kwargs)
+            return format_mcp_result(result)
+            
         except Exception as e:
-            return f"执行工具失败: {str(e)}"
+            return f"MCP 工具执行错误: {str(e)}"
     
     # 获取输入模式用于描述参数
     input_schema = getattr(mcp_tool, 'inputSchema', {})
@@ -144,7 +111,8 @@ def convert_single_mcp_tool(mcp_tool: Any) -> Optional[BaseTool]:
     
     try:
         return StructuredTool.from_function(
-            func=execute_tool,  # 使用 func 而不是 coroutine
+            func=None,
+            coroutine=execute_tool_async,
             name=tool_name,
             description=tool_description,
             args_schema=args_schema,

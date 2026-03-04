@@ -180,6 +180,7 @@ class MCPClient:
         self._exit_stack = None
         self._session = None
         self._tools = []
+        self._stdio_client = None
     
     async def connect(self) -> bool:
         """连接 MCP 服务器"""
@@ -209,15 +210,23 @@ class MCPClient:
                     "env": self.config.env or {}
                 }
             
-            # 创建客户端连接
+            # 创建客户端连接 (避免使用 async with 以兼容 uvicorn reload)
             if 'StdioClient' in dir():
-                # MCP 1.6+ 新 API
-                async with StdioClient(**server_params) as (read, write):
+                # MCP 1.6+ 新 API - 手动管理上下文
+                stdio_client_instance = StdioClient(**server_params)
+                read, write = await stdio_client_instance.__aenter__()
+                try:
                     session = ClientSession(read, write)
-                    async with session:
-                        await session.initialize()
-                        tools_response = await session.list_tools()
-                        self._tools = tools_response.tools
+                    await session.initialize()
+                    tools_response = await session.list_tools()
+                    self._tools = tools_response.tools
+                    # 保存引用以便后续使用
+                    self._session = session
+                    self._stdio_client = stdio_client_instance
+                    return True
+                except Exception as e:
+                    await stdio_client_instance.__aexit__(None, None, None)
+                    raise
             else:
                 # 旧版 API
                 stdio_ctx = stdio_client(server_params)
@@ -258,6 +267,12 @@ class MCPClient:
             if self._session:
                 await self._session.__aexit__(None, None, None)
                 self._session = None
+            if hasattr(self, '_stdio_client') and self._stdio_client:
+                await self._stdio_client.__aexit__(None, None, None)
+                self._stdio_client = None
+        except (asyncio.CancelledError, RuntimeError) as e:
+            # 忽略 uvicorn 关闭时的取消/作用域错误
+            pass
         except Exception as e:
             print(f"断开连接时出错: {e}")
     
