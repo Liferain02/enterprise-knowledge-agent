@@ -16,8 +16,8 @@ from agents.nodes.utils import get_last_user_message
 # Agent 缓存
 _agent_cache = {}
 
-# 操作超时设置（秒）
-OPERATION_TIMEOUT = 600
+# 操作超时设置（秒）- 3分钟超时
+OPERATION_TIMEOUT = 180
 
 
 def _get_operation_agent(tools):

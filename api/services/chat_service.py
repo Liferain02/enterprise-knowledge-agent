@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any
 from agents.graph import run_agent, arun_agent, get_agent_graph
 from config.settings import get_settings
-from api.services import session_service
+from api.services.session_service import session_service
 
 logger = logging.getLogger(__name__)
 

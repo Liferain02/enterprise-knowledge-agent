@@ -4,7 +4,7 @@
 """
 import uuid
 from typing import Dict, Any, List
-from core.dao import session_dao, message_dao
+from api.dao import session_dao, message_dao
 from core.llm import get_llm
 import logging
 

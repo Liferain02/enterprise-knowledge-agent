@@ -16,7 +16,7 @@ class SessionDAO:
     """会话数据访问对象"""
 
     def __init__(self):
-        self._db_path = Path(__file__).parent.parent / "chroma_db" / "sessions.db"
+        self._db_path = Path(__file__).parent.parent.parent / "chroma_db" / "sessions.db"
         self._init_db()
 
     def _get_db_path(self) -> Path:
@@ -197,7 +197,7 @@ class MessageDAO:
     """消息数据访问对象"""
 
     def __init__(self):
-        self._db_path = Path(__file__).parent.parent / "chroma_db" / "sessions.db"
+        self._db_path = Path(__file__).parent.parent.parent / "chroma_db" / "sessions.db"
 
     def _get_db_path(self) -> Path:
         return self._db_path
