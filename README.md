@@ -200,13 +200,16 @@ enterprise-knowledge-agent/
 │       ├── datetime/            # 日期时间技能
 │       └── file_operation/      # 文件操作技能
 │
-├── api/                         # API 模块 (Controller + Service 分层)
+├── api/                         # API 模块 (Controller + Service + DAO 分层)
 │   ├── controllers/             # Controller 层 (接收请求)
 │   │   ├── chat_controller.py   # 聊天 API
 │   │   └── knowledge_controller.py  # 知识管理 API
 │   ├── services/                 # Service 层 (业务逻辑)
 │   │   ├── chat_service.py
+│   │   ├── session_service.py
 │   │   └── knowledge_service.py
+│   ├── dao/                     # DAO 层 (数据访问)
+│   │   └── session_dao.py
 │   └── dependencies.py          # 依赖注入
 │
 ├── scripts/                     # 脚本
