@@ -6,8 +6,8 @@ import sys
 import asyncio
 from pathlib import Path
 
-from rag.document_loader import get_document_loader_manager
-from rag.vectorstore import get_vectorstore_manager
+from src.rag.processing.document_loader import get_document_loader_manager
+from src.rag.storage.vectorstore import get_vectorstore_manager
 from config.settings import get_settings
 
 

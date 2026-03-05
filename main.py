@@ -5,41 +5,43 @@ import asyncio
 import sys
 import os
 
-# 设置代理（如果环境变量中没有配置）
-if not os.environ.get("http_proxy") and not os.environ.get("HTTP_PROXY"):
-    # 可以在这里硬编码代理，或者从配置文件读取
-    os.environ["http_proxy"] = "http://127.0.0.1:7897"
-    os.environ["https_proxy"] = "http://127.0.0.1:7897"
-    pass
-
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import uvicorn
-from config.settings import get_settings
 
-# 清空 LLM 缓存，确保代理配置生效
-from core.llm import reset_llm
-reset_llm()
-
-from api.controllers import chat_router, knowledge_router, auth_router
-from core.mcp_client import mcp_manager as global_mcp_manager
-from rag.vectorstore import get_vectorstore_manager
+from config import get_settings
 
 # 初始化设置
 settings = get_settings()
+
+# 设置代理（如果配置了代理地址）
+if settings.http_proxy:
+    os.environ["http_proxy"] = settings.http_proxy
+if settings.https_proxy:
+    os.environ["https_proxy"] = settings.https_proxy
+
+# 清空 LLM 缓存，确保代理配置生效
+from src.models import reset_llm
+reset_llm()
+
+# 导入路由
+from src.api.controllers import chat_router, knowledge_router, auth_router
+
+# 导入核心组件
+from src.models.mcp_client import mcp_manager as global_mcp_manager
+from src.rag import get_vectorstore_manager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理 - 在 uvicorn 的 event loop 中初始化 MCP"""
-    # 在 uvicorn 的 event loop 中初始化 MCP（带超时保护）
+    # 初始化 MCP
     print("==================================================")
     print("正在初始化 MCP 服务器...")
 
-    # 获取超时配置
     mcp_timeout = settings.mcp_init_timeout
     await global_mcp_manager.initialize(timeout=mcp_timeout)
 
@@ -58,7 +60,7 @@ async def lifespan(app: FastAPI):
             print("=" * 50)
 
             # 导入并运行嵌入脚本
-            from scripts.ingest import ingest_knowledge_base
+            from scripts import ingest_knowledge_base
             ingest_knowledge_base(
                 reset=False,
                 chunking_strategy=settings.chunking_strategy
@@ -73,13 +75,14 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        # 关闭时清理 MCP 连接 - 使用 try-except 忽略 anyio 取消错误
+        # 关闭时清理 MCP 连接
         print("正在关闭 MCP 服务器连接...")
         try:
             await global_mcp_manager.close()
             print("MCP 服务器连接已关闭")
         except Exception as e:
             print(f"关闭 MCP 连接时出错 (可忽略): {e}")
+
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -108,6 +111,7 @@ if os.path.exists(FRONTEND_DIST):
     async def serve_index():
         return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
 
+
 # 注册路由
 app.include_router(chat_router)
 app.include_router(knowledge_router)
@@ -133,5 +137,3 @@ if __name__ == "__main__":
         port=settings.api_port,
         reload=False
     )
-
-

@@ -1,0 +1,12 @@
+{
+  "dependencies": [
+    "langchain-openai",
+    "langchain-community",
+    "langgraph",
+    "src"
+  ],
+  "graphs": {
+    "agent": "./src/agent/__init__.py:get_agent_graph"
+  },
+  "env": "./config/.env"
+}

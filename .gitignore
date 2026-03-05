@@ -25,6 +25,8 @@ conda_env/
 .env
 .env.local
 .env.*.local
+# 但跟踪 env.example 作为模板
+!/.env.example
 
 # IDE 配置
 .idea/

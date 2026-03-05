@@ -115,7 +115,7 @@ class Settings(BaseSettings):
         description="检索返回的top k结果数"
     )
     similarity_threshold: float = Field(
-        default=0.3,
+        default=0.7,
         description="相似度阈值 (0-1，越低越宽松)"
     )
     chunk_size: int = Field(
@@ -169,6 +169,16 @@ class Settings(BaseSettings):
     hybrid_bm25_weight: float = Field(
         default=0.5,
         description="BM25 检索权重"
+    )
+
+    # 代理配置
+    http_proxy: str = Field(
+        default="",
+        description="HTTP 代理地址，如 http://127.0.0.1:7897"
+    )
+    https_proxy: str = Field(
+        default="",
+        description="HTTPS 代理地址，如 http://127.0.0.1:7897"
     )
 
     # MCP 配置
