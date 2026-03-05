@@ -7,6 +7,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from agents.nodes.supervisor import supervisor_node, route_to_agent
 from agents.nodes.knowledge import knowledge_agent_node
@@ -74,9 +75,10 @@ def create_multi_agent_graph() -> StateGraph:
     workflow.set_entry_point("supervisor")
     
     # 添加条件边 - 根据 Supervisor 决策路由
+    # 使用 RunnableLambda 包装以支持异步
     workflow.add_conditional_edges(
         "supervisor",
-        route_to_agent,
+        RunnableLambda(route_to_agent),
         {
             "knowledge_agent": "knowledge_agent",
             "operation_agent": "operation_agent",

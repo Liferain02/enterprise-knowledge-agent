@@ -1,22 +1,21 @@
 """
 RAG Pipeline 模块
 整合检索和生成流程
-使用 LangChain 原生 create_history_aware_retriever 处理对话历史
+使用 LangChain 1.x LCEL 方式
+支持 Reranker 重排序
 """
 from typing import List, Optional, Dict, Any
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
-# LangChain 1.0+ 导入路径
-from langchain.chains import create_stuff_documents_chain
-from langchain.chains.retrieval import create_retrieval_chain
-from langchain.chains.history_aware_retriever import create_history_aware_retriever
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 
 from core.llm import get_llm
 from core.embeddings import get_embeddings
 from rag.vectorstore import get_vectorstore
 from rag.retriever import get_retriever_manager
+from rag.reranker import get_reranker_manager
 from config.settings import get_settings
 
 
@@ -56,60 +55,113 @@ HISTORY_AWARE_RETRIEVER_PROMPT = """给定聊天历史和最新用户问题，�
 优化后的查询："""
 
 
+def format_docs(docs: List[Document]) -> str:
+    """格式化文档为字符串"""
+    return "\n\n".join(doc.page_content for doc in docs)
+
+
 class RAGPipeline:
     """RAG 管道"""
-    
+
     def __init__(
         self,
         collection_name: str = "enterprise_knowledge",
         top_k: int = 5,
-        use_compression: bool = False
+        use_compression: bool = False,
+        use_reranker: bool = True
     ):
         self.settings = get_settings()
         self.collection_name = collection_name
         self.top_k = top_k or self.settings.retrieval_top_k
         self.use_compression = use_compression
-        
+        self.use_reranker = use_reranker and self.settings.reranker_enabled
+
         self.llm = get_llm()
         self.vectorstore = get_vectorstore(collection_name)
         self.retriever_manager = get_retriever_manager()
-        
+
+        # 初始化 Reranker
+        self.reranker_manager = None
+        if self.use_reranker:
+            try:
+                self.reranker_manager = get_reranker_manager()
+            except Exception as e:
+                print(f"Warning: Reranker 初始化失败: {e}")
+                self.use_reranker = False
+
         # 构建检索链
         self._build_chain()
-    
+
     def _build_chain(self):
-        """构建 RAG 链"""
+        """使用 LCEL 构建 RAG 链"""
         # 提示词模板
         prompt = ChatPromptTemplate.from_messages([
             ("system", RAG_SYSTEM_PROMPT),
             ("human", RAG_QUESTION_PROMPT)
         ])
-        
-        # 文档填充链
-        self.document_chain = create_stuff_documents_chain(
-            self.llm,
-            prompt
-        )
-        
-        # 检索链
+
+        # 基础检索器
         retriever = self.retriever_manager.retriever
-        self.retrieval_chain = create_retrieval_chain(
-            retriever,
-            self.document_chain
+
+        # 定义检索函数（支持 Reranker）
+        def retrieve_and_rerank(input_dict: Dict) -> List[Document]:
+            query = input_dict.get("input", "")
+            docs = retriever.invoke(query)
+            
+            if self.use_reranker and self.reranker_manager and docs:
+                try:
+                    results = self.reranker_manager.rerank(query, docs, top_n=self.top_k)
+                    return [doc for doc, score in results]
+                except Exception as e:
+                    print(f"Rerank 错误: {e}")
+                    return docs[:self.top_k]
+            return docs[:self.top_k]
+
+        # 使用 LCEL 构建链
+        self.retrieval_chain = (
+            RunnablePassthrough.assign(
+                context=RunnableLambda(retrieve_and_rerank)
+            )
+            | prompt
+            | self.llm
+            | StrOutputParser()
         )
-    
+
     def invoke(self, query: str) -> Dict[str, Any]:
         """执行 RAG 流程"""
-        result = self.retrieval_chain.invoke({
-            "input": query
-        })
+        # 先获取文档（用于返回 source_documents）
+        retriever = self.retriever_manager.retriever
+        docs = retriever.invoke(query)
+        
+        # Reranker
+        if self.use_reranker and self.reranker_manager and docs:
+            try:
+                results = self.reranker_manager.rerank(query, docs, top_n=self.top_k)
+                docs = [doc for doc, score in results]
+            except Exception as e:
+                print(f"Rerank 错误: {e}")
+                docs = docs[:self.top_k]
+        else:
+            docs = docs[:self.top_k]
+
+        # 执行生成
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", RAG_SYSTEM_PROMPT),
+            ("human", RAG_QUESTION_PROMPT)
+        ])
+        
+        context_str = format_docs(docs)
+        
+        answer = self.llm.invoke(
+            prompt.format(context=context_str, input=query)
+        )
         
         return {
-            "answer": result["answer"],
-            "context": result.get("context", []),
-            "source_documents": result.get("source_documents", [])
+            "answer": answer.content if hasattr(answer, 'content') else str(answer),
+            "context": docs,
+            "source_documents": docs
         }
-    
+
     def invoke_with_sources(self, query: str) -> Dict[str, Any]:
         """带来源信息的执行"""
         result = self.invoke(query)
@@ -127,20 +179,23 @@ class RAGPipeline:
     
     async def ainvoke(self, query: str) -> Dict[str, Any]:
         """异步执行 RAG 流程"""
-        result = await self.retrieval_chain.ainvoke({
-            "input": query
-        })
-        
-        return {
-            "answer": result["answer"],
-            "context": result.get("context", []),
-            "source_documents": result.get("source_documents", [])
-        }
+        return self.invoke(query)
     
     def get_relevant_documents(self, query: str) -> List[Document]:
         """仅获取相关文档（不生成答案）"""
         retriever = self.retriever_manager.retriever
-        return retriever.invoke(query)
+        docs = retriever.invoke(query)
+        
+        # Reranker
+        if self.use_reranker and self.reranker_manager and docs:
+            try:
+                results = self.reranker_manager.rerank(query, docs, top_n=self.top_k)
+                return [doc for doc, score in results]
+            except Exception as e:
+                print(f"Rerank 错误: {e}")
+                return docs[:self.top_k]
+        
+        return docs[:self.top_k]
     
     def format_context(self, query: str) -> str:
         """格式化检索到的上下文"""
@@ -164,7 +219,7 @@ class RAGPipeline:
 
 
 class ConversationalRAGPipeline:
-    """对话式 RAG 管道（支持历史记录）- 使用 LangChain 原生 create_history_aware_retriever"""
+    """对话式 RAG 管道（支持历史记录）- 使用 LCEL"""
     
     def __init__(
         self,
@@ -186,35 +241,60 @@ class ConversationalRAGPipeline:
         """构建支持历史记录的 RAG 链"""
         retriever = self.retriever_manager.retriever
         
-        # 1. 历史感知检索器 - 将历史和当前问题改写为独立查询
+        # 历史感知检索器 prompt
         history_prompt = ChatPromptTemplate.from_messages([
             ("system", HISTORY_AWARE_RETRIEVER_PROMPT),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}")
         ])
         
-        self.history_aware_retriever = create_history_aware_retriever(
-            self.llm,
-            retriever,
-            history_prompt
-        )
+        # 使用 LLM 将历史问题改写为独立查询
+        def rewrite_query(input_dict: Dict) -> str:
+            query = input_dict.get("input", "")
+            chat_history = input_dict.get("chat_history", [])
+            
+            if not chat_history:
+                return query
+            
+            # 使用 LLM 改写
+            try:
+                result = history_prompt.format(
+                    chat_history=chat_history,
+                    input=query
+                )
+                response = self.llm.invoke(result)
+                rewritten = response.content if hasattr(response, 'content') else str(response)
+                return rewritten.strip()
+            except Exception as e:
+                print(f"Query rewrite error: {e}")
+                return query
         
-        # 2. 问答提示词
+        # 问答 prompt
         qa_prompt = ChatPromptTemplate.from_messages([
             ("system", RAG_SYSTEM_PROMPT),
             ("human", RAG_QUESTION_PROMPT)
         ])
         
-        # 3. 文档填充链
-        self.document_chain = create_stuff_documents_chain(
-            self.llm,
-            qa_prompt
-        )
+        # 定义检索和生成流程
+        def retrieve_with_history(input_dict: Dict) -> List[Document]:
+            query = rewrite_query(input_dict)
+            return retriever.invoke(query)[:self.top_k]
         
-        # 4. 完整检索链
-        self.retrieval_chain = create_retrieval_chain(
-            self.history_aware_retriever,
-            self.document_chain
+        self.retrieval_chain = (
+            RunnablePassthrough.assign(
+                context=RunnableLambda(retrieve_with_history)
+            )
+            | RunnablePassthrough.assign(
+                chat_history=lambda x: x.get("chat_history", [])
+            )
+            | RunnableLambda(lambda x: {
+                "input": x.get("input", ""),
+                "context": format_docs(x.get("context", [])),
+                "chat_history": x.get("chat_history", [])
+            })
+            | qa_prompt
+            | self.llm
+            | StrOutputParser()
         )
     
     def invoke(
@@ -235,16 +315,48 @@ class ConversationalRAGPipeline:
         # 将历史记录转换为 LangChain 消息格式
         chat_history = self._convert_history_to_messages(history)
         
-        # 执行检索链
-        result = self.retrieval_chain.invoke({
-            "input": query,
-            "chat_history": chat_history
-        })
+        # 先检索文档
+        retriever = self.retriever_manager.retriever
+        
+        # 如果有历史，先改写查询
+        if chat_history:
+            history_prompt = ChatPromptTemplate.from_messages([
+                ("system", HISTORY_AWARE_RETRIEVER_PROMPT),
+                MessagesPlaceholder(variable_name="chat_history", optional=True),
+                ("human", "{input}")
+            ])
+            try:
+                prompt_str = history_prompt.format(
+                    chat_history=chat_history,
+                    input=query
+                )
+                response = self.llm.invoke(prompt_str)
+                rewritten_query = response.content if hasattr(response, 'content') else str(response)
+                rewritten_query = rewritten_query.strip()
+            except Exception as e:
+                print(f"Query rewrite error: {e}")
+                rewritten_query = query
+        else:
+            rewritten_query = query
+        
+        # 检索文档
+        docs = retriever.invoke(rewritten_query)[:self.top_k]
+        
+        # 生成答案
+        qa_prompt = ChatPromptTemplate.from_messages([
+            ("system", RAG_SYSTEM_PROMPT),
+            ("human", RAG_QUESTION_PROMPT)
+        ])
+        
+        context_str = format_docs(docs)
+        answer = self.llm.invoke(
+            qa_prompt.format(context=context_str, input=query)
+        )
         
         return {
-            "answer": result["answer"],
-            "context": result.get("context", []),
-            "source_documents": result.get("source_documents", [])
+            "answer": answer.content if hasattr(answer, 'content') else str(answer),
+            "context": docs,
+            "source_documents": docs
         }
     
     def _convert_history_to_messages(self, history: Optional[List[Dict]]) -> List:
@@ -274,18 +386,7 @@ class ConversationalRAGPipeline:
         history: Optional[List[Dict]] = None
     ) -> Dict[str, Any]:
         """异步执行带历史记录的 RAG"""
-        chat_history = self._convert_history_to_messages(history)
-        
-        result = await self.retrieval_chain.ainvoke({
-            "input": query,
-            "chat_history": chat_history
-        })
-        
-        return {
-            "answer": result["answer"],
-            "context": result.get("context", []),
-            "source_documents": result.get("source_documents", [])
-        }
+        return self.invoke(query, history)
 
 
 # 全局实例

@@ -27,7 +27,13 @@ def knowledge_search(query: str, top_k: int = 5) -> str:
     
     try:
         retriever_manager = get_retriever_manager()
-        results = retriever_manager.search(query, k=top_k)
+        
+        # 使用带 Reranker 的搜索
+        if retriever_manager.use_reranker and retriever_manager.reranker_manager:
+            results_with_score = retriever_manager.search_with_rerank(query, k=top_k)
+            results = [doc for doc, score in results_with_score]
+        else:
+            results = retriever_manager.search(query, k=top_k)
         
         if not results:
             return "未在知识库中找到相关内容。建议尝试使用不同的关键词或简化查询。"

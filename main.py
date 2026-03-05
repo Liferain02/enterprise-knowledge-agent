@@ -35,10 +35,14 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理 - 在 uvicorn 的 event loop 中初始化 MCP"""
-    # 在 uvicorn 的 event loop 中初始化 MCP
+    # 在 uvicorn 的 event loop 中初始化 MCP（带超时保护）
     print("==================================================")
     print("正在初始化 MCP 服务器...")
-    await global_mcp_manager.initialize()
+
+    # 获取超时配置
+    mcp_timeout = settings.mcp_init_timeout
+    await global_mcp_manager.initialize(timeout=mcp_timeout)
+
     print(f"MCP 服务器初始化完成，获取 {len(global_mcp_manager.get_tools())} 个工具")
     print("==================================================")
 
@@ -55,7 +59,10 @@ async def lifespan(app: FastAPI):
 
             # 导入并运行嵌入脚本
             from scripts.ingest import ingest_knowledge_base
-            ingest_knowledge_base(reset=False)
+            ingest_knowledge_base(
+                reset=False,
+                chunking_strategy=settings.chunking_strategy
+            )
 
             print("✅ 知识库嵌入完成！")
         else:

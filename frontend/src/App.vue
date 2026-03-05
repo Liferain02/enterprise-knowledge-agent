@@ -90,6 +90,10 @@
           <span class="connection-status" :class="{ connected: apiConnected }">
             {{ apiConnected ? '🟢 已连接' : '🔴 未连接' }}
           </span>
+          <label class="stream-toggle">
+            <input type="checkbox" v-model="streamMode" />
+            <span>流式输出</span>
+          </label>
           <button v-if="isAuthed" class="btn-logout" @click="logout">退出</button>
         </div>
       </header>
@@ -144,6 +148,7 @@
               </span>
             </div>
             <div class="message-body" v-html="renderMarkdown(msg.content)"></div>
+            <span v-if="isStreaming && index === streamingMessageIndex" class="streaming-cursor">|</span>
           </div>
         </div>
         
@@ -277,6 +282,9 @@ const currentAgent = ref('supervisor')
 const apiConnected = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 const sessions = ref<Session[]>([])
+const streamMode = ref(false)
+const streamingMessageIndex = ref(-1)
+const isStreaming = ref(false)
 
 // 用于取消请求
 let abortController: AbortController | null = null
@@ -427,6 +435,10 @@ const sendMessage = async () => {
       abortController = null
     }
     loading.value = false
+    // 如果正在流式输出，直接结束当前消息
+    if (streamingMessageIndex.value >= 0) {
+      streamingMessageIndex.value = -1
+    }
     messages.value.push({
       role: 'assistant',
       content: '⏹️ 已手动取消回答',
@@ -448,29 +460,115 @@ const sendMessage = async () => {
   currentAgent.value = 'supervisor'
   scrollToBottom()
 
-  try {
-    const response = await axios.post(`${API_BASE}/chat`, {
-      session_id: sessionId.value,
-      message: text
-    }, {
-      signal: abortController.signal
-    })
+  // 用于流式输出时累积内容
+  let accumulatedContent = ''
+  streamingMessageIndex.value = -1
 
-    const data = response.data
+  try {
+    if (streamMode.value) {
+      // 流式输出模式
+      const response = await fetch(`${API_BASE}/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token.value}`
+        },
+        body: JSON.stringify({
+          session_id: sessionId.value,
+          message: text
+        }),
+        signal: abortController.signal
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is null')
+      }
+
+      // 添加一个空的 assistant 消息用于流式更新
+      messages.value.push({
+        role: 'assistant',
+        content: '',
+        agent: 'supervisor'
+      })
+      streamingMessageIndex.value = messages.value.length - 1
+      isStreaming.value = true
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (data.type === 'chunk' && data.content) {
+                accumulatedContent += data.content
+                if (streamingMessageIndex.value >= 0) {
+                  // 使用 splice 触发 Vue 响应式更新
+                  const idx = streamingMessageIndex.value
+                  messages.value.splice(idx, 1, {
+                    ...messages.value[idx],
+                    content: accumulatedContent,
+                    agent: data.used_agent || currentAgent.value
+                  })
+                  currentAgent.value = data.used_agent || currentAgent.value
+                }
+                scrollToBottom()
+              } else if (data.type === 'done') {
+                currentAgent.value = data.used_agent || currentAgent.value
+                if (streamingMessageIndex.value >= 0) {
+                  const idx = streamingMessageIndex.value
+                  messages.value.splice(idx, 1, {
+                    ...messages.value[idx],
+                    agent: currentAgent.value
+                  })
+                }
+              }
+            } catch (e) {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+
+      streamingMessageIndex.value = -1
+      isStreaming.value = false
+    } else {
+      // 非流式输出模式
+      const response = await axios.post(`${API_BASE}/chat`, {
+        session_id: sessionId.value,
+        message: text
+      }, {
+        signal: abortController.signal
+      })
+
+      const data = response.data
+      
+      // 添加 AI 回复
+      messages.value.push({
+        role: 'assistant',
+        content: data.answer || data.final_answer || '无回复',
+        agent: data.used_agent || 'unknown'
+      })
+      
+      currentAgent.value = data.used_agent || 'supervisor'
+    }
     
-    // 添加 AI 回复
-    messages.value.push({
-      role: 'assistant',
-      content: data.answer || data.final_answer || '无回复',
-      agent: data.used_agent || 'unknown'
-    })
-    
-    currentAgent.value = data.used_agent || 'supervisor'
     // 刷新会话列表（更新标题和消息数）
     await loadSessions()
   } catch (error: any) {
     // 判断是否是主动取消
-    if (axios.isCancel(error)) {
+    if (axios.isCancel(error) || error.name === 'AbortError') {
       console.log('请求已取消')
       return
     }
@@ -483,6 +581,7 @@ const sendMessage = async () => {
   } finally {
     loading.value = false
     abortController = null
+    streamingMessageIndex.value = -1
     scrollToBottom()
   }
 }

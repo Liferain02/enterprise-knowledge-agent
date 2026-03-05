@@ -27,46 +27,80 @@ class MCPConnectionManager:
             self._initialized_connect = False
             MCPConnectionManager._initialized = True
     
-    async def initialize(self):
-        """初始化 MCP 连接（懒加载模式）"""
+    async def initialize(self, timeout: float = 30.0):
+        """
+        初始化 MCP 连接（支持并发和超时保护）
+
+        Args:
+            timeout: 单个 MCP 服务器连接超时时间（秒）
+        """
         if self._initialized_connect:
             return
-        
+
         self._initialized_connect = True
         settings = get_settings()
-        
+
         if not settings.mcp_server_enabled:
             print("MCP 服务器未启用")
             return
-        
+
         # 加载 MCP 服务器配置
         mcp_configs = settings.load_mcp_servers_config()
-        
+
         if not mcp_configs:
             print("未配置 MCP 服务器")
             return
-        
+
         # 创建工具管理器
         self.tool_manager = MCPToolManager()
-        
-        # 连接每个 MCP 服务器
-        for config in mcp_configs:
+
+        # 并发连接所有 MCP 服务器
+        await self._connect_servers_concurrent(mcp_configs, timeout)
+
+    async def _connect_servers_concurrent(
+        self,
+        mcp_configs: List[Dict],
+        timeout: float = 30.0
+    ):
+        """
+        并发连接多个 MCP 服务器
+
+        Args:
+            mcp_configs: MCP 服务器配置列表
+            timeout: 超时时间
+        """
+        async def connect_with_timeout(config: Dict) -> tuple:
+            """带超时的连接"""
+            server_config = MCPServerConfig(**config)
             try:
-                server_config = MCPServerConfig(**config)
-                print(f"正在连接 MCP 服务器: {server_config.name}...")
-                
-                success = await self.tool_manager.connect_mcp_server(server_config)
-                
-                if success:
-                    print(f"✓ MCP 服务器 '{server_config.name}' 连接成功")
-                else:
-                    print(f"✗ MCP 服务器 '{server_config.name}' 连接失败")
-                    
-            except asyncio.CancelledError:
-                print(f"连接 MCP 服务器 '{config.get('name', 'unknown')}' 被取消")
-                break
+                success = await asyncio.wait_for(
+                    self.tool_manager.connect_mcp_server(server_config),
+                    timeout=timeout
+                )
+                return (server_config.name, success, None)
+            except asyncio.TimeoutError:
+                return (server_config.name, False, f"连接超时 ({timeout}s)")
             except Exception as e:
-                print(f"连接 MCP 服务器 '{config.get('name', 'unknown')}' 时出错: {e}")
+                return (server_config.name, False, str(e))
+
+        # 并发执行所有连接
+        print(f"正在并发连接 {len(mcp_configs)} 个 MCP 服务器...")
+        results = await asyncio.gather(
+            *[connect_with_timeout(config) for config in mcp_configs],
+            return_exceptions=False
+        )
+
+        # 汇总结果
+        success_count = 0
+        for name, success, error in results:
+            if success:
+                print(f"  ✓ MCP 服务器 '{name}' 连接成功")
+                success_count += 1
+            else:
+                msg = error or "连接失败"
+                print(f"  ✗ MCP 服务器 '{name}' {msg}")
+
+        print(f"MCP 连接完成: {success_count}/{len(mcp_configs)} 成功")
     
     def get_tools(self) -> List:
         """获取所有 MCP 工具"""

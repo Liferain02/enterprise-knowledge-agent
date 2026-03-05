@@ -16,6 +16,7 @@ def get_llm(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
     provider: Optional[str] = None,
+    streaming: bool = False,
 ) -> ChatOpenAI:
     """
     获取 LLM 实例（带缓存）
@@ -64,7 +65,18 @@ def get_llm(
         max_tokens=max_tokens or settings.max_token_response,
         api_key=api_key,
         base_url=base_url,
+        streaming=streaming,
     )
+
+
+def get_streaming_llm(
+    model: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    provider: Optional[str] = None,
+) -> ChatOpenAI:
+    """获取支持流式输出的 LLM 实例"""
+    return get_llm(model, temperature, max_tokens, provider, streaming=True)
 
 
 def reset_llm():

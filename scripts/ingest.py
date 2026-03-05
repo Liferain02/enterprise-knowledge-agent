@@ -16,29 +16,32 @@ def ingest_knowledge_base(
     collection_name: str = "enterprise_knowledge",
     chunk_size: int = 1000,
     chunk_overlap: int = 200,
+    chunking_strategy: str = "recursive",
     reset: bool = False
 ):
     """
     执行知识库文档嵌入
-    
+
     Args:
         knowledge_dir: 知识库目录路径
         collection_name: Chroma 集合名称
         chunk_size: 分块大小
         chunk_overlap: 分块重叠大小
+        chunking_strategy: 分块策略: recursive / markdown / semantic / hybrid
         reset: 是否重置向量数据库
     """
     settings = get_settings()
-    
+
     # 确定知识库目录
     if knowledge_dir is None:
         knowledge_dir = str(settings.knowledge_base_dir)
-    
+
     print(f"=" * 50)
     print(f"开始文档嵌入...")
     print(f"知识库目录: {knowledge_dir}")
     print(f"集合名称: {collection_name}")
     print(f"分块大小: {chunk_size}")
+    print(f"分块策略: {chunking_strategy}")
     print(f"=" * 50)
     
     # 检查目录是否存在
@@ -79,7 +82,8 @@ def ingest_knowledge_base(
         split_docs = loader_manager.split_documents(
             documents,
             chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap
+            chunk_overlap=chunk_overlap,
+            splitter_type=chunking_strategy
         )
         print(f"      分割完成: {len(split_docs)} 个文本块")
     except Exception as e:
@@ -159,18 +163,26 @@ def main():
         help="分块重叠大小 (默认: 200)"
     )
     parser.add_argument(
+        "--strategy", "-s",
+        type=str,
+        default="recursive",
+        choices=["recursive", "markdown", "semantic", "hybrid"],
+        help="分块策略: recursive(固定长度) / markdown(标题) / semantic(语义) / hybrid(混合)"
+    )
+    parser.add_argument(
         "--reset", "-r",
         action="store_true",
         help="是否重置向量数据库"
     )
-    
+
     args = parser.parse_args()
-    
+
     ingest_knowledge_base(
         knowledge_dir=args.dir,
         collection_name=args.collection,
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
+        chunking_strategy=args.strategy,
         reset=args.reset
     )
 

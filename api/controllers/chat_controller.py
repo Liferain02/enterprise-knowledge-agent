@@ -2,7 +2,9 @@
 聊天 Controller
 """
 import logging
+import json
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.services import chat_service
@@ -74,6 +76,67 @@ async def chat(request: ChatRequest, _: dict = Depends(get_current_user)):
     except Exception as e:
         logger.exception(f"聊天请求失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"处理请求时出错: {str(e)}")
+
+
+async def generate_chat_stream(message: str, session_id: str):
+    """生成聊天流式响应 - 直接使用 LLM 流式输出"""
+    try:
+        from core.llm import get_streaming_llm
+        from langchain_core.messages import HumanMessage
+        from langchain_core.prompts import ChatPromptTemplate
+
+        # 获取流式 LLM
+        llm = get_streaming_llm()
+
+        # 构建提示词
+        system_prompt = """你是一个友好的AI助手。请用简洁的语言回答用户的问题。"""
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "{message}")
+        ])
+
+        # 创建 chain
+        chain = prompt | llm
+
+        # 流式调用 LLM
+        full_content = ""
+        async for chunk in chain.astream({"message": message}):
+            content = chunk.content
+            if content:
+                full_content += content
+                yield f"data: {json.dumps({'type': 'chunk', 'content': content})}\n\n"
+
+        # 如果没有内容，发送错误
+        if not full_content:
+            yield f"data: {json.dumps({'type': 'error', 'message': '生成回答失败'})}\n\n"
+            return
+
+        # 发送完成信号
+        yield f"data: {json.dumps({'type': 'done', 'used_agent': 'general_agent', 'sources': []})}\n\n"
+
+    except Exception as e:
+        logger.exception(f"流式聊天出错: {str(e)}")
+        yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+
+@router.post("/chat/stream")
+async def chat_stream(request: ChatRequest, _: dict = Depends(get_current_user)):
+    """
+    流式聊天接口
+
+    使用 Server-Sent Events (SSE) 实现流式输出
+    前端需要使用 EventSource API 接收流式响应
+    """
+    return StreamingResponse(
+        generate_chat_stream(request.message, request.session_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @router.get("/history/{session_id}")

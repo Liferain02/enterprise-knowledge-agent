@@ -9,6 +9,10 @@ langchain-openai==1.1.10
 # 新增：阿里通义千问官方 SDK（必须）
 dashscope>=1.20.0          # 最新版建议 >=1.20，兼容 Qwen-Max 等
 
+# 新增：Reranker 和混合检索
+sentence-transformers>=2.2.0   # BGE Reranker 本地模型
+rank-bm25>=0.2.2               # BM25 检索
+
 # LangGraph（Agent 工作流，保持）
 langgraph==1.0.9
 langgraph-prebuilt==1.0.8  # LangGraph 预构建节点

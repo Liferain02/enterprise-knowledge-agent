@@ -126,6 +126,50 @@ class Settings(BaseSettings):
         default=200,
         description="文档分块重叠大小"
     )
+    chunking_strategy: str = Field(
+        default="recursive",
+        description="分块策略: recursive(固定长度) / markdown(标题) / semantic(语义) / hybrid(混合)"
+    )
+    semantic_threshold: float = Field(
+        default=0.3,
+        description="语义分块阈值 (0-1，越高越敏感)"
+    )
+
+    # Reranker 配置
+    reranker_enabled: bool = Field(
+        default=True,
+        description="是否启用 Reranker 重排序"
+    )
+    reranker_model: str = Field(
+        default="qwen3-rerank",
+        description="Reranker 模型名称"
+    )
+    reranker_provider: str = Field(
+        default="qwen",
+        description="Reranker 提供商: qwen(阿里百炼) 或 baai(BAAI)"
+    )
+    reranker_top_n: int = Field(
+        default=3,
+        description="Reranker 返回的 top n 结果数"
+    )
+    reranker_threshold: float = Field(
+        default=0.3,
+        description="Reranker 分数阈值"
+    )
+
+    # 混合检索配置
+    hybrid_search_enabled: bool = Field(
+        default=True,
+        description="是否启用混合检索（BM25 + 向量）"
+    )
+    hybrid_vector_weight: float = Field(
+        default=0.5,
+        description="向量检索权重"
+    )
+    hybrid_bm25_weight: float = Field(
+        default=0.5,
+        description="BM25 检索权重"
+    )
 
     # MCP 配置
     mcp_server_enabled: bool = Field(
@@ -135,6 +179,10 @@ class Settings(BaseSettings):
     mcp_server_port: int = Field(
         default=8001,
         description="MCP服务器端口"
+    )
+    mcp_init_timeout: float = Field(
+        default=30.0,
+        description="MCP服务器连接超时时间（秒）"
     )
 
     # 会话配置

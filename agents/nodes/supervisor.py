@@ -125,22 +125,32 @@ def fallback_routing(question: str) -> tuple:
     return "knowledge_agent", "默认路由到知识库"
 
 
+from langchain_core.runnables import RunnableLambda
+
+
 def route_to_agent(state: Dict[str, Any]) -> str:
     """
     路由执行节点 - 根据 Supervisor 的决策跳转到对应的 Agent
-    
+
     注意：返回值必须是节点名称（与 graph.py 中的 add_node 名称一致）
     即：knowledge_agent, operation_agent, general_agent
     """
     next_agent = state.get("next_agent", "general_agent")
-    
+
     # 直接返回 Agent 名称（与节点名称一致）
     # 可选值: knowledge_agent, operation_agent, general_agent
     valid_agents = ["knowledge_agent", "operation_agent", "general_agent"]
-    
+
     if next_agent in valid_agents:
         return next_agent
-    
+
     # 降级到 general_agent
     print(f"[route_to_agent] 无效的 agent: {next_agent}，降级到 general_agent")
     return "general_agent"
+
+
+async def aroute_to_agent(state: Dict[str, Any]) -> str:
+    """
+    异步版本的路由函数 - 用于 astream
+    """
+    return route_to_agent(state)
