@@ -71,22 +71,6 @@ class RetrieverManager:
             )
         return self._hybrid_manager
     
-    def get_compression_retriever(self, llm=None):
-        """获取压缩检索器（使用LLM提取相关内容）"""
-        # 注意：LangChain 1.0+ 中 LLMChainExtractor 已移除
-        # 这里返回基础检索器
-        return self.retriever
-    
-    def get_self_query_retriever(
-        self,
-        llm=None,
-        metadata_field_info: Optional[List] = None
-    ):
-        """获取自查询检索器"""
-        # 自查询检索器在 LangChain 1.0+ 中需要单独安装 langchain-experimental
-        # 这里返回基础检索器作为替代
-        return self.retriever
-    
     def search(
         self,
         query: str,

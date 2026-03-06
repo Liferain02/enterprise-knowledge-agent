@@ -4,7 +4,6 @@ LangGraph Multi-Agent 工作流图
 """
 from typing import Dict, Any
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import MessagesState
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnableLambda
@@ -13,18 +12,7 @@ from .agents.supervisor import supervisor_node, route_to_agent
 from .agents.knowledge import knowledge_agent_node
 from .agents.operation import operation_agent_node
 from .agents.general import general_agent_node
-
-
-# ==================== Checkpointer 实例 ====================
-
-def get_checkpointer() -> MemorySaver:
-    """
-    获取 Memory Saver
-    
-    注意：LangGraph 的状态持久化使用内存
-    会话元数据由 session_store.py 管理
-    """
-    return MemorySaver()
+from .checkpointer import get_checkpointer
 
 
 # ==================== 状态定义 ====================
@@ -96,7 +84,7 @@ def create_multi_agent_graph() -> StateGraph:
 
 # ==================== 编译图 ====================
 
-def compile_graph(checkpointer: MemorySaver = None) -> StateGraph:
+def compile_graph(checkpointer = None) -> StateGraph:
     """
     编译并返回可执行的图
     

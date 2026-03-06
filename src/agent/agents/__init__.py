@@ -1,8 +1,6 @@
 """
 Agent 节点模块
 """
-from typing import List, Optional
-from langchain_core.messages import HumanMessage
 from langgraph.graph import MessagesState
 
 from .supervisor import supervisor_node
@@ -21,14 +19,6 @@ class AgentState(MessagesState):
     sources: str
     used_agent: str
     session_id: str
-
-
-def get_last_user_message(messages: List) -> Optional[str]:
-    """获取最后一条用户消息"""
-    for msg in reversed(messages):
-        if isinstance(msg, HumanMessage):
-            return msg.content
-    return None
 
 
 __all__ = [

@@ -28,6 +28,12 @@
 │  Chroma DB      │  │  MCP Servers   │
 │  (向量存储)      │  │ (文件系统等)    │
 └─────────────────┘  └─────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              SQLite (langgraph-checkpoint-sqlite)              │
+│    (会话状态持久化: Agent 推理历史、工具调用记忆)                │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## 🛠️ 技术栈
@@ -37,10 +43,12 @@
 | LangChain | ≥1.0 | LLM框架 |
 | LangGraph | ≥1.0 | 工作流编排 |
 | LangGraph Prebuilt | ≥1.0 | 预构建Agent |
+| langgraph-checkpoint-sqlite | ≥3.0 | Agent状态持久化 |
 | ChromaDB | ≥0.4 | 向量数据库 |
 | FastAPI | ≥0.100 | REST API |
 | Vue 3 | ≥3.4 | 前端框架 |
 | MCP | ≥1.0 | 工具协议 |
+| SQLite | - | 本地数据库 |
 
 ## 📦 功能特性
 
@@ -49,7 +57,10 @@
 3. **Agent Skills** - 声明式技能定义 (Skill.md)
 4. **MCP工具集成** - 文件系统、搜索等外部工具
 5. **流式响应** - 支持Server-Sent Events
-6. **Vue 3前端** - 现代化聊天界面
+6. **会话状态持久化** - SQLite 持久化 Agent 推理历史，服务重启可恢复
+7. **混合检索** - BM25 + 向量混合检索，提升召回率
+8. **Reranker 重排序** - 基于 LLM 的结果重排序
+9. **Vue 3前端** - 现代化聊天界面
 
 ## 🚀 快速开始（Linux + Git）
 
@@ -80,8 +91,6 @@ conda create -n enterprise-agent python=3.11 -y
 # 激活环境
 conda activate enterprise-agent
 
-
-> 提示：如果你仍然选择使用 `python -m venv`，`.venv/` 等虚拟环境目录也已经在 `.gitignore` 中忽略。
 
 ### 4. 安装 Python 依赖
 
@@ -130,7 +139,7 @@ JWT_SECRET_KEY=请换成一个长随机字符串
 JWT_EXPIRE_MINUTES=720
 ```
 
-> `.env` 文件已经在 `.gitignore` 中配置为忽略，**不要**把真实 Key 提交到 Git。
+
 
 ### 6. 安装前端依赖
 
@@ -179,50 +188,56 @@ enterprise-knowledge-agent/
 │   ├── mcp_servers.json         # MCP 服务器配置
 │   └── .env                     # 环境变量
 │
-├── core/                        # 核心模块
-│   ├── llm.py                   # LLM 初始化 (千问/OpenAI)
-│   ├── embeddings.py            # 向量嵌入模型
-│   └── mcp_client.py             # MCP 客户端
-│
-├── rag/                         # RAG 模块
-│   ├── vectorstore.py           # Chroma 向量存储
-│   ├── retriever.py             # 检索器
-│   ├── document_loader.py       # 文档加载 (PDF/Word/MD/TXT)
-│   └── pipeline.py              # RAG 管道
-│
-├── tools/                       # 工具模块 (Operation Agent 用)
-│   ├── __init__.py              # 基础工具 (知识搜索/计算器/时间)
-│   └── mcp_adapter.py            # MCP 工具适配器
-│
-├── agents/                      # Agent 模块
-│   ├── graph.py                 # LangGraph 工作流定义
-│   ├── prompts.py               # Agent 系统提示词
-│   ├── nodes/                   # Agent 节点
-│   │   ├── supervisor.py       # 路由决策节点
-│   │   ├── knowledge.py         # 知识库问答节点
-│   │   ├── operation.py         # 操作执行节点
-│   │   ├── general.py           # 通用问答节点
-│   │   └── utils.py             # 节点工具函数
-│   └── skills/                  # Agent Skills (声明式技能)
-│       ├── skill_loader.py      # 技能加载器
-│       ├── knowledge/           # 知识检索技能
-│       │   ├── Skill.md         # 技能定义
-│       │   └── scripts/tools.py  # 技能工具
-│       ├── calculator/          # 计算器技能
-│       ├── datetime/            # 日期时间技能
-│       └── file_operation/      # 文件操作技能
-│
-├── api/                         # API 模块 (Controller + Service + DAO 分层)
-│   ├── controllers/             # Controller 层 (接收请求)
-│   │   ├── chat_controller.py   # 聊天 API
-│   │   └── knowledge_controller.py  # 知识管理 API
-│   ├── services/                 # Service 层 (业务逻辑)
-│   │   ├── chat_service.py
-│   │   ├── session_service.py
-│   │   └── knowledge_service.py
-│   ├── dao/                     # DAO 层 (数据访问)
-│   │   └── session_dao.py
-│   └── dependencies.py          # 依赖注入
+├── src/                         # 源代码
+│   ├── models/                  # 模型层
+│   │   ├── llm.py               # LLM 初始化 (千问/OpenAI)
+│   │   ├── embeddings.py        # 向量嵌入模型
+│   │   └── mcp_client.py        # MCP 客户端
+│   │
+│   ├── rag/                     # RAG 模块
+│   │   ├── storage/             # 存储层
+│   │   │   └── vectorstore.py   # Chroma 向量存储
+│   │   ├── retrieval/           # 检索层
+│   │   │   ├── retriever.py     # 检索器
+│   │   │   ├── hybrid_retriever.py  # 混合检索 (BM25 + 向量)
+│   │   │   └── reranker.py      # 重排序
+│   │   └── processing/          # 处理层
+│   │       ├── document_loader.py   # 文档加载 (PDF/Word/MD/TXT)
+│   │       └── chunker.py        # 文档分块
+│   │
+│   ├── agent/                   # Agent 模块
+│   │   ├── graph.py             # LangGraph 工作流定义
+│   │   ├── prompts.py           # Agent 系统提示词
+│   │   ├── agents/              # Agent 节点
+│   │   │   ├── supervisor.py    # 路由决策节点
+│   │   │   ├── knowledge.py     # 知识库问答节点
+│   │   │   ├── operation.py     # 操作执行节点
+│   │   │   ├── general.py       # 通用问答节点
+│   │   │   └── _utils.py        # 节点工具函数
+│   │   ├── skills/              # Agent Skills (声明式技能)
+│   │   │   ├── skill_loader.py  # 技能加载器
+│   │   │   ├── knowledge/       # 知识检索技能
+│   │   │   ├── calculator/      # 计算器技能
+│   │   │   ├── datetime/        # 日期时间技能
+│   │   │   └── file_operation/  # 文件操作技能
+│   │   └── tools/               # 工具模块
+│   │       ├── __init__.py      # 基础工具
+│   │       └── mcp_adapter.py    # MCP 工具适配器
+│   │
+│   └── api/                     # API 模块 (Controller + Service + DAO 分层)
+│       ├── controllers/         # Controller 层
+│       │   ├── chat_controller.py
+│       │   ├── knowledge_controller.py
+│       │   └── auth_controller.py
+│       ├── services/             # Service 层
+│       │   ├── chat_service.py
+│       │   ├── session_service.py
+│       │   └── knowledge_service.py
+│       ├── repositories/         # DAO 层
+│       │   └── dao/
+│       │       └── session_dao.py
+│       ├── schemas/              # Pydantic Schema
+│       └── security.py           # JWT 鉴权
 │
 ├── scripts/                     # 脚本
 │   └── ingest.py                # 知识库嵌入脚本
@@ -240,6 +255,18 @@ enterprise-knowledge-agent/
     ├── package.json             # 前端依赖
     └── vite.config.ts           # Vite 配置
 ```
+
+## 🗄️ 数据库说明
+
+所有数据库文件统一保存在 `{项目根目录}/chroma_db/` 目录下：
+
+| 数据库 | 路径 | 用途 |
+|--------|------|------|
+| Chroma DB | `chroma_db/chroma.sqlite3` | 向量存储 |
+| Sessions | `chroma_db/sessions.db` | 会话/消息历史 |
+| LangGraph Checkpoints | `chroma_db/langgraph_checkpoints.db` | Agent 推理状态持久化 |
+
+> **注意**: 所有路径已修复为绝对路径，确保多实例部署时数据库位置一致。
 
 ## 🔧 使用说明
 
@@ -301,6 +328,8 @@ GET /health
 1. 推荐在 **Linux** 环境下运行（当前说明默认以 Linux/Bash 为准）。
 2. 需要在 `config/.env` 中配置阿里千问或 OpenAI 的 API Key。
 3. 首次启动会自动嵌入知识库，向量数据保存在 `./chroma_db` 目录下（已在 `.gitignore` 中忽略）。
+4. **会话状态持久化**: Agent 推理历史保存在 `chroma_db/langgraph_checkpoints.db`，服务重启后可恢复对话。
+   - 如需调试，可设置环境变量 `USE_MEMORY_CHECKPOINTER=true` 切换回内存模式。
 
 ## 🚢 部署指南
 
@@ -323,7 +352,6 @@ vim config/.env   # 填入 DASHSCOPE_API_KEY / ADMIN_USERNAME / ADMIN_PASSWORD /
 
 # 5. 启动后端（后台运行）
 nohup python main.py > server.log 2>&1 &
-echo $! > backend.pid
 
 # 6. 启动前端
 cd frontend && nohup npm run dev > frontend.log 2>&1 &
@@ -339,12 +367,3 @@ cd frontend && nohup npm run dev > frontend.log 2>&1 &
 用户浏览器 → Frontend (Vite:3000) → Backend (uvicorn:8000) → AI API
 ```
 
-### 生产环境注意事项
-
-1. **API Key 安全**: 使用环境变量管理，不要提交到代码仓库
-2. **防火墙**: 开放 3000（前端）和 8000（后端）端口
-3. **数据持久化**: `chroma_db` 和 `data` 目录建议定期备份
-
-## 📄 License
-
-MIT

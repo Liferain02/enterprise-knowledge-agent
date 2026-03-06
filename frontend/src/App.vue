@@ -503,11 +503,20 @@ const checkConnection = async () => {
 }
 
 onMounted(async () => {
+  // 页面加载时验证 token 是否有效
   if (isAuthed.value) {
-    await checkConnection()
-    await loadSessions()
-    await loadHistory(sessionId.value)
-    setInterval(checkConnection, 30000)
+    try {
+      // 调用验证接口检查 token 是否有效
+      await axios.get(`${API_BASE}/sessions`, { timeout: 3000 })
+      await checkConnection()
+      await loadSessions()
+      await loadHistory(sessionId.value)
+      setInterval(checkConnection, 30000)
+    } catch (error) {
+      // token 无效，清除登录状态
+      console.log('Token 已过期，请重新登录')
+      logout()
+    }
   }
 })
 

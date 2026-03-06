@@ -9,10 +9,11 @@ import importlib.util
 from typing import Dict, Any, List, Optional, Type
 from pathlib import Path
 from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.tools import BaseTool
 from src.models.llm import get_llm
+from config.settings import get_settings
 import frontmatter
+from ..checkpointer import get_checkpointer
 
 
 class Skill:
@@ -173,7 +174,9 @@ class SkillLoader:
         skill = self.load_skill(skill_name)
         
         llm = get_llm()
-        checkpointer = MemorySaver()
+        
+        # 使用单例 checkpointer
+        checkpointer = get_checkpointer()
         
         agent = create_react_agent(
             llm,

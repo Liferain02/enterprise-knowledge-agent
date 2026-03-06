@@ -205,6 +205,12 @@ class Settings(BaseSettings):
         description="最大历史消息数"
     )
 
+    # Checkpointer 配置
+    use_sqlite_checkpointer: bool = Field(
+        default=False,
+        description="是否使用 SQLite 持久化 Agent 状态（需要重启生效）"
+    )
+
     # 项目根目录
     @property
     def project_root(self) -> Path:
@@ -218,8 +224,12 @@ class Settings(BaseSettings):
 
     @property
     def chroma_dir(self) -> Path:
-        """获取Chroma数据库目录"""
-        return Path(self.chroma_persist_directory)
+        """获取Chroma数据库目录（绝对路径）"""
+        # 转换为绝对路径，确保所有数据库文件在同一目录
+        persist_path = Path(self.chroma_persist_directory)
+        if not persist_path.is_absolute():
+            persist_path = self.project_root / persist_path
+        return persist_path
 
     def ensure_directories(self):
         """确保必要的目录存在"""

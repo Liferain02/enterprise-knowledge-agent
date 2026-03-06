@@ -3,14 +3,16 @@ Operation Agent 节点
 负责执行操作任务（计算、时间、MCP工具等）
 使用 langgraph-prebuilt 的 create_react_agent
 """
+import os
 from typing import Dict, Any
 import asyncio
 from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.memory import MemorySaver
 from src.models.llm import get_llm
 from ..tools import get_all_agent_tools
 from ..prompts import OPERATION_AGENT_SYSTEM_PROMPT
 from ._utils import get_last_user_message
+from config.settings import get_settings
+from ..checkpointer import get_checkpointer
 
 
 # Agent 缓存
@@ -25,7 +27,10 @@ def _get_operation_agent(tools):
     cache_key = f"op_{len(tools)}"
     if cache_key not in _agent_cache:
         llm = get_llm()
-        checkpointer = MemorySaver()
+        
+        # 使用单例 checkpointer
+        checkpointer = get_checkpointer()
+        
         _agent_cache[cache_key] = create_react_agent(
             model=llm,
             tools=tools,
