@@ -153,8 +153,8 @@ class Settings(BaseSettings):
         description="Reranker 返回的 top n 结果数"
     )
     reranker_threshold: float = Field(
-        default=0.3,
-        description="Reranker 分数阈值"
+        default=0.1,
+        description="Reranker 分数阈值，低于此分数的结果将被过滤"
     )
 
     # 混合检索配置
@@ -252,12 +252,15 @@ class Settings(BaseSettings):
             return []
 
 
-# 全局配置实例
-settings = Settings()
+# 全局配置实例（延迟初始化）
+_settings_instance = None
 
 
 def get_settings() -> Settings:
-    """获取配置实例"""
-    settings.ensure_directories()
-    return settings
+    """获取配置实例（单例模式）"""
+    global _settings_instance
+    if _settings_instance is None:
+        _settings_instance = Settings()
+    _settings_instance.ensure_directories()
+    return _settings_instance
 

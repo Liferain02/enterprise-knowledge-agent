@@ -28,7 +28,7 @@ print("=" * 70)
 print("测试 1: RetrieverManager 配置")
 print("=" * 70)
 
-from rag.retriever import get_retriever_manager
+from src.rag.retrieval.retriever import get_retriever_manager
 
 retriever_mgr = get_retriever_manager()
 print(f"use_reranker: {retriever_mgr.use_reranker}")
@@ -102,7 +102,7 @@ print("=" * 70)
 print("测试 4: Agent 知识搜索工具")
 print("=" * 70)
 
-from agents.skills.knowledge.scripts.tools import knowledge_search
+from src.agent.skills.knowledge.scripts.tools import knowledge_search
 
 query = "Python"
 

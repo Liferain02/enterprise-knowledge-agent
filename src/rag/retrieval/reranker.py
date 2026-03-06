@@ -99,8 +99,8 @@ class RerankerManager:
             return results
         except Exception as e:
             print(f"Reranker 错误: {e}")
-            # 如果 Reranker 失败，返回原始排序（按索引）
-            return [(doc, 1.0 - i * 0.01) for i, doc in enumerate(documents[:top_n])]
+            # 如果 Reranker 失败，使用均匀分布（保持原始顺序）
+            return [(doc, 1.0 / len(documents)) for doc in documents[:top_n]]
 
     def get_compression_retriever(
         self,
@@ -154,10 +154,17 @@ class QwenReranker:
 
         top_n = top_n or self.top_n
 
+        # 设置代理
+        http_proxy = os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY")
+        if http_proxy:
+            os.environ['DASHSCOPE_SDK_HTTP_PROXY'] = http_proxy
+            os.environ['DASHSCOPE_SDK_HTTPS_PROXY'] = http_proxy
+
         try:
             import dashscope
             from dashscope import TextReRank
 
+            # 每次调用都设置 API Key，确保使用正确的配置
             if self.api_key:
                 dashscope.api_key = self.api_key
 
@@ -186,14 +193,17 @@ class QwenReranker:
                 return results[:top_n]
             else:
                 print(f"Reranker API 错误: {response.message}")
-                return [(doc, 1.0 - i * 0.01) for i, doc in enumerate(documents[:top_n])]
+                # 使用均匀分布
+                return [(doc, 1.0 / len(documents)) for doc in documents[:top_n]]
 
         except ImportError:
             print("dashscope 未安装，使用备用排序")
-            return [(doc, 1.0 - i * 0.01) for i, doc in enumerate(documents[:top_n])]
+            # 使用均匀分布
+            return [(doc, 1.0 / len(documents)) for doc in documents[:top_n]]
         except Exception as e:
             print(f"Reranker 错误: {e}")
-            return [(doc, 1.0 - i * 0.01) for i, doc in enumerate(documents[:top_n])]
+            # 使用均匀分布
+            return [(doc, 1.0 / len(documents)) for doc in documents[:top_n]]
 
 
 class BGEHReranker:
@@ -249,7 +259,8 @@ class BGEHReranker:
 
         except Exception as e:
             print(f"BGE Reranker 错误: {e}")
-            return [(doc, 1.0 - i * 0.01) for i, doc in enumerate(documents[:top_n])]
+            # 如果 Reranker 失败，使用均匀分布（每个文档分数相同，保持原始顺序）
+            return [(doc, 1.0 / len(documents)) for doc in documents[:top_n]]
 
 
 class DocumentRerankerCompressor:
