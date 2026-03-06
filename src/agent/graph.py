@@ -1,12 +1,12 @@
 """
 LangGraph Multi-Agent 工作流图
-架构：Planner → Supervisor → Worker Agents → END
+架构：maybe_summarize → Planner → Supervisor → Worker Agents → END
 """
 import asyncio
 from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 from langgraph.graph import MessagesState
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, RemoveMessage
 
 from .agents.supervisor import supervisor_node, route_to_agent
 from .agents.knowledge import knowledge_agent_node
@@ -36,6 +36,9 @@ class AgentState(MessagesState):
     # 会话ID（用于在各节点中维护历史）
     session_id: str
 
+    # 语义总结记忆：存储旧对话的压缩摘要
+    summary: str
+
     # ==================== Planner 状态 ====================
     is_complex: bool       # 是否复杂任务
     plan_steps: list       # 计划步骤列表
@@ -43,6 +46,87 @@ class AgentState(MessagesState):
     current_step: int      # 当前执行的步骤索引
     completed_steps: list  # 已完成的步骤
     plan_results: list     # 各步骤的执行结果
+
+
+# ==================== 语义总结记忆节点 ====================
+
+async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
+    """
+    语义总结记忆节点（对话压缩）
+
+    当 messages 超过阈值时，用 LLM 将旧消息压缩为摘要，
+    并从 state 中移除旧消息，只保留最近 N 条原始消息。
+    摘要会滚动累积：新摘要 = 旧摘要 + 本批旧消息的总结。
+
+    本节点在每轮对话开始时运行（入口节点），轻量无副作用。
+    当消息数量未超过阈值时，直接透传不做任何操作。
+    """
+    from config.settings import get_settings
+    from src.models.llm import get_llm
+
+    settings = get_settings()
+    threshold = settings.summary_threshold
+    keep_recent = settings.summary_keep_recent
+
+    messages = state["messages"]
+    existing_summary = state.get("summary", "") or ""
+
+    # 未超过阈值，直接透传
+    if len(messages) <= threshold:
+        return {}
+
+    old_messages = messages[:-keep_recent]
+    # 若旧消息过少则不值得总结
+    if len(old_messages) < 2:
+        return {}
+
+    # 格式化旧消息为文本供 LLM 总结
+    lines = []
+    for msg in old_messages:
+        role = "用户"
+        msg_type = getattr(msg, "type", None) or type(msg).__name__
+        if msg_type in ("ai", "AIMessage"):
+            role = "助手"
+        elif msg_type in ("tool", "ToolMessage"):
+            role = "工具"
+        content = getattr(msg, "content", "")
+        if content:
+            lines.append(f"{role}：{content[:300]}")  # 单条最多取 300 字
+
+    if not lines:
+        return {}
+
+    conversation_text = "\n".join(lines)
+
+    existing_part = (
+        f"\n\n【已有摘要（请在此基础上追加）】\n{existing_summary}\n"
+        if existing_summary else ""
+    )
+
+    prompt = (
+        f"请将以下对话内容总结成简洁的摘要，保留关键信息、用户意图和重要上下文。"
+        f"摘要控制在 300 字以内，使用中文。"
+        f"{existing_part}"
+        f"\n\n【需要总结的对话片段】\n{conversation_text}"
+        f"\n\n摘要："
+    )
+
+    llm = get_llm()
+    response = await llm.ainvoke(prompt)
+    new_summary = response.content.strip()
+
+    # 用 RemoveMessage 删除旧消息（LangGraph add_messages reducer 支持）
+    remove_ops = [RemoveMessage(id=m.id) for m in old_messages if getattr(m, "id", None)]
+
+    print(
+        f"[Summarize] 触发摘要：原 {len(messages)} 条消息 → "
+        f"删除 {len(remove_ops)} 条，保留最近 {keep_recent} 条"
+    )
+
+    return {
+        "summary": new_summary,
+        "messages": remove_ops,
+    }
 
 
 # ==================== 图创建函数 ====================
@@ -59,6 +143,9 @@ def create_multi_agent_graph() -> StateGraph:
     """
     workflow = StateGraph(AgentState)
 
+    # 语义摘要节点（入口）
+    workflow.add_node("maybe_summarize", maybe_summarize_node)
+
     # Worker Agent 节点
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("knowledge_agent", knowledge_agent_node)
@@ -71,8 +158,9 @@ def create_multi_agent_graph() -> StateGraph:
     # Execute Plan 节点（复杂任务逐步执行）
     workflow.add_node("execute_plan", execute_plan_node)
 
-    # 入口：Planner
-    workflow.set_entry_point("planner")
+    # 入口：maybe_summarize → planner
+    workflow.set_entry_point("maybe_summarize")
+    workflow.add_edge("maybe_summarize", "planner")
 
     # Planner → Supervisor（简单）或 Execute Plan（复杂）
     workflow.add_conditional_edges(

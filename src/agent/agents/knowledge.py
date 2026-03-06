@@ -5,7 +5,7 @@ Knowledge Agent 节点
 """
 from typing import Dict, Any
 from ..skills import get_skill_loader
-from ._utils import get_last_user_message
+from ._utils import get_last_user_message, inject_summary_to_messages
 
 
 async def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -22,26 +22,28 @@ async def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     # 获取用户最新消息
     messages = state.get("messages", [])
     last_user_message = get_last_user_message(messages)
-    
+    summary = state.get("summary", "") or ""
+
     # 获取 session_id
     session_id = state.get("session_id", "default")
-    
+
     if not last_user_message:
         return {
             "final_answer": "抱歉，我无法理解您的问题。"
         }
-    
+
     try:
         # 使用 SkillLoader 获取 Agent
         loader = get_skill_loader()
         agent = loader.create_agent("knowledge")
-        
-        # 传递完整的 messages（包含历史）
+
+        # 传递完整的 messages（含摘要注入）
         config = {"configurable": {"thread_id": session_id}}
-        
-        # 执行 Agent（传递完整历史）
+        messages_with_summary = inject_summary_to_messages(messages, summary)
+
+        # 执行 Agent
         result = await agent.ainvoke(
-            {"messages": messages},
+            {"messages": messages_with_summary},
             config
         )
         

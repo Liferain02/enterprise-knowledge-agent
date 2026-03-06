@@ -17,6 +17,8 @@ jieba>=0.42                     # 中文分词
 # LangGraph（Agent 工作流，保持）
 langgraph==1.0.9
 langgraph-prebuilt==1.0.8  # LangGraph 预构建节点
+langgraph-checkpoint-sqlite==3.0.3   # LangGraph SQLite 持久化 Checkpointer
+aiosqlite==0.22.1          # AsyncSqliteSaver 依赖的异步 SQLite 驱动
 
 # MCP (Model Context Protocol)
 mcp==1.6.0                # MCP 协议支持

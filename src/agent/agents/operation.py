@@ -10,7 +10,7 @@ from langgraph.prebuilt import create_react_agent
 from src.models.llm import get_llm
 from ..tools import get_all_agent_tools
 from ..prompts import OPERATION_AGENT_SYSTEM_PROMPT
-from ._utils import get_last_user_message
+from ._utils import get_last_user_message, inject_summary_to_messages
 from config.settings import get_settings
 from ..checkpointer import get_sync_checkpointer as get_checkpointer
 
@@ -59,26 +59,27 @@ async def operation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     # 获取完整的消息历史（包含之前的对话）
     messages = state.get("messages", [])
     last_user_message = get_last_user_message(messages)
-    
+    summary = state.get("summary", "") or ""
+
     # 获取 session_id
     session_id = state.get("session_id", "default")
-    
+
     if not last_user_message:
         return {
             "final_answer": "抱歉，我无法理解您的问题。"
         }
-    
+
     try:
         # 获取预建的 Tool Calling Agent（注意：不传 checkpointer，避免重复管理状态）
         agent = _get_operation_agent(tools)
-        
-        # 直接传递当前 messages（包含完整历史）
-        # Agent 可以从 messages 中看到之前的对话
+
+        # 传递消息历史，若存在摘要则在头部注入 SystemMessage
         config = {"configurable": {"thread_id": session_id}}
-        
+        messages_with_summary = inject_summary_to_messages(messages, summary)
+
         # 直接使用 await ainvoke
         result = await asyncio.wait_for(
-            agent.ainvoke({"messages": messages}, config),
+            agent.ainvoke({"messages": messages_with_summary}, config),
             timeout=OPERATION_TIMEOUT
         )
         

@@ -6,7 +6,7 @@ from typing import Dict, Any, List
 from langchain_core.messages import AIMessage
 from src.models.llm import get_llm
 from ..prompts import GENERAL_AGENT_SYSTEM_PROMPT
-from ._utils import get_last_user_message
+from ._utils import get_last_user_message, build_summary_context
 
 
 async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -22,21 +22,24 @@ async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     # 获取完整的消息历史
     messages = state.get("messages", [])
     last_user_message = get_last_user_message(messages)
-    
-    # 构建系统提示词，包含历史上下文
+    summary = state.get("summary", "") or ""
+
+    # 摘要上下文（旧对话压缩后的摘要）
+    summary_context = build_summary_context(summary)
+
+    # 构建近期对话上下文（最近 6 条原始消息）
     history_context = ""
     if len(messages) > 1:
-        # 提取历史对话用于上下文
         history_msgs = []
         for msg in messages[:-1]:  # 排除当前消息
             if hasattr(msg, 'content'):
-                role = "用户" if isinstance(msg, type(messages[0])) else "助手"
+                role = "用户"
                 if hasattr(msg, 'type'):
                     role = "用户" if msg.type == 'human' else "助手"
                 history_msgs.append(f"{role}: {msg.content}")
-        
+
         if history_msgs:
-            history_context = f"\n\n## 对话历史\n" + "\n".join(history_msgs[-6:])  # 最近6条
+            history_context = f"\n\n## 近期对话记录\n" + "\n".join(history_msgs[-6:])
     
     if not last_user_message:
         # 没有用户消息，返回默认问候
@@ -46,9 +49,8 @@ async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "messages": [AIMessage(content="你好！有什么可以帮助你的吗？")]
         }
     
-    # 构建提示词
-    prompt = f"""{GENERAL_AGENT_SYSTEM_PROMPT}
-{history_context}
+    # 构建提示词（摘要在前，近期历史在后）
+    prompt = f"""{GENERAL_AGENT_SYSTEM_PROMPT}{summary_context}{history_context}
 
 ## 当前用户消息
 用户说：{last_user_message}

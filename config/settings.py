@@ -204,6 +204,14 @@ class Settings(BaseSettings):
         default=20,
         description="最大历史消息数"
     )
+    summary_threshold: int = Field(
+        default=20,
+        description="触发对话摘要的消息数阈值（超过此数量时自动总结旧消息）"
+    )
+    summary_keep_recent: int = Field(
+        default=6,
+        description="触发摘要后保留的最近消息条数"
+    )
 
     # Checkpointer 配置
     use_sqlite_checkpointer: bool = Field(
