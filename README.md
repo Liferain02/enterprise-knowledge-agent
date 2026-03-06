@@ -1,77 +1,92 @@
-# 🤖 企业知识库智能助手 (Enterprise Knowledge Agent)
+# 企业知识库智能助手 (Enterprise Knowledge Agent)
 
-一个基于 LangChain 1.0+、LangGraph、ReAct 和 MCP 的企业级 RAG Agent 系统。
+一个基于 LangChain、LangGraph、ReAct 和 MCP 的企业级 RAG Agent 系统，支持多轮对话、长效记忆、会话持久化。
 
-## 🏗️ 架构概览
+## 架构概览
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        FastAPI Server                           │
 │                    (http://localhost:8000)                      │
 └─────────────────────────────────────────────────────────────────┘
-                              │
+                              │ 每条消息
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Supervisor Agent                           │
-│  (路由决策: knowledge_agent / operation_agent / general_agent) │
+│                  maybe_summarize（语义总结记忆）                  │
+│  消息数 > 阈值时：LLM 压缩旧消息为摘要，删除旧消息，保留近 6 条   │
+│  消息数 ≤ 阈值时：透传（零开销）                                  │
 └─────────────────────────────────────────────────────────────────┘
-           │                    │                    │
-           ▼                    ▼                    ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│ Knowledge Agent │  │ Operation Agent │  │  General Agent  │
-│   (知识检索)     │  │  (工具执行)      │  │   (通用问答)     │
-│   + RAG         │  │  + MCP Tools    │  │                 │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-           │                    │
-           ▼                    ▼
-┌─────────────────┐  ┌─────────────────┐
-│  Chroma DB      │  │  MCP Servers   │
-│  (向量存储)      │  │ (文件系统等)    │
-└─────────────────┘  └─────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│              SQLite (langgraph-checkpoint-sqlite)              │
-│    (会话状态持久化: Agent 推理历史、工具调用记忆)                │
+│                  Planner（任务规划 + 轻量化快速路径）              │
+│  规则预判（< 1ms，无 LLM）：简单 → 直接跳过，复杂/不确定 → LLM   │
+│  LLM 判断：简单任务 → Supervisor；复杂任务 → Execute Plan        │
+└─────────────────────────────────────────────────────────────────┘
+           │ 简单                              │ 复杂
+           ▼                                   ▼
+┌─────────────────────────┐       ┌────────────────────────────┐
+│      Supervisor          │       │       Execute Plan          │
+│   (路由到专业 Agent)      │       │  (逐步执行各子任务，汇总)   │
+└─────────────────────────┘       └────────────────────────────┘
+     │           │          │
+     ▼           ▼          ▼
+┌─────────┐ ┌─────────┐ ┌─────────┐
+│Knowledge│ │Operation│ │ General │
+│ Agent   │ │ Agent   │ │ Agent   │
+│(知识检索)│ │(工具执行)│ │(通用问答)│
+└─────────┘ └─────────┘ └─────────┘
+     │           │
+     ▼           ▼
+┌─────────┐ ┌─────────────┐
+│Chroma DB│ │ MCP Servers │
+│(向量存储)│ │(文件系统等)  │
+└─────────┘ └─────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                         SQLite 持久化层                          │
+│  sessions.db              → 会话 / 消息历史                      │
+│  langgraph_checkpoints.db → Agent 推理状态 + 对话摘要            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## 🛠️ 技术栈
+## 技术栈
 
 | 技术 | 版本 | 用途 |
 |------|------|------|
-| LangChain | ≥1.0 | LLM框架 |
+| LangChain | ≥1.0 | LLM 框架 |
 | LangGraph | ≥1.0 | 工作流编排 |
-| LangGraph Prebuilt | ≥1.0 | 预构建Agent |
-| langgraph-checkpoint-sqlite | ≥3.0 | Agent状态持久化 |
-| ChromaDB | ≥0.4 | 向量数据库 |
-| FastAPI | ≥0.100 | REST API |
+| LangGraph Prebuilt | ≥1.0 | 预构建 ReAct Agent |
+| langgraph-checkpoint-sqlite | ≥3.0 | Agent 状态 + 摘要持久化 |
+| aiosqlite | ≥0.22 | 异步 SQLite 驱动 |
+| ChromaDB | ≥1.5 | 向量数据库 |
+| FastAPI | ≥0.115 | REST API + SSE |
 | Vue 3 | ≥3.4 | 前端框架 |
-| MCP | ≥1.0 | 工具协议 |
-| SQLite | - | 本地数据库 |
+| MCP | ≥1.6 | 工具协议 |
 
-## 📦 功能特性
+## 功能特性
 
-1. **多Agent路由** - Supervisor智能分发任务到专业Agent
-2. **知识库问答** - 基于RAG的企业知识库检索
-3. **Agent Skills** - 声明式技能定义 (Skill.md)
-4. **MCP工具集成** - 文件系统、搜索等外部工具
-5. **流式响应** - 支持Server-Sent Events
-6. **会话状态持久化** - SQLite 持久化 Agent 推理历史，服务重启可恢复
-7. **混合检索** - BM25 + 向量混合检索，提升召回率
-8. **Reranker 重排序** - 基于 LLM 的结果重排序
-9. **Vue 3前端** - 现代化聊天界面
+1. **多 Agent 路由** — Planner + Supervisor 智能分发任务到专业 Agent
+2. **任务规划与拆解** — Planner 识别复杂任务，拆解为多步骤顺序执行
+3. **轻量化 Planner** — 规则预判（< 1ms）跳过简单任务的 LLM 调用，降低约 60% 的 Planner 开销
+4. **语义总结记忆** — 对话过长时自动压缩旧消息为滚动摘要，防止 Context Window 溢出
+5. **会话状态持久化** — LangGraph 推理状态（含摘要）写入 SQLite，服务重启后恢复
+6. **知识库问答** — 基于 RAG 的企业知识库检索（PDF / Word / Markdown / TXT）
+7. **混合检索** — BM25 + 向量混合检索，提升召回率
+8. **Reranker 重排序** — 基于 LLM 的检索结果重排序
+9. **Agent Skills** — 声明式技能定义（Skill.md），支持热加载
+10. **MCP 工具集成** — 文件系统、外部搜索等工具通过 MCP 协议接入
+11. **流式响应** — Server-Sent Events 实时输出
+12. **JWT 鉴权** — 单用户登录保护
 
-## 🚀 快速开始（Linux + Git）
-
-下面以 Linux 环境为例，说明从 `git clone` 到可以访问系统的完整步骤。
+## 快速开始（Linux）
 
 ### 1. 环境准备
 
-- **Conda**: 建议使用 Miniconda / Anaconda 管理 Python 环境
-- **Python**: 建议 Python 3.10+（通过 Conda 创建）
-- **Node.js & npm**: 建议 Node 18+/20+（如 `node --version`、`npm --version`）
-- **Git**: 已安装 `git`
+- Conda（Miniconda / Anaconda）
+- Python 3.10+
+- Node.js 18+ / npm
+- Git
 
 ### 2. 克隆项目
 
@@ -80,17 +95,12 @@ git clone https://your.git.repo.url/enterprise-knowledge-agent.git
 cd enterprise-knowledge-agent
 ```
 
-将上面的地址替换成你自己的 Git 仓库地址。
-
-### 3. 使用 Conda 创建并激活环境（推荐）
+### 3. 创建 Conda 环境
 
 ```bash
-# 创建名为 enterprise-agent 的 Conda 环境（Python 版本可按需调整）
-conda create -n enterprise-agent python=3.11 -y
-
-# 激活环境
-conda activate enterprise-agent
-
+conda create -n agent-demo python=3.11 -y
+conda activate agent-demo
+```
 
 ### 4. 安装 Python 依赖
 
@@ -98,50 +108,51 @@ conda activate enterprise-agent
 pip install -r requirements.txt
 ```
 
-### 5. 安装 MCP 服务器依赖（npm）
+### 5. 安装 MCP 服务器依赖
 
 ```bash
-# 在项目根目录安装 MCP 服务器所需的 Node 依赖
 npm install
 ```
 
 ### 6. 配置环境变量
 
 ```bash
-# 复制模板
 cp config/env.template config/.env
-
-# 编辑 .env，填入你的 API Key（至少配置千问或 OpenAI 其中一种）
 vim config/.env
 ```
 
-关键变量示例（在 `config/.env` 中）：
+关键变量：
 
 ```bash
+# LLM（二选一）
 DASHSCOPE_API_KEY=你的千问APIKey
 DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 DASHSCOPE_MODEL=qwen-plus
 
-# 或者使用 OpenAI：
 # OPENAI_API_KEY=...
 # OPENAI_BASE_URL=https://api.openai.com/v1
 # OPENAI_MODEL=gpt-4o-mini
 
-# 对外提供服务（远程机器可访问）
+# 服务地址
 API_HOST=0.0.0.0
 API_PORT=8000
 
-# 登录鉴权（单用户）
+# 鉴权
 AUTH_ENABLED=true
 ADMIN_USERNAME=你的用户名
 ADMIN_PASSWORD=你的密码
 JWT_SECRET_KEY=请换成一个长随机字符串
 JWT_EXPIRE_MINUTES=720
+
+# 持久化（推荐开启）
+USE_SQLITE_CHECKPOINTER=true
+
+# 语义总结记忆（可选调整）
+SUMMARY_THRESHOLD=20      # 消息数超过此值时触发摘要
+SUMMARY_KEEP_RECENT=6     # 触发摘要后保留的最近消息条数
 ```
 
-
-
-### 6. 安装前端依赖
+### 7. 安装前端依赖
 
 ```bash
 cd frontend
@@ -149,159 +160,185 @@ npm install
 cd ..
 ```
 
-### 7. 启动后端服务（Linux）
+### 8. 启动后端
 
 ```bash
-# 确保在项目根目录，虚拟环境已激活
 python main.py
 ```
 
-- 默认监听地址：`http://0.0.0.0:8000`
-- 如需其他机器访问，请确保 `API_HOST=0.0.0.0`，并在服务器防火墙/安全组放通端口 `8000`（后端）和 `3000`（前端）。
-- 首次启动会自动检查并嵌入 `data/knowledge/` 中的文档到 `chroma_db/`
+首次启动会自动将 `data/knowledge/` 中的文档嵌入到向量库。
 
-### 8. 启动前端（新终端窗口）
+### 9. 启动前端（新终端）
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-默认访问地址：`http://localhost:3000`
+### 10. 访问
 
-### 9. 访问与调试
+| 地址 | 说明 |
+|------|------|
+| `http://localhost:3000` | 前端聊天界面 |
+| `http://localhost:8000` | 后端 API |
+| `http://localhost:8000/docs` | Swagger API 文档 |
 
-- **后端**: `http://localhost:8000`
-- **前端**: `http://localhost:3000`
-- **API 文档 (Swagger)**: `http://localhost:8000/docs`
-
-## 📁 项目结构
+## 项目结构
 
 ```
 enterprise-knowledge-agent/
-├── main.py                      # 主入口 (FastAPI + 启动时自动嵌入知识库)
-├── requirements.txt             # Python 依赖
-├── package.json                  # MCP 服务器依赖 (npm install)
+├── main.py                        # FastAPI 入口（自动嵌入知识库）
+├── requirements.txt               # Python 依赖
+├── package.json                   # MCP 服务器依赖
 │
-├── config/                       # 配置
-│   ├── settings.py               # Pydantic Settings 配置
-│   ├── mcp_servers.json         # MCP 服务器配置
-│   └── .env                     # 环境变量
+├── config/
+│   ├── settings.py                # Pydantic Settings（含摘要/持久化配置）
+│   ├── mcp_servers.json           # MCP 服务器配置
+│   └── .env                       # 环境变量（不提交 Git）
 │
-├── src/                         # 源代码
-│   ├── models/                  # 模型层
-│   │   ├── llm.py               # LLM 初始化 (千问/OpenAI)
-│   │   ├── embeddings.py        # 向量嵌入模型
-│   │   └── mcp_client.py        # MCP 客户端
+├── src/
+│   ├── models/                    # 模型层
+│   │   ├── llm.py                 # LLM 初始化
+│   │   ├── embeddings.py          # 向量嵌入模型
+│   │   └── mcp_client.py          # MCP 客户端
 │   │
-│   ├── rag/                     # RAG 模块
-│   │   ├── storage/             # 存储层
-│   │   │   └── vectorstore.py   # Chroma 向量存储
-│   │   ├── retrieval/           # 检索层
-│   │   │   ├── retriever.py     # 检索器
-│   │   │   ├── hybrid_retriever.py  # 混合检索 (BM25 + 向量)
-│   │   │   └── reranker.py      # 重排序
-│   │   └── processing/          # 处理层
-│   │       ├── document_loader.py   # 文档加载 (PDF/Word/MD/TXT)
-│   │       └── chunker.py        # 文档分块
+│   ├── rag/                       # RAG 模块
+│   │   ├── storage/vectorstore.py # Chroma 向量存储
+│   │   ├── retrieval/
+│   │   │   ├── retriever.py       # 基础检索器
+│   │   │   ├── hybrid_retriever.py# 混合检索（BM25 + 向量）
+│   │   │   └── reranker.py        # LLM 重排序
+│   │   └── processing/
+│   │       ├── document_loader.py # 文档加载（PDF/Word/MD/TXT）
+│   │       └── chunker.py         # 文档分块
 │   │
-│   ├── agent/                   # Agent 模块
-│   │   ├── graph.py             # LangGraph 工作流定义
-│   │   ├── prompts.py           # Agent 系统提示词
-│   │   ├── agents/              # Agent 节点
-│   │   │   ├── supervisor.py    # 路由决策节点
-│   │   │   ├── knowledge.py     # 知识库问答节点
-│   │   │   ├── operation.py     # 操作执行节点
-│   │   │   ├── general.py       # 通用问答节点
-│   │   │   └── _utils.py        # 节点工具函数
-│   │   ├── skills/              # Agent Skills (声明式技能)
-│   │   │   ├── skill_loader.py  # 技能加载器
-│   │   │   ├── knowledge/       # 知识检索技能
-│   │   │   ├── calculator/      # 计算器技能
-│   │   │   ├── datetime/        # 日期时间技能
-│   │   │   └── file_operation/  # 文件操作技能
-│   │   └── tools/               # 工具模块
-│   │       ├── __init__.py      # 基础工具
-│   │       └── mcp_adapter.py    # MCP 工具适配器
+│   ├── agent/                     # Agent 模块
+│   │   ├── graph.py               # LangGraph 图（含 maybe_summarize 节点）
+│   │   ├── checkpointer.py        # Checkpointer 工厂（MemorySaver / AsyncSqliteSaver）
+│   │   ├── prompts.py             # 系统提示词
+│   │   ├── agents/
+│   │   │   ├── planner.py         # Planner（规则快速路径 + LLM 任务拆解）
+│   │   │   ├── supervisor.py      # Supervisor 路由决策
+│   │   │   ├── knowledge.py       # 知识检索 Agent
+│   │   │   ├── operation.py       # 操作执行 Agent（工具调用）
+│   │   │   ├── general.py         # 通用问答 Agent
+│   │   │   └── _utils.py          # 共享工具函数（摘要注入等）
+│   │   ├── skills/                # Agent Skills（声明式技能）
+│   │   │   ├── skill_loader.py
+│   │   │   ├── knowledge/
+│   │   │   ├── calculator/
+│   │   │   ├── datetime/
+│   │   │   └── file_operation/
+│   │   └── tools/
+│   │       ├── __init__.py
+│   │       └── mcp_adapter.py
 │   │
-│   └── api/                     # API 模块 (Controller + Service + DAO 分层)
-│       ├── controllers/         # Controller 层
+│   └── api/                       # API 层（Controller / Service / DAO）
+│       ├── controllers/
 │       │   ├── chat_controller.py
 │       │   ├── knowledge_controller.py
 │       │   └── auth_controller.py
-│       ├── services/             # Service 层
+│       ├── services/
 │       │   ├── chat_service.py
 │       │   ├── session_service.py
 │       │   └── knowledge_service.py
-│       ├── repositories/         # DAO 层
-│       │   └── dao/
-│       │       └── session_dao.py
-│       ├── schemas/              # Pydantic Schema
-│       └── security.py           # JWT 鉴权
+│       ├── repositories/dao/
+│       │   └── session_dao.py
+│       ├── schemas/
+│       └── security.py
 │
-├── scripts/                     # 脚本
-│   └── ingest.py                # 知识库嵌入脚本
+├── scripts/
+│   └── ingest.py                  # 知识库批量嵌入脚本
 │
-├── data/                        # 数据目录
-│   └── knowledge/               # 知识库文档 (MD/PDF/DOCX)
+├── data/knowledge/                # 知识库文档（MD / PDF / DOCX）
+├── chroma_db/                     # 数据库目录（自动生成，已 gitignore）
+│   ├── chroma.sqlite3             # 向量存储
+│   ├── sessions.db                # 会话 / 消息历史
+│   └── langgraph_checkpoints.db  # Agent 状态 + 对话摘要持久化
 │
-├── chroma_db/                   # Chroma 向量数据库 (自动生成)
-│
-└── frontend/                    # Vue 3 前端
+└── frontend/                      # Vue 3 前端
     ├── src/
-    │   ├── App.vue              # 主组件
-    │   ├── main.ts              # 入口
-    │   └── style.css            # 样式
-    ├── package.json             # 前端依赖
-    └── vite.config.ts           # Vite 配置
+    │   ├── App.vue
+    │   ├── main.ts
+    │   └── style.css
+    ├── package.json
+    └── vite.config.ts
 ```
 
-## 🗄️ 数据库说明
+## 工作流程
 
-所有数据库文件统一保存在 `{项目根目录}/chroma_db/` 目录下：
-
-| 数据库 | 路径 | 用途 |
-|--------|------|------|
-| Chroma DB | `chroma_db/chroma.sqlite3` | 向量存储 |
-| Sessions | `chroma_db/sessions.db` | 会话/消息历史 |
-| LangGraph Checkpoints | `chroma_db/langgraph_checkpoints.db` | Agent 推理状态持久化 |
-
-> **注意**: 所有路径已修复为绝对路径，确保多实例部署时数据库位置一致。
-
-## 🔧 使用说明
-
-### 知识库管理
-
-```bash
-# 重新嵌入知识库 (清空后重新导入)
-python scripts/ingest.py --reset
-
-# 查看知识库状态
-# 启动后会自动显示知识库文档数量
+```
+用户消息
+  │
+  ▼
+maybe_summarize ──── 消息数 ≤ 阈值 ──→ 透传（无开销）
+  │ 消息数 > 阈值
+  │ LLM 压缩旧消息 → 更新摘要 → 删除旧消息
+  ▼
+Planner
+  ├── 规则预判 → 简单（≈60% 请求跳过 LLM）────────────────┐
+  └── LLM 判断 → 简单 ──────────────────────────────────┐  │
+               └── 复杂 → Execute Plan（多步执行）→ END  │  │
+                                                         ▼  ▼
+                                                      Supervisor
+                                                    ↙    ↓    ↘
+                                             Knowledge Operation General
+                                              Agent    Agent    Agent
+                                                └────────────────┘
+                                                        │
+                                                       END
 ```
 
-### 添加新知识
+## 数据库说明
 
-1. 将文档放入 `data/knowledge/` 目录
-2. 支持格式: `.md`, `.txt`, `.pdf`, `.docx`
-3. 重启服务会自动更新知识库
+所有数据库统一位于 `chroma_db/` 目录：
 
-### 自定义 Agent Skill
+| 文件 | 用途 |
+|------|------|
+| `chroma.sqlite3` | 知识库向量存储 |
+| `sessions.db` | 会话列表 + 聊天消息历史 |
+| `langgraph_checkpoints.db` | LangGraph 推理状态（含对话摘要）持久化 |
 
-1. 在 `agents/skills/` 下创建新目录
-2. 添加 `Skill.md` 定义技能
-3. 在 `scripts/tools.py` 实现工具函数
+## 语义总结记忆说明
 
-## 📡 API 接口
+当一个 session 的消息数超过 `SUMMARY_THRESHOLD`（默认 20）时，系统自动：
+
+1. 将旧消息（保留最近 `SUMMARY_KEEP_RECENT` 条之外的所有消息）送入 LLM 生成摘要
+2. 摘要滚动累积：新摘要 = 旧摘要 + 本批旧消息的总结
+3. 从 LangGraph state 中删除旧消息，只保留摘要 + 最近几条原始消息
+4. 摘要写入 `langgraph_checkpoints.db`，服务重启后不丢失
+5. 所有 Agent 在生成回答时自动感知摘要上下文
+
+## Planner 快速路径说明
+
+`planner_node` 在调用 LLM 之前先做纯规则预判（< 1ms）：
+
+| 判断 | 条件 | 行为 |
+|------|------|------|
+| `simple` | 极短消息 / 问候 / 单一查询（≤40字且无复杂信号）| 跳过 LLM，直接进 Supervisor |
+| `complex` | 含对比/多信息/顺序/汇总关键词，或多个问号 | 走 LLM 拆步骤 |
+| `uncertain` | 无法确定 | 走 LLM 精确判断 |
+
+约 60% 的典型企业知识问答请求（单一查询、闲聊）走快速路径，节省 5-10 秒延迟。
+
+## API 接口
 
 ### 聊天
 
 ```bash
 POST /api/v1/chat
+Authorization: Bearer <token>
 {
     "message": "公司的年假政策是什么？",
     "session_id": "可选的会话ID"
 }
+```
+
+### 流式聊天
+
+```bash
+GET /api/v1/chat/stream?message=你好&session_id=xxx
+Authorization: Bearer <token>
 ```
 
 ### 健康检查
@@ -310,60 +347,43 @@ POST /api/v1/chat
 GET /health
 ```
 
-## 🔄 工作流程
+完整接口文档见 `http://localhost:8000/docs`。
 
-```
-用户请求 → Supervisor 路由 → [Knowledge/Operation/General] Agent → 返回结果
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │  ReAct Loop     │
-                    │ (推理 → 工具 →  │
-                    │   执行 → 观察)  │
-                    └─────────────────┘
-```
-
-## 📝 注意
-
-1. 推荐在 **Linux** 环境下运行（当前说明默认以 Linux/Bash 为准）。
-2. 需要在 `config/.env` 中配置阿里千问或 OpenAI 的 API Key。
-3. 首次启动会自动嵌入知识库，向量数据保存在 `./chroma_db` 目录下（已在 `.gitignore` 中忽略）。
-4. **会话状态持久化**: Agent 推理历史保存在 `chroma_db/langgraph_checkpoints.db`，服务重启后可恢复对话。
-   - 如需调试，可设置环境变量 `USE_MEMORY_CHECKPOINTER=true` 切换回内存模式。
-
-## 🚢 部署指南
-
-### 直接部署
+## 知识库管理
 
 ```bash
-# 1. 进入项目目录
-cd /share/home/lifr/workspace/code/enterprise-knowledge-agent
+# 重新嵌入知识库（清空后重新导入）
+python scripts/ingest.py --reset
 
-# 2. 激活 Python 环境
-conda activate enterprise-agent
-
-# 3. 安装依赖
-pip install -r requirements.txt
-cd frontend && npm install && cd ..
-
-# 4. 配置环境变量
-cp config/env.template config/.env
-vim config/.env   # 填入 DASHSCOPE_API_KEY / ADMIN_USERNAME / ADMIN_PASSWORD / JWT_SECRET_KEY
-
-# 5. 启动后端（后台运行）
-nohup python main.py > server.log 2>&1 &
-
-# 6. 启动前端
-cd frontend && nohup npm run dev > frontend.log 2>&1 &
-
-# 7. 访问
-# 前端: http://your-server-ip:3000
-# 后端: http://your-server-ip:8000
+# 增量添加文档
+# 1. 将文档放入 data/knowledge/ 目录（支持 .md .txt .pdf .docx）
+# 2. 重启服务或调用 /api/v1/knowledge/ingest 接口
 ```
 
-### 部署架构
+## 部署
+
+### 后台运行
+
+```bash
+conda activate agent-demo
+
+# 后端
+nohup python main.py > server.log 2>&1 &
+
+# 前端
+cd frontend && nohup npm run dev > frontend.log 2>&1 &
+```
+
+### 访问地址
 
 ```
 用户浏览器 → Frontend (Vite:3000) → Backend (uvicorn:8000) → AI API
 ```
 
+## 注意事项
+
+1. 推荐在 **Linux** 环境运行。
+2. 需在 `config/.env` 中配置阿里千问或 OpenAI 的 API Key。
+3. 首次启动自动嵌入知识库，向量数据保存在 `./chroma_db/`（已 gitignore）。
+4. 开启 `USE_SQLITE_CHECKPOINTER=true` 后，Agent 推理状态和对话摘要均持久化到 SQLite，服务重启后对话上下文完整恢复。
+5. 若需调试或测试，可设置 `USE_SQLITE_CHECKPOINTER=false` 切换为内存模式（重启后状态清空）。
