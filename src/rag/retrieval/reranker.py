@@ -1,6 +1,6 @@
 """
 Reranker 模块 - 文档重排序
-支持多种 Reranker 模型：阿里百炼 BGE、BAAI BGE 等
+默认使用阿里百炼 qwen3-rerank，也支持 BAAI BGE 本地模型
 """
 from typing import List, Optional, Dict, Any
 from langchain_core.documents import Document
@@ -15,7 +15,7 @@ class RerankerManager:
 
     def __init__(
         self,
-        reranker_model: str = "bge-reranker-v2-mini",
+        reranker_model: str = "qwen3-rerank",
         provider: str = "qwen",  # "qwen" 或 "baai"
         top_n: int = 3,
         score_threshold: float = 0.3
@@ -133,7 +133,7 @@ class QwenReranker:
 
     def __init__(
         self,
-        model: str = "bge-reranker-v2-mini",
+        model: str = "qwen3-rerank",
         api_key: str = None,
         top_n: int = 3,
         score_threshold: float = 0.3
@@ -307,7 +307,7 @@ def get_reranker_manager(
 
     if _reranker_manager is None:
         _reranker_manager = RerankerManager(
-            reranker_model=reranker_model or getattr(settings, 'reranker_model', 'bge-reranker-v2-mini'),
+            reranker_model=reranker_model or getattr(settings, 'reranker_model', 'qwen3-rerank'),
             provider=provider or getattr(settings, 'reranker_provider', 'qwen'),
             top_n=top_n or getattr(settings, 'reranker_top_n', 3),
             score_threshold=score_threshold or getattr(settings, 'reranker_threshold', 0.3)
