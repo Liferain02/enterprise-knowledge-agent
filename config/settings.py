@@ -200,10 +200,6 @@ class Settings(BaseSettings):
         default=3600,
         description="会话过期时间(秒)"
     )
-    max_history_messages: int = Field(
-        default=20,
-        description="最大历史消息数"
-    )
     summary_threshold: int = Field(
         default=20,
         description="触发对话摘要的消息数阈值（超过此数量时自动总结旧消息）"
@@ -245,16 +241,32 @@ class Settings(BaseSettings):
         self.knowledge_base_dir.mkdir(parents=True, exist_ok=True)
 
     def load_mcp_servers_config(self) -> List[Dict[str, Any]]:
-        """加载 MCP 服务器配置"""
+        """
+        加载 MCP 服务器配置。
+        args 列表中以 './' 开头的相对路径会被自动解析为项目根目录下的绝对路径，
+        确保配置文件与部署路径无关。
+        """
         config_path = self.project_root / "config" / "mcp_servers.json"
-        
+
         if not config_path.exists():
             return []
-        
+
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 config = json.load(f)
-                return config.get("servers", [])
+            servers = config.get("servers", [])
+
+            # 将 args 中的相对路径解析为绝对路径
+            for server in servers:
+                resolved = []
+                for arg in server.get("args", []):
+                    if isinstance(arg, str) and arg.startswith("./"):
+                        resolved.append(str(self.project_root / arg[2:]))
+                    else:
+                        resolved.append(arg)
+                server["args"] = resolved
+
+            return servers
         except Exception as e:
             print(f"加载 MCP 服务器配置失败: {e}")
             return []

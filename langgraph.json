@@ -1,4 +1,5 @@
 {
+  "_comment": "此文件仅用于 LangGraph Cloud 部署，本地运行无需修改。",
   "dependencies": [
     "langchain-openai",
     "langchain-community",
@@ -6,7 +7,7 @@
     "src"
   ],
   "graphs": {
-    "agent": "./src/agent/__init__.py:get_agent_graph"
+    "agent": "./src/agent/__init__.py:get_agent_graph_async"
   },
   "env": "./config/.env"
 }

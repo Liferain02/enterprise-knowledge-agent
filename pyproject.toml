@@ -1,6 +1,3 @@
-"""
-Pyproject configuration for enterprise-knowledge-agent
-"""
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -10,19 +7,11 @@ name = "enterprise-knowledge-agent"
 version = "1.0.0"
 description = "Enterprise Knowledge Assistant with RAG and Multi-Agent System"
 requires-python = ">=3.10"
-dependencies = [
-    "fastapi>=0.104.0",
-    "uvicorn>=0.24.0",
-    "langchain>=0.1.0",
-    "langchain-openai>=0.0.2",
-    "langgraph>=0.0.20",
-    "pydantic>=2.0.0",
-    "chromadb>=0.4.0",
-]
+# 运行时依赖统一由 requirements.txt 管理，此处不重复声明
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["src*", "config*", "scripts*"]
 
 [project.optional-dependencies]
 dev = [
@@ -30,3 +19,15 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "ruff>=0.1.0",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]   # pycodestyle errors, pyflakes, isort
+ignore = ["E501"]           # 行长由 line-length 控制，不重复报
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
