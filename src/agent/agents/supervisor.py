@@ -4,16 +4,16 @@ Supervisor 节点
 """
 import json
 from typing import Dict, Any
-from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
 from langchain_core.messages import HumanMessage
 from src.models.llm import get_llm
 
 
-class RouteDecision(BaseModel):
+class RouteDecision(TypedDict):
     """Supervisor 路由决策结构化输出"""
-    reasoning: str = Field(description="分析问题的理由")
-    next_agent: str = Field(description="下一个处理的 Agent: knowledge_agent/operation_agent/general_agent")
-    reason: str = Field(description="选择该 Agent 的原因")
+    reasoning: str
+    next_agent: str   # knowledge_agent / operation_agent / general_agent
+    reason: str
 
 
 async def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -77,10 +77,11 @@ async def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
         llm_structured = llm.with_structured_output(RouteDecision)
         # 使用 ainvoke
         decision: RouteDecision = await llm_structured.ainvoke(prompt)
-        
-        next_agent = decision.next_agent
-        reasoning = decision.reasoning
-        reason = decision.reason
+
+        # TypedDict 返回普通 dict，用 [] 访问
+        next_agent = decision["next_agent"]
+        reasoning = decision["reasoning"]
+        reason = decision["reason"]
         
     except Exception as e:
         # 降级处理：根据关键词判断

@@ -13,7 +13,7 @@ from langchain_core.tools import BaseTool
 from src.models.llm import get_llm
 from config.settings import get_settings
 import frontmatter
-from ..checkpointer import get_checkpointer
+from ..checkpointer import get_sync_checkpointer as get_checkpointer
 
 
 class Skill:

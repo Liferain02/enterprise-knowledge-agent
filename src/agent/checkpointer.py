@@ -1,55 +1,49 @@
 """
 Checkpointer - 状态持久化
-提供 AsyncSqliteSaver 的创建和管理
+提供 CheckpointSaver 的创建和管理
+
+设计原则：
+- AsyncSqliteSaver 必须在将要使用它的同一个 event loop 中创建
+- 异步图实例通过 get_agent_graph_async() 延迟初始化（在 FastAPI event loop 内）
+- 同步图实例使用 MemorySaver（用于测试或非服务器场景）
 """
-import asyncio
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.memory import MemorySaver
 
 
-# 全局单例
-_checkpointer = None
-
-
-async def _create_async_sqlite_checkpointer() -> AsyncSqliteSaver:
-    """创建 AsyncSqliteSaver 异步检查点"""
-    import aiosqlite
-    from config.settings import get_settings
-    
-    settings = get_settings()
-    db_path = settings.chroma_dir / "langgraph_checkpoints.db"
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = await aiosqlite.connect(str(db_path))
-    return AsyncSqliteSaver(conn)
-
-
-def get_checkpointer():
+def get_sync_checkpointer() -> MemorySaver:
     """
-    获取 Checkpointer（单例模式）
-    使用 AsyncSqliteSaver 持久化 LangGraph 的运行状态
+    获取同步 Checkpointer（内存模式）
+    用于 run_agent()、测试、或非 FastAPI 环境
+    
+    注意：MemorySaver 不持久化，进程重启后状态丢失
+    但对单次测试完全足够，且不存在事件循环冲突问题
     """
-    global _checkpointer
+    return MemorySaver()
+
+
+async def get_async_checkpointer():
+    """
+    在当前 event loop 中创建 AsyncSqliteSaver
     
-    if _checkpointer is not None:
-        return _checkpointer
+    必须在异步上下文中调用（如 FastAPI 的 lifespan/endpoint）
+    这样 aiosqlite 连接就绑定在 FastAPI 的 event loop 上，
+    后续 graph.ainvoke() 也在同一个 loop 中运行，不会产生跨循环阻塞
     
+    Returns:
+        AsyncSqliteSaver 或 MemorySaver（取决于配置）
+    """
     from config.settings import get_settings
     settings = get_settings()
-    
-    # 使用配置决定是否使用 SQLite 持久化
+
     if settings.use_sqlite_checkpointer:
-        # 尝试获取已有事件循环
-        try:
-            loop = asyncio.get_running_loop()
-            # 如果有运行中的循环，需要创建任务
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, _create_async_sqlite_checkpointer())
-                _checkpointer = future.result()
-        except RuntimeError:
-            # 没有运行中的循环，可以直接使用 asyncio.run
-            _checkpointer = asyncio.run(_create_async_sqlite_checkpointer())
+        import aiosqlite
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+        db_path = settings.chroma_dir / "langgraph_checkpoints.db"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # 在当前 event loop 中创建连接——这是关键
+        conn = await aiosqlite.connect(str(db_path))
+        return AsyncSqliteSaver(conn)
     else:
-        from langgraph.checkpoint.memory import MemorySaver
-        _checkpointer = MemorySaver()
-    
-    return _checkpointer
+        return MemorySaver()

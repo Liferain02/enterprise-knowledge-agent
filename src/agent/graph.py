@@ -1,18 +1,19 @@
 """
 LangGraph Multi-Agent 工作流图
-重构后的完整 Agent 架构
+架构：Planner → Supervisor → Worker Agents → END
 """
+import asyncio
 from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 from langgraph.graph import MessagesState
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_core.runnables import RunnableLambda
+from langchain_core.messages import HumanMessage
 
 from .agents.supervisor import supervisor_node, route_to_agent
 from .agents.knowledge import knowledge_agent_node
 from .agents.operation import operation_agent_node
 from .agents.general import general_agent_node
-from .checkpointer import get_checkpointer
+from .agents.planner import planner_node, route_from_planner, execute_plan_node, route_execute_plan
+from .checkpointer import get_sync_checkpointer, get_async_checkpointer
 
 
 # ==================== 状态定义 ====================
@@ -26,14 +27,22 @@ class AgentState(MessagesState):
     next_agent: str
     supervisor_reasoning: str
     supervisor_reason: str
-    
+
     # 执行结果
     final_answer: str
     sources: str
     used_agent: str
-    
+
     # 会话ID（用于在各节点中维护历史）
     session_id: str
+
+    # ==================== Planner 状态 ====================
+    is_complex: bool       # 是否复杂任务
+    plan_steps: list       # 计划步骤列表
+    plan_reasoning: str    # 计划决策理由
+    current_step: int      # 当前执行的步骤索引
+    completed_steps: list  # 已完成的步骤
+    plan_results: list     # 各步骤的执行结果
 
 
 # ==================== 图创建函数 ====================
@@ -41,84 +50,127 @@ class AgentState(MessagesState):
 def create_multi_agent_graph() -> StateGraph:
     """
     创建 Multi-Agent 工作流图
-    
+
     工作流程：
     1. 接收用户消息
-    2. Supervisor 分析意图并路由
-    3. 根据路由选择对应的 Worker Agent
-    4. Worker Agent 生成答案
-    5. 返回最终答案
+    2. Planner 判断任务复杂度
+       - 简单任务 → Supervisor 路由 → Worker Agent → END
+       - 复杂任务 → Execute Plan（逐步执行各子步骤）→ END
     """
-    
-    # 创建图
     workflow = StateGraph(AgentState)
-    
-    # 添加节点
+
+    # Worker Agent 节点
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("knowledge_agent", knowledge_agent_node)
     workflow.add_node("operation_agent", operation_agent_node)
     workflow.add_node("general_agent", general_agent_node)
-    
-    # 设置入口点
-    workflow.set_entry_point("supervisor")
-    
-    # 添加条件边 - 根据 Supervisor 决策路由
-    # 使用 RunnableLambda 包装以支持异步
+
+    # Planner 节点（任务规划）
+    workflow.add_node("planner", planner_node)
+
+    # Execute Plan 节点（复杂任务逐步执行）
+    workflow.add_node("execute_plan", execute_plan_node)
+
+    # 入口：Planner
+    workflow.set_entry_point("planner")
+
+    # Planner → Supervisor（简单）或 Execute Plan（复杂）
+    workflow.add_conditional_edges(
+        "planner",
+        route_from_planner,
+        {
+            "supervisor": "supervisor",
+            "execute_plan": "execute_plan",
+        }
+    )
+
+    # Supervisor → Worker Agent
     workflow.add_conditional_edges(
         "supervisor",
-        RunnableLambda(route_to_agent),
+        route_to_agent,
         {
             "knowledge_agent": "knowledge_agent",
             "operation_agent": "operation_agent",
-            "general_agent": "general_agent"
+            "general_agent": "general_agent",
         }
     )
-    
-    # 所有 Agent 节点都指向 END
+
+    # Execute Plan → 下一步 或 END
+    workflow.add_conditional_edges(
+        "execute_plan",
+        route_execute_plan,
+        {
+            "execute_plan": "execute_plan",
+            "END": END,
+        }
+    )
+
+    # Worker Agent → END
     workflow.add_edge("knowledge_agent", END)
     workflow.add_edge("operation_agent", END)
     workflow.add_edge("general_agent", END)
-    
+
     return workflow
 
 
-# ==================== 编译图 ====================
+# ==================== 图编译与缓存 ====================
 
-def compile_graph(checkpointer = None) -> StateGraph:
+# 同步图实例（MemorySaver，用于测试/run_agent）
+_sync_graph = None
+
+# 异步图实例（AsyncSqliteSaver，用于 FastAPI/arun_agent）
+_async_graph = None
+
+
+def get_agent_graph():
     """
-    编译并返回可执行的图
-    
-    Args:
-        checkpointer: 状态持久化检查点，默认使用 SQLite 持久化
-        
-    Returns:
-        编译后的 LangGraph
+    获取同步图实例（单例，MemorySaver）
+
+    适用于测试和脚本调用，不存在事件循环冲突问题。
+    注意：MemorySaver 不持久化，进程重启后历史丢失。
+    生产环境请使用 get_agent_graph_async()。
     """
-    if checkpointer is None:
-        checkpointer = get_checkpointer()
-    
-    workflow = create_multi_agent_graph()
-    compiled = workflow.compile(checkpointer=checkpointer)
-    
-    return compiled
+    global _sync_graph
+    if _sync_graph is None:
+        checkpointer = get_sync_checkpointer()
+        workflow = create_multi_agent_graph()
+        _sync_graph = workflow.compile(checkpointer=checkpointer)
+    return _sync_graph
 
 
-# ==================== 全局图实例 ====================
-
-_agent_graph = None
-
-
-def get_agent_graph() -> StateGraph:
+async def get_agent_graph_async():
     """
-    获取 Agent 图实例（单例模式）
-    
-    Returns:
-        编译后的 LangGraph
+    获取异步图实例（单例，AsyncSqliteSaver）
+
+    在当前 event loop（FastAPI 的循环）中初始化，
+    确保 aiosqlite 连接与 graph.ainvoke() 在同一个 loop 中运行，
+    彻底避免跨循环阻塞问题。首次调用后缓存复用。
     """
-    global _agent_graph
-    if _agent_graph is None:
-        _agent_graph = compile_graph()
-    return _agent_graph
+    global _async_graph
+    if _async_graph is None:
+        checkpointer = await get_async_checkpointer()
+        workflow = create_multi_agent_graph()
+        _async_graph = workflow.compile(checkpointer=checkpointer)
+    return _async_graph
+
+
+# ==================== 工具函数 ====================
+
+def _build_run_config(session_id: str, config: Dict[str, Any] = None) -> Dict[str, Any]:
+    run_config = config or {}
+    if "configurable" not in run_config:
+        run_config["configurable"] = {}
+    run_config["configurable"]["thread_id"] = session_id
+    return run_config
+
+
+def _extract_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "final_answer": result.get("final_answer", "抱歉，无法生成答案。"),
+        "sources": result.get("sources", ""),
+        "used_agent": result.get("used_agent", "unknown"),
+        "messages": result.get("messages", [])
+    }
 
 
 # ==================== 执行入口函数 ====================
@@ -129,57 +181,32 @@ def run_agent(
     config: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
-    运行 Agent 的入口函数（同步版本）
-    
-    Args:
-        input_text: 用户输入
-        session_id: 会话ID（用于状态持久化）
-        config: 额外配置
-        
-    Returns:
-        包含 final_answer 的字典
+    运行 Agent（同步封装，使用 MemorySaver）
+
+    适用于测试和脚本。在新建的 event loop 中运行，
+    不存在跨循环冲突。
     """
-    # 获取图
-    graph = get_agent_graph()
-    
-    # 构建配置（包含 thread_id 用于状态持久化）
-    run_config = config or {}
-    if "configurable" not in run_config:
-        run_config["configurable"] = {}
-    run_config["configurable"]["thread_id"] = session_id
-    
-    # 构建初始状态（包含 session_id 供各节点使用）
-    initial_state = {
-        "messages": [HumanMessage(content=input_text)],
-        "session_id": session_id  # 传递 session_id 到状态中
-    }
-    
-    # 执行图
-    try:
-        result = graph.invoke(initial_state, run_config)
-        
-        # 提取最终答案
-        final_answer = result.get("final_answer", "抱歉，无法生成答案。")
-        sources = result.get("sources", "")
-        used_agent = result.get("used_agent", "unknown")
-        
-        return {
-            "final_answer": final_answer,
-            "sources": sources,
-            "used_agent": used_agent,
-            "messages": result.get("messages", [])
+    async def _run():
+        graph = get_agent_graph()
+        run_config = _build_run_config(session_id, config)
+        initial_state = {
+            "messages": [HumanMessage(content=input_text)],
+            "session_id": session_id,
         }
-        
+        return await graph.ainvoke(initial_state, run_config)
+
+    try:
+        result = asyncio.run(_run())
+        return _extract_result(result)
     except Exception as e:
         print(f"Agent 执行出错: {e}")
         import traceback
         traceback.print_exc()
-        
         return {
             "final_answer": f"处理请求时出错: {str(e)}",
             "sources": "",
             "used_agent": "error",
-            "messages": []
+            "messages": [],
         }
 
 
@@ -189,95 +216,50 @@ async def arun_agent(
     config: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
-    运行 Agent 的入口函数（异步版本）
-    
-    使用 ainvoke 在主事件循环中运行
-    避免跨事件循环导致的 MCP 死锁
-    
-    Args:
-        input_text: 用户输入
-        session_id: 会话ID（用于状态持久化）
-        config: 额外配置
-        
-    Returns:
-        包含 final_answer 的字典
+    运行 Agent（异步，使用 AsyncSqliteSaver）
+
+    适用于 FastAPI 生产环境，支持跨请求多轮对话持久化。
     """
-    # 获取图
-    graph = get_agent_graph()
-    
-    # 构建配置（包含 thread_id 用于状态持久化）
-    run_config = config or {}
-    if "configurable" not in run_config:
-        run_config["configurable"] = {}
-    run_config["configurable"]["thread_id"] = session_id
-    
-    # 构建初始状态（包含 session_id 供各节点使用）
+    graph = await get_agent_graph_async()
+    run_config = _build_run_config(session_id, config)
     initial_state = {
         "messages": [HumanMessage(content=input_text)],
-        "session_id": session_id  # 传递 session_id 到状态中
+        "session_id": session_id,
     }
-    
-    # 执行图（异步版本）
+
     try:
         result = await graph.ainvoke(initial_state, run_config)
-        
-        # 提取最终答案
-        final_answer = result.get("final_answer", "抱歉，无法生成答案。")
-        sources = result.get("sources", "")
-        used_agent = result.get("used_agent", "unknown")
-        
-        return {
-            "final_answer": final_answer,
-            "sources": sources,
-            "used_agent": used_agent,
-            "messages": result.get("messages", [])
-        }
-        
+        return _extract_result(result)
     except Exception as e:
         print(f"Agent 执行出错: {e}")
         import traceback
         traceback.print_exc()
-        
         return {
             "final_answer": f"处理请求时出错: {str(e)}",
             "sources": "",
             "used_agent": "error",
-            "messages": []
+            "messages": [],
         }
 
 
 # ==================== 流式执行 ====================
 
-def run_agent_stream(
+async def arun_agent_stream(
     input_text: str,
     session_id: str = "default",
     config: Dict[str, Any] = None
 ):
     """
-    流式运行 Agent
-    
-    Args:
-        input_text: 用户输入
-        session_id: 会话ID
-        config: 额外配置
-        
-    Yields:
-        流式输出
+    流式运行 Agent（异步，使用 AsyncSqliteSaver）
+
+    适用于 FastAPI SSE/流式接口。
     """
-    # 获取图
-    graph = get_agent_graph()
-    
-    # 构建配置
-    run_config = config or {}
-    if "configurable" not in run_config:
-        run_config["configurable"] = {}
-    run_config["configurable"]["thread_id"] = session_id
-    
-    # 构建初始状态
+    graph = await get_agent_graph_async()
+    run_config = _build_run_config(session_id, config)
     initial_state = {
-        "messages": [HumanMessage(content=input_text)]
+        "messages": [HumanMessage(content=input_text)],
+        "session_id": session_id,
     }
-    
-    # 流式执行
-    for chunk in graph.stream(initial_state, run_config):
+
+    async for chunk in graph.astream(initial_state, run_config):
         yield chunk

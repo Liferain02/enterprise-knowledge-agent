@@ -12,7 +12,7 @@ from ..tools import get_all_agent_tools
 from ..prompts import OPERATION_AGENT_SYSTEM_PROMPT
 from ._utils import get_last_user_message
 from config.settings import get_settings
-from ..checkpointer import get_checkpointer
+from ..checkpointer import get_sync_checkpointer as get_checkpointer
 
 
 # Agent 缓存

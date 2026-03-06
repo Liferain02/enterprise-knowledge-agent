@@ -4,7 +4,7 @@
 """
 import logging
 from typing import Dict, Any
-from src.agent.graph import run_agent, arun_agent, get_agent_graph
+from src.agent.graph import run_agent, arun_agent, get_agent_graph, get_agent_graph_async
 from config.settings import get_settings
 from .session_service import session_service
 
