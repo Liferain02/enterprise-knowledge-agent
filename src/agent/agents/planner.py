@@ -2,6 +2,7 @@
 Planner 节点
 负责分析任务复杂度并拆解步骤
 """
+import re
 import json
 from typing import Dict, Any, List
 from typing_extensions import TypedDict
@@ -33,35 +34,120 @@ class SummaryOutput(TypedDict):
     final_answer: str
 
 
+# ==================== 快速复杂度预判 ====================
+
+# 命中任意一条 → 判定为复杂任务（走 LLM planner 拆步骤）
+_COMPLEX_PATTERNS = [
+    r"对比|比较|区别|差异|异同|不同点",          # 对比类
+    r"\bvs\b|VS|versus",                          # 英文对比
+    r"分别.*查|分别.*看|各自|各个",               # 多信息并行
+    r"先.{0,10}再|先.{0,10}然后|然后再|之后再",  # 顺序执行
+    r"总结.{0,15}和|汇总|综合.{0,15}和|梳理",    # 汇总类
+    r"第一.{0,20}第二|①.{0,20}②",               # 列举多项
+    r"多个.{0,10}政策|多个.{0,10}文档",          # 多文档
+]
+
+# 命中任意一条 → 判定为简单任务（直接跳过 LLM planner）
+_SIMPLE_PATTERNS = [
+    r"^(你好|hi|hello|您好|早上好|下午好|晚上好|在吗|嗨).{0,10}$",  # 问候
+    r"^(谢谢|感谢|多谢|thanks|thank you).{0,15}$",                    # 致谢
+    r"^(再见|拜拜|bye|晚安|好的|okay|ok|收到).{0,10}$",              # 结束语
+    r"^现在(几点|时间|日期)|^今天(几号|星期|日期)|^当前时间",         # 时间查询
+]
+
+_COMPILED_COMPLEX = [re.compile(p, re.IGNORECASE) for p in _COMPLEX_PATTERNS]
+_COMPILED_SIMPLE  = [re.compile(p, re.IGNORECASE) for p in _SIMPLE_PATTERNS]
+
+
+def _quick_complexity_check(message: str) -> str:
+    """
+    快速复杂度预判（纯规则，无 LLM 调用，耗时 < 1ms）
+
+    Returns:
+        "simple"    确定是简单任务，跳过 LLM planner，节省一次 LLM 调用
+        "complex"   确定是复杂任务，走 LLM planner 拆解步骤
+        "uncertain" 无法确定，走 LLM planner 精确判断
+
+    策略：宁可漏报 complex（降级为 uncertain → LLM 判断），
+    不可误报 simple（跳过 LLM 导致复杂任务未被拆解）。
+    """
+    msg = message.strip()
+
+    # 极短消息 → 必然简单（问候/单词回复）
+    if len(msg) <= 8:
+        return "simple"
+
+    # 命中复杂信号 → 交给 LLM 拆步骤
+    for pattern in _COMPILED_COMPLEX:
+        if pattern.search(msg):
+            return "complex"
+
+    # 命中简单信号 → 跳过 LLM
+    for pattern in _COMPILED_SIMPLE:
+        if pattern.search(msg):
+            return "simple"
+
+    # 多个问号 → 多问题 → complex
+    if msg.count("？") >= 2 or msg.count("?") >= 2:
+        return "complex"
+
+    # 消息较短（≤ 40字）且无复杂信号 → 大概率简单
+    if len(msg) <= 40:
+        return "simple"
+
+    # 其余交给 LLM 判断
+    return "uncertain"
+
+
 # ==================== Planner 节点 ====================
 
 async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Planner 节点 - 分析任务复杂度并拆解步骤
-    
+
     工作逻辑：
-    1. 接收用户问题
-    2. 判断是否复杂任务（需要多步骤处理）
-    3. 如果是复杂任务，拆解成步骤序列
-    4. 如果是简单任务，返回空步骤（后续由 Supervisor 处理）
-    
+    1. 快速规则预判（无 LLM，< 1ms）
+       - 确定简单 → 直接返回，跳过 LLM（节省 5-10 秒）
+       - 确定复杂 / 不确定 → 走 LLM 精确判断
+    2. LLM 判断（仅对 complex / uncertain 触发）
+       - 简单任务 → 返回空步骤，后续由 Supervisor 处理
+       - 复杂任务 → 拆解成步骤序列，由 execute_plan 执行
+
     复杂任务示例：
     - "对比 A 政策和 B 政策的差异" → 需要两步：查A政策，查B政策
     - "算一下我下个月能休几天假" → 需要多步：查假期政策，查日历，计算
     - "查询多个文档后总结" → 需要多步：检索多个文档，汇总
     """
-    llm = get_llm()
-    
     # 获取用户消息
     messages = state.get("messages", [])
     last_user_message = _get_last_user_message(messages)
-    
+
     if not last_user_message:
         return {
             "is_complex": False,
             "plan_steps": [],
             "plan_reasoning": "无用户消息输入"
         }
+
+    # ── 快速路径：规则预判 ──────────────────────────────────────────
+    quick_result = _quick_complexity_check(last_user_message)
+
+    if quick_result == "simple":
+        print(f"[Planner] 快速判断: 简单任务（跳过 LLM）")
+        return {
+            "is_complex": False,
+            "plan_steps": [],
+            "plan_reasoning": "规则快速判断为简单任务",
+            "current_step": 0,
+        }
+
+    if quick_result == "complex":
+        print(f"[Planner] 快速判断: 复杂任务（进入 LLM 拆步骤）")
+    else:
+        print(f"[Planner] 快速判断: 不确定（进入 LLM 精确判断）")
+
+    # ── LLM 路径：精确判断（仅 complex / uncertain 到达此处）─────────
+    llm = get_llm()
     
     # 构建分析提示词
     prompt = f"""请分析以下用户问题，判断是否需要拆解成多个步骤来处理。
