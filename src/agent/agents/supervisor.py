@@ -149,9 +149,3 @@ def route_to_agent(state: Dict[str, Any]) -> str:
     print(f"[route_to_agent] 无效的 agent: {next_agent}，降级到 general_agent")
     return "general_agent"
 
-
-async def aroute_to_agent(state: Dict[str, Any]) -> str:
-    """
-    异步版本的路由函数 - 用于 astream
-    """
-    return route_to_agent(state)

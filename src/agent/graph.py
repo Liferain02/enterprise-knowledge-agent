@@ -328,26 +328,3 @@ async def arun_agent(
             "used_agent": "error",
             "messages": [],
         }
-
-
-# ==================== 流式执行 ====================
-
-async def arun_agent_stream(
-    input_text: str,
-    session_id: str = "default",
-    config: Dict[str, Any] = None
-):
-    """
-    流式运行 Agent（异步，使用 AsyncSqliteSaver）
-
-    适用于 FastAPI SSE/流式接口。
-    """
-    graph = await get_agent_graph_async()
-    run_config = _build_run_config(session_id, config)
-    initial_state = {
-        "messages": [HumanMessage(content=input_text)],
-        "session_id": session_id,
-    }
-
-    async for chunk in graph.astream(initial_state, run_config):
-        yield chunk
