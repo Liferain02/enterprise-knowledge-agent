@@ -21,30 +21,55 @@ def knowledge_search(query: str, top_k: int = 5) -> str:
         top_k: 返回结果数量
 
     Returns:
-        相关文档内容列表
+        相关文档内容列表（包含分数和来源信息）
     """
     from src.rag.retrieval.retriever import get_retriever_manager
-    
+    from config.settings import get_settings
+
+    settings = get_settings()
+    min_score = getattr(settings, 'reranker_threshold', 0.1) or 0.1
+
     try:
         retriever_manager = get_retriever_manager()
-        
+
         # 使用带 Reranker 的搜索
         if retriever_manager.use_reranker and retriever_manager.reranker_manager:
             results_with_score = retriever_manager.search_with_rerank(query, k=top_k)
-            results = [doc for doc, score in results_with_score]
         else:
-            results = retriever_manager.search(query, k=top_k)
-        
-        if not results:
-            return "未在知识库中找到相关内容。建议尝试使用不同的关键词或简化查询。"
-        
+            # 如果没有 Reranker，使用带分数的搜索
+            results_with_score = retriever_manager.search_with_score(query, k=top_k)
+
+        if not results_with_score:
+            return "【检索结果】\n未在知识库中找到相关内容。建议尝试使用不同的关键词或简化查询。"
+
+        # 过滤低相关性结果
+        filtered_results = [(doc, score) for doc, score in results_with_score if score >= min_score]
+
+        if not filtered_results:
+            # 如果所有结果都被过滤，说明没有足够相关的内容
+            return f"""【检索结果】
+未找到足够相关的内容（相关性分数均低于 {min_score}）。
+知识库中可能没有您需要的信息，请尝试其他问题或调整查询关键词。"""
+
+        # 格式化结果，包含分数和来源
         formatted_results = []
-        for i, doc in enumerate(results, 1):
+        for i, (doc, score) in enumerate(filtered_results, 1):
             source = doc.metadata.get("source", "未知来源") if doc.metadata else "未知来源"
-            formatted_results.append(f"【结果 {i}】来源: {source}\n{doc.page_content}\n")
-        
-        return "\n".join(formatted_results)
-    
+            # 将分数转换为可读性更高的形式（0-100）
+            score_percent = round(score * 100, 1)
+            formatted_results.append(
+                f"【结果 {i}】相关性: {score_percent}%\n"
+                f"来源: {source}\n"
+                f"内容: {doc.page_content}\n"
+            )
+
+        result_text = "【检索结果】\n" + "\n---\n".join(formatted_results)
+
+        # 添加使用提示
+        result_text += "\n\n【使用说明】\n以上结果按相关性分数排序，分数越高表示与问题越相关。"
+
+        return result_text
+
     except Exception as e:
         return f"搜索知识库时出错: {str(e)}"
 
