@@ -91,7 +91,39 @@ class KnowledgeService:
 
     def search(self, query: str, top_k: int = 5) -> Dict[str, Any]:
         """
-        搜索知识库
+        搜索知识库（默认使用重排序）
+
+        Args:
+            query: 搜索查询
+            top_k: 返回结果数量
+
+        Returns:
+            搜索结果（包含重排序分数）
+        """
+        try:
+            retriever_manager = get_retriever_manager()
+
+            results = retriever_manager.search_with_rerank(query, k=top_k)
+
+            return {
+                "query": query,
+                "count": len(results),
+                "results": [
+                    {
+                        "content": doc.page_content,
+                        "score": score,
+                        "metadata": doc.metadata
+                    }
+                    for doc, score in results
+                ]
+            }
+        except Exception as e:
+            logger.exception(f"搜索失败: {str(e)}")
+            raise
+
+    def search_basic(self, query: str, top_k: int = 5) -> Dict[str, Any]:
+        """
+        基础搜索（不使用重排序）
 
         Args:
             query: 搜索查询
