@@ -70,7 +70,7 @@ class RetrieverManager:
                 bm25_weight=self.hybrid_bm25_weight
             )
         return self._hybrid_manager
-    
+
     def search(
         self,
         query: str,
@@ -132,7 +132,10 @@ class RetrieverManager:
 
         # 1. 先检索更多候选文档（通常是 top_n 的 2-3 倍）
         candidate_k = k * 3
-        candidates = self.search(query, k=candidate_k, filter=filter)
+
+        # 使用 search_with_score 获取带分数的结果
+        scored_candidates = self.search_with_score(query, k=candidate_k, filter=filter)
+        candidates = [doc for doc, score in scored_candidates]
 
         if not candidates:
             return []
