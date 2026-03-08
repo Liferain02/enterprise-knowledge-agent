@@ -136,7 +136,10 @@ def ingest_knowledge_base(
 def main():
     """主函数"""
     import argparse
-    
+
+    # 初始化 settings 以获取默认配置
+    settings = get_settings()
+
     parser = argparse.ArgumentParser(description="知识库文档嵌入工具")
     parser.add_argument(
         "--dir", "-d",
@@ -165,9 +168,8 @@ def main():
     parser.add_argument(
         "--strategy", "-s",
         type=str,
-        default="recursive",
-        choices=["recursive", "markdown", "semantic", "hybrid"],
-        help="分块策略: recursive(固定长度) / markdown(标题) / semantic(语义) / hybrid(混合)"
+        default="",
+        help=f"分块策略 (默认: {settings.chunking_strategy}): recursive(固定长度) / markdown(标题) / semantic(语义) / hybrid(混合)"
     )
     parser.add_argument(
         "--reset", "-r",
@@ -177,12 +179,15 @@ def main():
 
     args = parser.parse_args()
 
+    # 如果未指定策略，使用配置文件中的默认值
+    chunking_strategy = args.strategy if args.strategy.strip() else settings.chunking_strategy
+
     ingest_knowledge_base(
         knowledge_dir=args.dir,
         collection_name=args.collection,
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
-        chunking_strategy=args.strategy,
+        chunking_strategy=chunking_strategy,
         reset=args.reset
     )
 
