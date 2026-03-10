@@ -179,10 +179,19 @@ class SemanticChunker:
             chunks = self.split_text(text)
 
             for i, chunk in enumerate(chunks):
+                # 过滤掉不支持的元数据字段（ChromaDB不支持列表/字典类型）
+                filtered_metadata = {}
+                for key, value in doc.metadata.items():
+                    if isinstance(value, (list, dict)):
+                        # 将列表/字典转换为字符串
+                        filtered_metadata[key] = str(value)
+                    else:
+                        filtered_metadata[key] = value
+                
                 new_doc = Document(
                     page_content=chunk,
                     metadata={
-                        **doc.metadata,
+                        **filtered_metadata,
                         "chunk_index": i,
                         "chunking_method": "semantic",
                         "total_chunks": len(chunks)

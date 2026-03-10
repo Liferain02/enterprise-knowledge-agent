@@ -214,11 +214,12 @@ class DocumentLoaderManager:
             doc.metadata["file_name"] = os.path.basename(file_path)
             doc.metadata["file_type"] = ".md"
             doc.metadata["has_toc"] = len(headers) > 0
-            doc.metadata["toc_headers"] = headers[:10]
+            # ChromaDB 不支持列表类型元数据，转换为字符串
+            doc.metadata["toc_headers"] = str(headers[:10]) if headers else ""
             # 增强：添加文档标题
             doc.metadata["document_title"] = self._extract_title_from_filename(file_path)
-            # 增强：添加所有章节信息
-            doc.metadata["all_sections"] = self._extract_all_sections(content)
+            # 增强：添加所有章节信息（转换为字符串）
+            doc.metadata["all_sections"] = str(self._extract_all_sections(content))
 
         return docs
 
@@ -414,7 +415,8 @@ class DocumentLoaderManager:
                     chunk.page_content, 100
                 )
                 if section_path:
-                    chunk.metadata["section_path"] = section_path
+                    # ChromaDB 不支持列表类型，转为字符串
+                    chunk.metadata["section_path"] = str(section_path)
                     # 简化：提取最高级别章节标题作为父标题
                     chunk.metadata["parent_section"] = section_path[-1]["title"] if section_path else None
 
