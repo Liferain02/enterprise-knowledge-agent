@@ -1,9 +1,9 @@
 """
 LangGraph Multi-Agent 工作流图
-架构：maybe_summarize → Planner → Supervisor → Worker Agents → END
+架构：maybe_summarize → retrieve_mem0_memories → Planner → Supervisor → Worker Agents → END
 """
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, List
 from langgraph.graph import StateGraph, END
 from langgraph.graph import MessagesState
 from langchain_core.messages import HumanMessage, RemoveMessage
@@ -38,6 +38,10 @@ class AgentState(MessagesState):
 
     # 语义总结记忆：存储旧对话的压缩摘要
     summary: str
+
+    # ==================== Mem0 记忆字段 ====================
+    mem0_memories: str  # 检索到的 Mem0 记忆（格式化后）
+    user_id: str        # 用户ID（用于 Mem0 检索）
 
     # ==================== Planner 状态 ====================
     is_complex: bool       # 是否复杂任务
@@ -129,6 +133,96 @@ async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
     }
 
 
+# ==================== Mem0 记忆检索节点 ====================
+
+async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Mem0 记忆检索节点
+
+    从 Mem0 语义记忆存储中检索与当前对话相关的记忆，
+    包括用户偏好、历史交互上下文等信息。
+    检索结果格式化后注入到 Agent 上下文中。
+    """
+    from config.settings import get_settings
+
+    settings = get_settings()
+
+    # 检查是否启用 Mem0
+    if not getattr(settings, "mem0_enabled", False):
+        print("[Mem0] 未启用，跳过检索")
+        return {}
+
+    try:
+        from .memory import get_mem0_manager
+
+        # 获取当前消息
+        messages = state.get("messages", [])
+        if not messages:
+            print("[Mem0] 无消息，跳过检索")
+            return {}
+
+        print(f"[Mem0] 开始检索，消息数量: {len(messages)}")
+
+        # 提取当前用户问题
+        current_query = ""
+        for msg in reversed(messages):
+            msg_type = getattr(msg, "type", None) or type(msg).__name__
+            if msg_type in ("human", "HumanMessage"):
+                current_query = getattr(msg, "content", "")
+                break
+
+        if not current_query:
+            return {}
+
+        # 获取用户ID和会话ID
+        session_id = state.get("session_id", "default")
+        user_id = state.get("user_id", "default_user")
+
+        # 检索 Mem0 记忆 - 同时检索当前会话和跨会话记忆
+        mem0_manager = get_mem0_manager()
+        
+        # 1. 优先检索当前会话记忆
+        current_session_memories = await mem0_manager.search(
+            query=current_query,
+            user_id=user_id,
+            session_id=session_id,
+            limit=2
+        )
+        
+        # 2. 检索跨会话记忆（不限制会话）
+        cross_session_memories = await mem0_manager.search(
+            query=current_query,
+            user_id=user_id,
+            session_id=None,  # 跨会话检索
+            limit=3
+        )
+        
+        # 合并记忆，去重
+        all_memories = {m["id"]: m for m in current_session_memories}
+        for m in cross_session_memories:
+            if m["id"] not in all_memories:
+                all_memories[m["id"]] = m
+        memories = list(all_memories.values())[:5]
+
+        if not memories:
+            return {}
+
+        # 格式化记忆
+        formatted_memories = mem0_manager.format_memories_for_context(
+            memories,
+            max_chars=getattr(settings, "mem0_max_context_chars", 500)
+        )
+
+        print(f"[Mem0] 检索到 {len(memories)} 条相关记忆")
+
+        return {"mem0_memories": formatted_memories}
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Mem0 记忆检索失败: {e}")
+        return {}
+
+
 # ==================== 图创建函数 ====================
 
 def create_multi_agent_graph() -> StateGraph:
@@ -146,6 +240,12 @@ def create_multi_agent_graph() -> StateGraph:
     # 语义摘要节点（入口）
     workflow.add_node("maybe_summarize", maybe_summarize_node)
 
+    # Mem0 记忆检索节点
+    workflow.add_node("retrieve_mem0_memories", retrieve_mem0_memories_node)
+
+    # Mem0 记忆保存节点
+    workflow.add_node("save_to_mem0", save_to_mem0_node)
+
     # Worker Agent 节点
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("knowledge_agent", knowledge_agent_node)
@@ -158,9 +258,10 @@ def create_multi_agent_graph() -> StateGraph:
     # Execute Plan 节点（复杂任务逐步执行）
     workflow.add_node("execute_plan", execute_plan_node)
 
-    # 入口：maybe_summarize → planner
+    # 入口：maybe_summarize → retrieve_mem0_memories → planner
     workflow.set_entry_point("maybe_summarize")
-    workflow.add_edge("maybe_summarize", "planner")
+    workflow.add_edge("maybe_summarize", "retrieve_mem0_memories")
+    workflow.add_edge("retrieve_mem0_memories", "planner")
 
     # Planner → Supervisor（简单）或 Execute Plan（复杂）
     workflow.add_conditional_edges(
@@ -193,12 +294,88 @@ def create_multi_agent_graph() -> StateGraph:
         }
     )
 
-    # Worker Agent → END
-    workflow.add_edge("knowledge_agent", END)
-    workflow.add_edge("operation_agent", END)
-    workflow.add_edge("general_agent", END)
+    # Worker Agent → save_mem0 → END
+    workflow.add_edge("knowledge_agent", "save_to_mem0")
+    workflow.add_edge("operation_agent", "save_to_mem0")
+    workflow.add_edge("general_agent", "save_to_mem0")
+    workflow.add_edge("save_to_mem0", END)
 
     return workflow
+
+
+# ==================== Mem0 记忆保存节点 ====================
+
+async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
+    """
+    保存对话到 Mem0 记忆节点
+
+    在 Agent 执行完成后，将本次对话内容保存到 Mem0，
+    供后续会话检索使用。
+    """
+    from config.settings import get_settings
+
+    settings = get_settings()
+
+    # 检查是否启用 Mem0
+    if not getattr(settings, "mem0_enabled", False):
+        print("[Mem0] 未启用，跳过保存")
+        return {}
+
+    try:
+        from .memory import get_mem0_manager
+
+        messages = state.get("messages", [])
+        if not messages or len(messages) < 2:
+            print("[Mem0] 消息不足，跳过保存")
+            return {}
+
+        print(f"[Mem0] 开始保存，消息数量: {len(messages)}")
+
+        # 获取用户ID和会话ID
+        session_id = state.get("session_id", "default")
+        user_id = state.get("user_id", "default_user")
+
+        # 转换消息格式
+        msg_list = []
+        for msg in messages[-4:]:  # 只保存最近4条消息
+            msg_type = getattr(msg, "type", None) or type(msg).__name__
+            role = "user" if msg_type in ("human", "HumanMessage") else "assistant"
+            content = getattr(msg, "content", "")
+            if content:
+                msg_list.append({"role": role, "content": content})
+
+        if not msg_list:
+            return {}
+
+        # 保存到 Mem0 - 同时保存当前会话和跨会话记忆
+        mem0_manager = get_mem0_manager()
+        
+        # 1. 保存当前会话记忆
+        result = await mem0_manager.add_conversation(
+            messages=msg_list,
+            user_id=user_id,
+            session_id=session_id
+        )
+        
+        # 2. 保存跨会话记忆（不带 session_id 限制，用于跨会话检索）
+        cross_session_msg_list = [
+            {"role": m["role"], "content": m["content"]} 
+            for m in msg_list
+        ]
+        await mem0_manager.add_conversation(
+            messages=cross_session_msg_list,
+            user_id=user_id,
+            session_id=None  # 跨会话记忆
+        )
+
+        print(f"[Mem0] 保存对话到记忆: user={user_id}, session={session_id}")
+
+        return {}
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Mem0 保存记忆失败: {e}")
+        return {}
 
 
 # ==================== 图编译与缓存 ====================
@@ -266,6 +443,7 @@ def _extract_result(result: Dict[str, Any]) -> Dict[str, Any]:
 def run_agent(
     input_text: str,
     session_id: str = "default",
+    user_id: str = "default_user",
     config: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
@@ -273,6 +451,12 @@ def run_agent(
 
     适用于测试和脚本。在新建的 event loop 中运行，
     不存在跨循环冲突。
+
+    Args:
+        input_text: 用户输入文本
+        session_id: 会话ID
+        user_id: 用户ID（用于跨会话记忆）
+        config: 额外配置
     """
     async def _run():
         graph = get_agent_graph()
@@ -280,6 +464,7 @@ def run_agent(
         initial_state = {
             "messages": [HumanMessage(content=input_text)],
             "session_id": session_id,
+            "user_id": user_id,
         }
         return await graph.ainvoke(initial_state, run_config)
 
@@ -301,18 +486,26 @@ def run_agent(
 async def arun_agent(
     input_text: str,
     session_id: str = "default",
+    user_id: str = "default_user",
     config: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
     运行 Agent（异步，使用 AsyncSqliteSaver）
 
     适用于 FastAPI 生产环境，支持跨请求多轮对话持久化。
+
+    Args:
+        input_text: 用户输入文本
+        session_id: 会话ID
+        user_id: 用户ID（用于跨会话记忆）
+        config: 额外配置
     """
     graph = await get_agent_graph_async()
     run_config = _build_run_config(session_id, config)
     initial_state = {
         "messages": [HumanMessage(content=input_text)],
         "session_id": session_id,
+        "user_id": user_id,
     }
 
     try:

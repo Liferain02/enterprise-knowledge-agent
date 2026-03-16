@@ -12,17 +12,23 @@ from ._utils import get_last_user_message, build_summary_context
 async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     General Agent 节点 - 负责通用回答
-    
+
     处理问候、寒暄、一般性闲聊
-    
+
     注意：不维护自己的历史，由主图统一管理
     """
     llm = get_llm()
-    
+
     # 获取完整的消息历史
     messages = state.get("messages", [])
     last_user_message = get_last_user_message(messages)
     summary = state.get("summary", "") or ""
+
+    # 获取 Mem0 记忆
+    mem0_memories = state.get("mem0_memories", "") or ""
+    
+    # 调试输出
+    print(f"[General Agent] mem0_memories 内容: {repr(mem0_memories[:200] if mem0_memories else '')}")
 
     # 摘要上下文（旧对话压缩后的摘要）
     summary_context = build_summary_context(summary)
@@ -40,7 +46,7 @@ async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
         if history_msgs:
             history_context = f"\n\n## 近期对话记录\n" + "\n".join(history_msgs[-6:])
-    
+
     if not last_user_message:
         # 没有用户消息，返回默认问候
         return {
@@ -48,9 +54,11 @@ async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "used_agent": "general_agent",
             "messages": [AIMessage(content="你好！有什么可以帮助你的吗？")]
         }
-    
-    # 构建提示词（摘要在前，近期历史在后）
-    prompt = f"""{GENERAL_AGENT_SYSTEM_PROMPT}{summary_context}{history_context}
+
+    # 构建提示词（Mem0记忆 -> 摘要 -> 近期历史 -> 当前消息）
+    prompt = f"""{GENERAL_AGENT_SYSTEM_PROMPT}
+{mem0_memories}
+{summary_context}{history_context}
 
 ## 当前用户消息
 用户说：{last_user_message}

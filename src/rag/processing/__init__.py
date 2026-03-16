@@ -1,11 +1,18 @@
 """
-RAG 文档处理模块
+多模态文档处理模块
 """
-from .document_loader import get_document_loader_manager, load_document
-from .chunker import SemanticChunker
+from .multimodal import (
+    MultimodalDocumentProcessor,
+    TableExtractor,
+    ImageExtractor,
+    OCRProcessor,
+    get_multimodal_processor
+)
 
 __all__ = [
-    "get_document_loader_manager",
-    "load_document",
-    "SemanticChunker",
+    "MultimodalDocumentProcessor",
+    "TableExtractor",
+    "ImageExtractor",
+    "OCRProcessor",
+    "get_multimodal_processor"
 ]

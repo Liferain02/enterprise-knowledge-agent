@@ -215,6 +215,16 @@ class Settings(BaseSettings):
         description="是否使用 SQLite 持久化 Agent 状态（需要重启生效）"
     )
 
+    # Mem0 记忆配置
+    mem0_enabled: bool = Field(
+        default=False,
+        description="是否启用 Mem0 智能记忆功能"
+    )
+    mem0_max_context_chars: int = Field(
+        default=500,
+        description="Mem0 记忆注入上下文的最大字符数"
+    )
+
     # 项目根目录
     @property
     def project_root(self) -> Path:

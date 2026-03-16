@@ -55,7 +55,7 @@ class ChatService:
             "used_agent": used_agent
         }
 
-    async def achat(self, message: str, session_id: str) -> Dict[str, Any]:
+    async def achat(self, message: str, session_id: str, username: str = "anonymous") -> Dict[str, Any]:
         """
         处理聊天请求（异步版本）
 
@@ -65,6 +65,7 @@ class ChatService:
         Args:
             message: 用户消息
             session_id: 会话ID
+            username: 用户名（用于跨会话记忆）
 
         Returns:
             包含 answer, sources, used_agent 的字典
@@ -76,7 +77,8 @@ class ChatService:
 
         result = await arun_agent(
             input_text=message,
-            session_id=session_id
+            session_id=session_id,
+            user_id=username  # 传递用户名作为 user_id，用于跨会话记忆
         )
 
         answer = result.get("final_answer", "抱歉，无法生成答案。")

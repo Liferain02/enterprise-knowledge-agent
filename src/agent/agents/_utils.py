@@ -34,3 +34,40 @@ def inject_summary_to_messages(messages: List, summary: str) -> List:
         content=f"【历史对话摘要】以下是本次对话早期内容的摘要，请结合它理解用户的上下文：\n{summary}"
     )
     return [summary_msg] + list(messages)
+
+
+def inject_mem0_to_messages(messages: List, mem0_memories: str) -> List:
+    """
+    若存在 Mem0 记忆，在消息列表头部插入一条 SystemMessage 作为上下文。
+    用于注入用户偏好、历史交互等信息。
+    """
+    if not mem0_memories:
+        return messages
+    mem0_msg = SystemMessage(content=mem0_memories)
+    return [mem0_msg] + list(messages)
+
+
+def inject_context_to_messages(
+    messages: List,
+    summary: str = "",
+    mem0_memories: str = ""
+) -> List:
+    """
+    综合注入摘要和 Mem0 记忆到消息列表。
+    优先注入 Mem0 记忆（用户画像），然后是摘要（对话历史）。
+    """
+    injected = list(messages)
+
+    # 先注入 Mem0 记忆（用户偏好等）
+    if mem0_memories:
+        mem0_msg = SystemMessage(content=mem0_memories)
+        injected = [mem0_msg] + injected
+
+    # 再注入对话摘要
+    if summary:
+        summary_msg = SystemMessage(
+            content=f"【历史对话摘要】以下是本次对话早期内容的摘要，请结合它理解用户的上下文：\n{summary}"
+        )
+        injected = [summary_msg] + injected
+
+    return injected

@@ -1,6 +1,7 @@
 """
 Planner 节点
 负责分析任务复杂度并拆解步骤
+支持并行执行独立步骤以提高效率
 """
 import re
 import json
@@ -149,10 +150,14 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
     # ── LLM 路径：精确判断（仅 complex / uncertain 到达此处）─────────
     llm = get_llm()
     
+    # 获取 Mem0 记忆上下文
+    mem0_memories = state.get("mem0_memories", "")
+    memory_context = f"\n\n## 相关记忆上下文\n以下是你之前与用户交流时记录的相关信息：\n{mem0_memories}\n\n请结合以上记忆上下文来理解用户问题。" if mem0_memories else ""
+    
     # 构建分析提示词
     prompt = f"""请分析以下用户问题，判断是否需要拆解成多个步骤来处理。
 
-用户问题：{last_user_message}
+用户问题：{last_user_message}{memory_context}
 
 ## 复杂度判断标准
 
@@ -267,78 +272,144 @@ def route_from_planner(state: Dict[str, Any]) -> str:
 
 # ==================== 计划执行节点 ====================
 
+# 是否启用并行执行（可以通过配置控制）
+PARALLEL_EXECUTION_ENABLED = True
+
+
 async def execute_plan_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     执行计划步骤的节点
+
+    支持并行执行独立步骤以提高效率：
+    - 分析步骤之间的依赖关系
+    - 将没有依赖关系的步骤并行执行
+    - 有依赖关系的步骤按顺序执行
+    """
+    global PARALLEL_EXECUTION_ENABLED
+
+    plan_steps = state.get("plan_steps", [])
+    current_step = state.get("current_step", 0)
+
+    if not plan_steps:
+        return {"current_step": -1}
+
+    # 检查是否启用并行执行
+    if PARALLEL_EXECUTION_ENABLED and current_step == 0:
+        # 使用并行执行器
+        return await _execute_plan_parallel(state)
+
+    # 原有顺序执行逻辑（保留作为后备）
+    return await _execute_plan_sequential(state)
     
-    根据 current_step 执行对应的步骤
-    步骤执行完成后，检查是否还有更多步骤：
-    - 有 -> 更新 current_step，继续执行
-    - 没有 -> 跳转到 Reflect 节点
-    
-    当前实现：简化版本，只收集结果，不实际调用 Agent
-    后续可以扩展为真正调用各个 Agent
+async def _execute_plan_parallel(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    并行执行计划步骤
+    分析依赖关系，将独立步骤并行执行
+    """
+    from .parallel_executor import get_parallel_executor, analyze_step_dependencies
+
+    plan_steps = state.get("plan_steps", [])
+    messages = state.get("messages", [])
+    session_id = state.get("session_id", "default")
+    summary = state.get("summary", "") or ""
+
+    if not plan_steps:
+        return {"current_step": -1}
+
+    # 分析依赖关系并显示执行计划
+    batches = analyze_step_dependencies(plan_steps)
+    print(f"[Execute Plan] 并行执行：分 {len(batches)} 批处理 {len(plan_steps)} 个步骤")
+
+    # 使用并行执行器
+    executor = get_parallel_executor()
+    plan_results = await executor.execute_parallel(
+        plan_steps,
+        messages,
+        session_id,
+        summary
+    )
+
+    # 转换结果格式
+    completed = [r.get("step_id") for r in plan_results if r.get("success", False)]
+
+    # 汇总结果
+    final_answer = await _summarize_results(
+        messages,
+        plan_results
+    )
+
+    return {
+        "current_step": -1,
+        "completed_steps": completed,
+        "plan_results": plan_results,
+        "final_answer": final_answer,
+        "used_agent": "planner_parallel"
+    }
+
+
+async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    顺序执行计划步骤（原有逻辑）
     """
     from .knowledge import knowledge_agent_node
     from .operation import operation_agent_node
     from .general import general_agent_node
-    
+
     plan_steps = state.get("plan_steps", [])
     current_step = state.get("current_step", 0)
     messages = state.get("messages", [])
-    
+
     if not plan_steps or current_step >= len(plan_steps):
         return {"current_step": -1}
-    
+
     # 获取当前步骤
     step = plan_steps[current_step]
     print(f"[Execute Plan] 执行步骤 {step['step_id']}: {step['description']}")
     print(f"[Execute Plan] 分配给 Agent: {step['agent']}")
-    
+
     # 根据步骤指定的 agent 执行
     agent_name = step.get("agent", "general_agent")
     step_result = ""
     sources = ""
-    
+
     try:
         if agent_name == "knowledge_agent":
-            # 构造子问题（只包含当前步骤的问题）
             sub_question = step['description']
             sub_messages = messages + [HumanMessage(content=sub_question)]
-            
+
             result = await knowledge_agent_node({
                 "messages": sub_messages,
                 "session_id": state.get("session_id", "default")
             })
             step_result = result.get("final_answer", "")
             sources = result.get("sources", "")
-            
+
         elif agent_name == "operation_agent":
             sub_question = step['description']
             sub_messages = messages + [HumanMessage(content=sub_question)]
-            
+
             result = await operation_agent_node({
                 "messages": sub_messages,
                 "session_id": state.get("session_id", "default")
             })
             step_result = result.get("final_answer", "")
-            
+
         elif agent_name == "general_agent":
             sub_question = step['description']
             sub_messages = messages + [HumanMessage(content=sub_question)]
-            
+
             result = await general_agent_node({
                 "messages": sub_messages,
                 "session_id": state.get("session_id", "default")
             })
             step_result = result.get("final_answer", "")
-        
+
         print(f"[Execute Plan] 步骤 {step['step_id']} 结果: {step_result[:100]}...")
-        
+
     except Exception as e:
         print(f"[Execute Plan] 步骤执行失败: {e}")
         step_result = f"步骤执行出错: {str(e)}"
-    
+
     # 收集步骤结果
     plan_results = state.get("plan_results", [])
     plan_results.append({
@@ -347,32 +418,30 @@ async def execute_plan_node(state: Dict[str, Any]) -> Dict[str, Any]:
         "agent": agent_name,
         "result": step_result
     })
-    
+
     # 更新已完成步骤
     completed = state.get("completed_steps", [])
     completed.append(step['step_id'])
-    
+
     # 检查是否还有更多步骤
     next_step = current_step + 1
     if next_step >= len(plan_steps):
         # 所有步骤完成，汇总结果
         print(f"[Execute Plan] 所有步骤完成，开始汇总")
-        
-        # 生成最终答案（汇总所有步骤结果）
+
         final_answer = await _summarize_results(
             state.get("messages", []),
             plan_results
         )
-        
+
         return {
             "current_step": -1,
             "completed_steps": completed,
             "plan_results": plan_results,
             "final_answer": final_answer,
-            "used_agent": "planner"  # 标记为 planner 执行的
+            "used_agent": "planner"
         }
     else:
-        # 还有步骤，继续执行
         print(f"[Execute Plan] 步骤 {step['step_id']} 完成，继续执行下一步")
         return {
             "current_step": next_step,

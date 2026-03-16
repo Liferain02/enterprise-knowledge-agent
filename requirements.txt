@@ -9,6 +9,9 @@ langchain-openai==1.1.10
 # 新增：阿里通义千问官方 SDK（必须）
 dashscope>=1.20.0          # 最新版建议 >=1.20，兼容 Qwen-Max 等
 
+# 新增：Mem0 AI Memory
+mem0ai>=0.1.0              # Mem0 智能记忆管理层
+
 # 新增：Reranker 和混合检索
 sentence-transformers>=2.2.0   # BGE Reranker 本地模型
 rank-bm25>=0.2.2               # BM25 检索
@@ -58,3 +61,12 @@ python-jose[cryptography]==3.4.0
 # ============================================================
 ragas>=0.1.0          # RAG 评估框架
 datasets>=2.14.0      # 数据集管理
+
+# ============================================================
+# 多模态文档处理依赖（可选）
+# 用于表格提取、图片 OCR 等
+# ============================================================
+pymupdf>=1.23.0       # PyMuPDF 用于 PDF 表格和图片提取
+openpyxl>=3.1.0       # Excel 表格提取
+Pillow>=10.0.0        # 图片处理（OCR 需要）
+pytesseract>=0.3.10   # OCR 文字识别（需要系统安装 tesseract）

@@ -27,7 +27,7 @@ async def health_check():
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, _: dict = Depends(get_current_user)):
+async def chat(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     """
     聊天接口
 
@@ -36,9 +36,11 @@ async def chat(request: ChatRequest, _: dict = Depends(get_current_user)):
     3. 返回结果
     """
     try:
+        username = current_user.get("username", "anonymous")
         result = await chat_service.achat(
             message=request.message,
-            session_id=request.session_id
+            session_id=request.session_id,
+            username=username
         )
 
         return ChatResponse(
