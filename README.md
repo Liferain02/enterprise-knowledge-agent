@@ -19,6 +19,13 @@
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
+│           retrieve_mem0_memories（语义记忆检索）                  │
+│  检索用户相关记忆：当前会话 + 跨会话记忆                          │
+│  格式化后注入 Agent 上下文                                       │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
 │                  Planner（任务规划 + 轻量化快速路径）              │
 │  规则预判（< 1ms，无 LLM）：简单 → 直接跳过，复杂/不确定 → LLM   │
 │  LLM 判断：简单任务 → Supervisor；复杂任务 → Execute Plan        │
@@ -44,10 +51,15 @@
 └─────────┘ └─────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│                         SQLite 持久化层                          │
-│  sessions.db              → 会话 / 消息历史                      │
-│  langgraph_checkpoints.db → Agent 推理状态 + 对话摘要            │
-└─────────────────────────────────────────────────────────────────┘
+│                         双层记忆持久化                               │
+├───────────────────────────────────────────────────────────────────┤
+│  SQLite Checkpointer                                              │
+│  ├── sessions.db              → 会话 / 消息历史                   │
+│  └── langgraph_checkpoints.db → Agent 推理状态 + 对话摘要        │
+├───────────────────────────────────────────────────────────────────┤
+│  Mem0 语义记忆（Chroma）                                          │
+│  └── mem0_chroma/              → 用户级语义记忆，跨会话共享       │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ## 技术栈
@@ -60,6 +72,7 @@
 | langgraph-checkpoint-sqlite | ≥3.0 | Agent 状态 + 摘要持久化 |
 | aiosqlite | ≥0.22 | 异步 SQLite 驱动 |
 | ChromaDB | ≥1.5 | 向量数据库 |
+| Mem0 | ≥1.0 | 语义记忆层 |
 | FastAPI | ≥0.115 | REST API + SSE |
 | Vue 3 | ≥3.4 | 前端框架 |
 | MCP | ≥1.6 | 工具协议 |
@@ -71,13 +84,14 @@
 3. **轻量化 Planner** — 规则预判（< 1ms）跳过简单任务的 LLM 调用，降低约 60% 的 Planner 开销
 4. **语义总结记忆** — 对话过长时自动压缩旧消息为滚动摘要，防止 Context Window 溢出
 5. **会话状态持久化** — LangGraph 推理状态（含摘要）写入 SQLite，服务重启后恢复
-6. **知识库问答** — 基于 RAG 的企业知识库检索（PDF / Word / Markdown / TXT）
-7. **混合检索** — BM25 + 向量混合检索，提升召回率
-8. **Reranker 重排序** — 基于 LLM 的检索结果重排序
-9. **Agent Skills** — 声明式技能定义（Skill.md），支持热加载
-10. **MCP 工具集成** — 文件系统、外部搜索等工具通过 MCP 协议接入
-11. **流式响应** — Server-Sent Events 实时输出
-12. **JWT 鉴权** — 单用户登录保护
+6. **长期记忆（Mem0）** — 用户级语义记忆存储，跨会话记忆共享，语义检索增强
+7. **知识库问答** — 基于 RAG 的企业知识库检索（PDF / Word / Markdown / TXT）
+8. **混合检索** — BM25 + 向量混合检索，提升召回率
+9. **Reranker 重排序** — 基于 LLM 的检索结果重排序
+10. **Agent Skills** — 声明式技能定义（Skill.md），支持热加载
+11. **MCP 工具集成** — 文件系统、外部搜索等工具通过 MCP 协议接入
+12. **流式响应** — Server-Sent Events 实时输出
+13. **JWT 鉴权** — 单用户登录保护
 
 ## 快速开始（Linux）
 
@@ -150,6 +164,10 @@ USE_SQLITE_CHECKPOINTER=true
 # 语义总结记忆（可选调整）
 SUMMARY_THRESHOLD=20      # 消息数超过此值时触发摘要
 SUMMARY_KEEP_RECENT=6     # 触发摘要后保留的最近消息条数
+
+# Mem0 长期记忆（可选开启）
+MEM0_ENABLED=true
+MEM0_MAX_CONTEXT_CHARS=500
 ```
 
 ### 7. 安装前端依赖
@@ -216,6 +234,9 @@ enterprise-knowledge-agent/
 │   │   ├── graph.py               # LangGraph 图（含 maybe_summarize 节点）
 │   │   ├── checkpointer.py        # Checkpointer 工厂（MemorySaver / AsyncSqliteSaver）
 │   │   ├── prompts.py             # 系统提示词
+│   │   ├── memory/                # 记忆模块
+│   │   │   ├── __init__.py
+│   │   │   └── mem0_manager.py    # Mem0 语义记忆管理器
 │   │   ├── agents/
 │   │   │   ├── planner.py         # Planner（规则快速路径 + LLM 任务拆解）
 │   │   │   ├── supervisor.py      # Supervisor 路由决策
@@ -275,6 +296,10 @@ maybe_summarize ──── 消息数 ≤ 阈值 ──→ 透传（无开销�
   │ 消息数 > 阈值
   │ LLM 压缩旧消息 → 更新摘要 → 删除旧消息
   ▼
+retrieve_mem0_memories
+  │ 检索当前会话记忆 + 跨会话记忆
+  │ 格式化后注入上下文
+  ▼
 Planner
   ├── 规则预判 → 简单（≈60% 请求跳过 LLM）────────────────┐
   └── LLM 判断 → 简单 ──────────────────────────────────┐  │
@@ -286,7 +311,12 @@ Planner
                                               Agent    Agent    Agent
                                                 └────────────────┘
                                                         │
-                                                       END
+                                                       ▼
+                                                  save_to_mem0
+                                                （保存对话到记忆）
+                                                       │
+                                                       ▼
+                                                      END
 ```
 
 ## 数据库说明
@@ -298,6 +328,7 @@ Planner
 | `chroma.sqlite3` | 知识库向量存储 |
 | `sessions.db` | 会话列表 + 聊天消息历史 |
 | `langgraph_checkpoints.db` | LangGraph 推理状态（含对话摘要）持久化 |
+| `mem0_chroma/` | Mem0 语义记忆向量存储 |
 
 ## 语义总结记忆说明
 
@@ -308,6 +339,43 @@ Planner
 3. 从 LangGraph state 中删除旧消息，只保留摘要 + 最近几条原始消息
 4. 摘要写入 `langgraph_checkpoints.db`，服务重启后不丢失
 5. 所有 Agent 在生成回答时自动感知摘要上下文
+
+
+## Mem0 长期记忆说明
+
+系统采用双层记忆机制：
+
+### 短期记忆（会话级）
+- LangGraph State 消息列表
+- SQLite Checkpointer 持久化
+- 滚动摘要压缩
+
+### 长期记忆（用户级）- Mem0
+- **自动记忆提取**：LLM 从对话中自动提取关键信息（用户偏好、身份信息、重要事项等）
+- **跨会话共享**：用户维度的记忆在不同会话间共享
+- **语义检索**：基于向量相似度的精准记忆召回
+- **上下文注入**：Agent 执行前自动检索相关记忆并注入上下文
+
+核心工作流程：
+
+```
+用户消息
+    │
+    ▼
+retrieve_mem0_memories_node
+    │ 1. 检索当前会话记忆（session_id 过滤）
+    │ 2. 检索跨会话记忆（用户维度）
+    │ 3. 格式化后注入上下文
+    ▼
+Agent 执行
+    │
+    ▼
+save_to_mem0_node
+    │ 1. 保存当前会话记忆
+    │ 2. 保存跨会话记忆（用于后续跨会话检索）
+    ▼
+END
+```
 
 ## Planner 快速路径说明
 
