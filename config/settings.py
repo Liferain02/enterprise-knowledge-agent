@@ -29,7 +29,7 @@ class Settings(BaseSettings):
         description="阿里千问 API 基础URL"
     )
     dashscope_model: str = Field(
-        default="qwen-plus",
+        default="qwen-turbo",
         description="使用的千问模型名称"
     )
 

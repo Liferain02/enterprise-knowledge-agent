@@ -83,7 +83,10 @@ class Mem0MemoryManager:
                 "embedder": {
                     "provider": "openai",
                     "config": {
-                        "model": "text-embedding-v2"  # DashScope qwen embedding 模型
+                        "model": "text-embedding-v3",
+                        "openai_base_url": self._get_base_url(),
+                        "api_key": self._get_api_key(),
+                        "embedding_dims": 1024
                     }
                 },
                 "vector_store": {
