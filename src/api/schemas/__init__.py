@@ -6,10 +6,18 @@ from typing import List, Any, Optional
 
 
 # ==================== Request Models ====================
+class ImageContent(BaseModel):
+    """单张图片内容"""
+    data: str = Field(description="图片数据，URL 或 base64 编码（data:image/xxx;base64,xxx 格式）")
+    type: str = Field(default="base64", description="图片类型: base64 / url")
+    filename: Optional[str] = Field(default=None, description="文件名（可选）")
+
+
 class ChatRequest(BaseModel):
-    """聊天请求"""
+    """聊天请求（支持多模态）"""
     message: str = Field(description="用户消息")
     session_id: str = Field(default="default", description="会话ID")
+    images: Optional[List[ImageContent]] = Field(default=None, description="附带的图片（支持多张）")
 
 
 class CreateSessionRequest(BaseModel):
@@ -47,6 +55,7 @@ class ChatResponse(BaseModel):
     sources: List[Any] = Field(default_factory=list, description="信息来源")
     session_id: str = Field(description="会话ID")
     used_agent: str = Field(description="使用的Agent类型")
+    image_understood: bool = Field(default=False, description="是否对图片进行了理解")
 
 
 class SearchResponse(BaseModel):
@@ -69,6 +78,7 @@ class HealthResponse(BaseModel):
 
 
 __all__ = [
+    "ImageContent",
     "ChatRequest",
     "CreateSessionRequest",
     "UpdateTitleRequest",

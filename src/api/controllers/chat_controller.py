@@ -29,25 +29,33 @@ async def health_check():
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     """
-    聊天接口
+    聊天接口（支持多模态）
 
-    1. 接收用户的 session_id 和 message
-    2. 调用 ChatService 处理业务逻辑
+    1. 接收用户的 session_id、message 和可选的 images
+    2. 调用 ChatService 处理业务逻辑（支持 Vision LLM 图片理解）
     3. 返回结果
     """
     try:
         username = current_user.get("username", "anonymous")
+
+        # 将 Pydantic 模型转为 dict 列表传给 service
+        images_data = None
+        if request.images:
+            images_data = [img.model_dump() if hasattr(img, "model_dump") else img for img in request.images]
+
         result = await chat_service.achat(
             message=request.message,
             session_id=request.session_id,
-            username=username
+            username=username,
+            images=images_data,
         )
 
         return ChatResponse(
             answer=result["answer"],
             sources=result["sources"],
             session_id=request.session_id,
-            used_agent=result["used_agent"]
+            used_agent=result["used_agent"],
+            image_understood=result.get("image_understood", False),
         )
     except Exception as e:
         logger.exception(f"聊天请求失败: {str(e)}")

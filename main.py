@@ -28,7 +28,7 @@ from src.models import reset_llm
 reset_llm()
 
 # 导入路由
-from src.api.controllers import chat_router, knowledge_router, auth_router
+from src.api.controllers import chat_router, knowledge_router, auth_router, vision_router
 
 # 导入核心组件
 from src.models.mcp_client import mcp_manager as global_mcp_manager
@@ -116,6 +116,7 @@ if os.path.exists(FRONTEND_DIST):
 app.include_router(chat_router)
 app.include_router(knowledge_router)
 app.include_router(auth_router)
+app.include_router(vision_router)
 
 
 @app.get("/health")

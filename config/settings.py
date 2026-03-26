@@ -53,6 +53,51 @@ class Settings(BaseSettings):
         description="LLM 提供商: qwen / openai"
     )
 
+    # Vision 模型配置（用于图片理解）
+    vision_model: str = Field(
+        default="qwen-vl-plus",
+        description="Vision 模型名称: qwen-vl-plus / qwen-vl-max / gpt-4o"
+    )
+    vision_enabled: bool = Field(
+        default=True,
+        description="是否启用图片理解功能"
+    )
+    vision_max_image_size: int = Field(
+        default=5,
+        description="单张图片最大大小（MB），超过则压缩"
+    )
+
+    # ============================================================
+    # 视觉入库配置（文档中图片的 Vision LLM 理解）
+    # ============================================================
+    vision_ingestion_enabled: bool = Field(
+        default=True,
+        description="入库时是否用 Vision LLM 理解文档中的图片"
+    )
+    vision_ingestion_model: str = Field(
+        default="qwen-vl-plus",
+        description="入库时使用的 Vision 模型"
+    )
+    vision_ingestion_max_images_per_doc: int = Field(
+        default=20,
+        description="单个文档最多处理图片数（防止超长文档调用过多）"
+    )
+    vision_ingestion_skip_small: int = Field(
+        default=64,
+        description="宽或高小于此像素的图片跳过（可能是图标/水印）"
+    )
+    vision_ingestion_prompt: str = Field(
+        default=(
+            "请详细描述这张图片的所有内容：\n"
+            "1. 图片主体是什么（图表、截图、照片、文档等）\n"
+            "2. 图片中包含的所有文字（请完整提取）\n"
+            "3. 图表的标题、坐标轴标签、数据趋势\n"
+            "4. 任何其他有价值的信息\n"
+            "请用中文回答，语言简洁专业。"
+        ),
+        description="Vision LLM 图片理解提示词"
+    )
+
     # Chroma 向量数据库配置
     chroma_persist_directory: str = Field(
         default="./chroma_db",

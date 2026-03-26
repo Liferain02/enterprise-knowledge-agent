@@ -108,8 +108,11 @@ class VectorStoreManager:
         self._vectorstore = None  # 重置实例，下次访问时重新创建
     
     def reset(self):
-        """重置向量存储"""
-        self.vectorstore.reset()
+        """重置向量存储：删除并重建集合"""
+        try:
+            self.vectorstore.delete_collection()
+        except Exception:
+            pass
         self._vectorstore = None  # 重置实例，下次访问时重新创建
     
     def get_collection_info(self) -> Dict[str, Any]:

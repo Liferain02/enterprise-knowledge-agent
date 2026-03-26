@@ -55,9 +55,15 @@ class ChatService:
             "used_agent": used_agent
         }
 
-    async def achat(self, message: str, session_id: str, username: str = "anonymous") -> Dict[str, Any]:
+    async def achat(
+        self,
+        message: str,
+        session_id: str,
+        username: str = "anonymous",
+        images: list = None,
+    ) -> Dict[str, Any]:
         """
-        处理聊天请求（异步版本）
+        处理聊天请求（异步版本，支持多模态图片输入）
 
         使用 ainvoke 在主事件循环中运行
         避免跨事件循环导致的 MCP 死锁
@@ -66,14 +72,60 @@ class ChatService:
             message: 用户消息
             session_id: 会话ID
             username: 用户名（用于跨会话记忆）
+            images: 图片列表（每项为 ImageContent 或 dict）
 
         Returns:
-            包含 answer, sources, used_agent 的字典
+            包含 answer, sources, used_agent, image_understood 的字典
         """
-        logger.info(f"收到聊天请求(异步) - session: {session_id}, message: {message[:50]}...")
+        logger.info(f"收到聊天请求(异步) - session: {session_id}, message: {message[:50]}..., images={len(images) if images else 0}")
 
         # 确保会话存在
         session_service.ensure_session_exists(session_id)
+
+        # ============================================================
+        # 图片理解：先调用 Vision LLM 理解图片，再将理解结果加入消息
+        # ============================================================
+        image_understood = False
+        image_context = ""
+        if images:
+            try:
+                from src.models.vision import understand_images
+                from src.api.schemas import ImageContent
+
+                # 转换为统一格式
+                parsed_images = []
+                for img in images:
+                    if isinstance(img, dict):
+                        parsed_images.append(ImageContent(**img))
+                    else:
+                        parsed_images.append(img)
+
+                # 构造图片理解提示
+                vision_prompt = (
+                    f"用户的问题是：「{message}」。"
+                    f"请仔细看图，然后回答这个问题。"
+                    f"如果图片中有图表、文字、数据，请完整提取。"
+                    f"如果图片内容与问题无关，也请描述图片内容。"
+                )
+
+                image_context = await understand_images(parsed_images, prompt=vision_prompt)
+                image_understood = True
+
+                logger.info(f"[Vision] 图片理解完成，长度: {len(image_context)} 字符")
+
+                # 将图片理解结果追加到消息中
+                if image_context and not image_context.startswith("[图片理解失败"):
+                    message = (
+                        f"【用户上传的图片内容如下，请结合图片回答用户问题】\n"
+                        f"{image_context}\n\n"
+                        f"【用户问题】\n{message}"
+                    )
+            except Exception as e:
+                logger.warning(f"[Vision] 图片理解出错: {e}")
+                import traceback
+                traceback.print_exc()
+                image_context = f"[图片理解出错: {str(e)}]"
+                image_understood = True  # 仍然标记为已理解（虽然失败了）
 
         result = await arun_agent(
             input_text=message,
@@ -91,7 +143,7 @@ class ChatService:
             title = session_service.generate_title(message)
             session_service.update_session_title(session_id, title)
 
-        # 保存消息
+        # 保存消息（使用原始消息，不含图片上下文）
         self._save_session_message(session_id, message, answer, used_agent)
 
         # 格式化来源
@@ -104,7 +156,8 @@ class ChatService:
         return {
             "answer": answer,
             "sources": sources_list,
-            "used_agent": used_agent
+            "used_agent": used_agent,
+            "image_understood": image_understood,
         }
 
     def _save_session_message(self, session_id: str, user_message: str, ai_message: str, used_agent: str = None):
