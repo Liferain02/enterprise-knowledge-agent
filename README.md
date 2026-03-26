@@ -7,34 +7,34 @@
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        FastAPI Server                           │
-│                    (http://localhost:8000)                      │
+│                    (http://localhost:8000)                     │
 └─────────────────────────────────────────────────────────────────┘
                               │ 每条消息
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                  maybe_summarize（语义总结记忆）                  │
 │  消息数 > 阈值时：LLM 压缩旧消息为摘要，删除旧消息，保留近 6 条   │
-│  消息数 ≤ 阈值时：透传（零开销）                                  │
+│  消息数 ≤ 阈值时：透传（零开销）                                 │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │           retrieve_mem0_memories（语义记忆检索）                  │
 │  检索用户相关记忆：当前会话 + 跨会话记忆                          │
-│  格式化后注入 Agent 上下文                                       │
+│  格式化后注入 Agent 上下文                                      │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  Planner（任务规划 + 轻量化快速路径）              │
-│  规则预判（< 1ms，无 LLM）：简单 → 直接跳过，复杂/不确定 → LLM   │
+│                  Planner（任务规划 + 轻量化快速路径）             │
+│  规则预判（< 1ms，无 LLM）：简单 → 直接跳过，复杂/不确定 → LLM  │
 │  LLM 判断：简单任务 → Supervisor；复杂任务 → Execute Plan        │
 └─────────────────────────────────────────────────────────────────┘
            │ 简单                              │ 复杂
            ▼                                   ▼
 ┌─────────────────────────┐       ┌────────────────────────────┐
-│      Supervisor          │       │       Execute Plan          │
-│   (路由到专业 Agent)      │       │  (逐步执行各子任务，汇总)   │
+│      Supervisor         │       │       Execute Plan         │
+│   (路由到专业 Agent)     │       │  (逐步执行各子任务，汇总)   │
 └─────────────────────────┘       └────────────────────────────┘
      │           │          │
      ▼           ▼          ▼
@@ -49,16 +49,22 @@
 │Chroma DB│ │ MCP Servers │
 │(向量存储)│ │(文件系统等)  │
 └─────────┘ └─────────────┘
+     │
+     ▼
+┌──────────────────────────┐     ┌──────────────────────────────┐
+│  Multimodal Pipeline     │     │      Vision LLM (qwen-vl)    │
+│  (文档图片理解入库)       │────▶│  图片 → bytes → 理解 → 入库 │
+└──────────────────────────┘     └──────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
-│                         双层记忆持久化                               │
+│                         双层记忆持久化                            │
 ├───────────────────────────────────────────────────────────────────┤
 │  SQLite Checkpointer                                              │
 │  ├── sessions.db              → 会话 / 消息历史                   │
-│  └── langgraph_checkpoints.db → Agent 推理状态 + 对话摘要        │
+│  └── langgraph_checkpoints.db → Agent 推理状态 + 对话摘要       │
 ├───────────────────────────────────────────────────────────────────┤
-│  Mem0 语义记忆（Chroma）                                          │
-│  └── mem0_chroma/              → 用户级语义记忆，跨会话共享       │
+│  Mem0 语义记忆（Chroma）                                         │
+│  └── mem0_chroma/              → 用户级语义记忆，跨会话共享      │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -76,6 +82,10 @@
 | FastAPI | ≥0.115 | REST API + SSE |
 | Vue 3 | ≥3.4 | 前端框架 |
 | MCP | ≥1.6 | 工具协议 |
+| PyMuPDF | ≥1.24 | PDF 文本/图片/表格提取 |
+| Pillow | ≥10.0 | 图片处理 + 尺寸检查 |
+| python-docx | ≥1.0 | Word 文档解析 |
+| openpyxl | ≥3.1 | Excel 表格提取 |
 
 ## 功能特性
 
@@ -86,12 +96,14 @@
 5. **会话状态持久化** — LangGraph 推理状态（含摘要）写入 SQLite，服务重启后恢复
 6. **长期记忆（Mem0）** — 用户级语义记忆存储，跨会话记忆共享，语义检索增强
 7. **知识库问答** — 基于 RAG 的企业知识库检索（PDF / Word / Markdown / TXT）
-8. **混合检索** — BM25 + 向量混合检索，提升召回率
-9. **Reranker 重排序** — 基于 LLM 的检索结果重排序
-10. **Agent Skills** — 声明式技能定义（Skill.md），支持热加载
-11. **MCP 工具集成** — 文件系统、外部搜索等工具通过 MCP 协议接入
-12. **流式响应** — Server-Sent Events 实时输出
-13. **JWT 鉴权** — 单用户登录保护
+8. **文档图片 Vision LLM 理解** — PDF/DOCX 中的图片自动通过 qwen-vl-plus 理解，内容入库向量库
+9. **混合检索** — BM25 + 向量混合检索，提升召回率
+10. **Reranker 重排序** — 基于 LLM 的检索结果重排序
+11. **对话图片理解** — 聊天时上传图片，Vision LLM 理解后传给 Agent
+12. **Agent Skills** — 声明式技能定义（Skill.md），支持热加载
+13. **MCP 工具集成** — 文件系统、外部搜索等工具通过 MCP 协议接入
+14. **流式响应** — Server-Sent Events 实时输出
+15. **JWT 鉴权** — 单用户登录保护
 
 ## 快速开始（Linux）
 
@@ -143,6 +155,10 @@ DASHSCOPE_API_KEY=你的千问APIKey
 DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 DASHSCOPE_MODEL=qwen-plus
 
+# Vision LLM（对话图片理解）
+VISION_MODEL=qwen-vl-plus
+VISION_ENABLED=true
+
 # OPENAI_API_KEY=...
 # OPENAI_BASE_URL=https://api.openai.com/v1
 # OPENAI_MODEL=gpt-4o-mini
@@ -168,6 +184,12 @@ SUMMARY_KEEP_RECENT=6     # 触发摘要后保留的最近消息条数
 # Mem0 长期记忆（可选开启）
 MEM0_ENABLED=true
 MEM0_MAX_CONTEXT_CHARS=500
+
+# Vision LLM 入库（文档图片理解，默认开启）
+VISION_INGESTION_ENABLED=true
+VISION_INGESTION_MODEL=qwen-vl-plus
+VISION_INGESTION_MAX_IMAGES_PER_DOC=20   # 单文档最多处理图片数
+VISION_INGESTION_SKIP_SMALL=64           # 小于此像素的图片跳过（图标/水印）
 ```
 
 ### 7. 安装前端依赖
@@ -218,6 +240,7 @@ enterprise-knowledge-agent/
 │   ├── models/                    # 模型层
 │   │   ├── llm.py                 # LLM 初始化
 │   │   ├── embeddings.py          # 向量嵌入模型
+│   │   ├── vision.py             # Vision LLM（qwen-vl / GPT-4o）图片理解
 │   │   └── mcp_client.py          # MCP 客户端
 │   │
 │   ├── rag/                       # RAG 模块
@@ -228,7 +251,8 @@ enterprise-knowledge-agent/
 │   │   │   └── reranker.py        # LLM 重排序
 │   │   └── processing/
 │   │       ├── document_loader.py # 文档加载（PDF/Word/MD/TXT）
-│   │       └── chunker.py         # 文档分块
+│   │       ├── chunker.py         # 文档分块
+│   │       └── multimodal.py      # 多模态处理（表格提取 / Vision LLM 图片理解）
 │   │
 │   ├── agent/                     # Agent 模块
 │   │   ├── graph.py               # LangGraph 图（含 maybe_summarize 节点）
@@ -258,6 +282,7 @@ enterprise-knowledge-agent/
 │       ├── controllers/
 │       │   ├── chat_controller.py
 │       │   ├── knowledge_controller.py
+│       │   ├── vision_controller.py  # 对话图片理解 API
 │       │   └── auth_controller.py
 │       ├── services/
 │       │   ├── chat_service.py
@@ -288,8 +313,37 @@ enterprise-knowledge-agent/
 
 ## 工作流程
 
+### 知识库入库流程（scripts/ingest.py）
+
 ```
-用户消息
+知识库目录 (data/knowledge/)
+  │
+  ▼
+[1/6] 加载文档 ──────── .md .txt .pdf .docx .xlsx
+  │                              （PNG 等不支持格式跳过）
+  ▼
+[2/6] Vision LLM 理解文档图片（可选，默认启用）
+  │  PDF/DOCX ── 提取图片 bytes
+  │    │
+  │    ├── xref 去重（同图跨页不重复调用）
+  │    ├── 跳过 < 64px 的小图（图标/水印）
+  │    ├── 单文档最多 20 张（防止超长调用）
+  │    └── qwen-vl-plus 理解 → 图片描述文字
+  │
+[3/6] 分割文档（recursive / markdown / semantic / hybrid）
+  │
+[4/6] 广播图片描述到同一文档的所有 chunk
+  │  （第一个 chunk 含完整描述，其他 chunk 追加引用）
+  ▼
+[5/6] 向量化 → ChromaDB
+  │
+[6/6] 验证结果
+```
+
+### Agent 问答流程
+
+```
+用户消息（文字 / 带图片）
   │
   ▼
 maybe_summarize ──── 消息数 ≤ 阈值 ──→ 透传（无开销）
@@ -300,23 +354,27 @@ retrieve_mem0_memories
   │ 检索当前会话记忆 + 跨会话记忆
   │ 格式化后注入上下文
   ▼
+[可选] Vision LLM 理解用户上传的图片
+  │ 图片 bytes → base64 → qwen-vl → 描述文字
+  │ → 拼入用户消息上下文
+  ▼
 Planner
-  ├── 规则预判 → 简单（≈60% 请求跳过 LLM）────────────────┐
-  └── LLM 判断 → 简单 ──────────────────────────────────┐  │
-               └── 复杂 → Execute Plan（多步执行）→ END  │  │
-                                                         ▼  ▼
-                                                      Supervisor
-                                                    ↙    ↓    ↘
-                                             Knowledge Operation General
-                                              Agent    Agent    Agent
-                                                └────────────────┘
-                                                        │
-                                                       ▼
-                                                  save_to_mem0
-                                                （保存对话到记忆）
-                                                       │
-                                                       ▼
-                                                      END
+  ├── 规则预判 → 简单（≈60% 请求跳过 LLM）──────────┐
+  └── LLM 判断 → 简单 ───────────────────────────────┐ │
+                └── 复杂 → Execute Plan（多步执行）→ END │ │
+                                                           ▼ ▼
+                                                        Supervisor
+                                                      ↙    ↓    ↘
+                                               Knowledge Operation General
+                                                Agent    Agent    Agent
+                                                   └────────────────┘
+                                                           │
+                                                          ▼
+                                                     save_to_mem0
+                                                   （保存对话到记忆）
+                                                           │
+                                                          ▼
+                                                         END
 ```
 
 ## 数据库说明
@@ -409,6 +467,42 @@ GET /api/v1/chat/stream?message=你好&session_id=xxx
 Authorization: Bearer <token>
 ```
 
+### 对话图片理解（聊天时附带图片）
+
+```bash
+POST /api/v1/vision/understand
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+
+image: <file>   # 支持 jpg / png / webp
+```
+
+### 知识库搜索
+
+```bash
+POST /api/v1/knowledge/search
+Authorization: Bearer <token>
+{
+    "query": "年假政策",
+    "top_k": 5,
+    "filter": {}           # 可选，元数据过滤条件
+    "enable_rerank": true  # 可选，是否启用重排序
+}
+```
+
+### 触发知识库嵌入
+
+```bash
+POST /api/v1/knowledge/ingest
+Authorization: Bearer <token>
+{
+    "collection_name": "enterprise_knowledge",  # 可选，默认值
+    "chunk_size": 1000,
+    "chunk_overlap": 200,
+    "chunking_strategy": "recursive"
+}
+```
+
 ### 健康检查
 
 ```bash
@@ -419,14 +513,33 @@ GET /health
 
 ## 知识库管理
 
+### 批量嵌入
+
 ```bash
-# 重新嵌入知识库（清空后重新导入）
-python scripts/ingest.py --reset
+# 完整嵌入（启用 Vision LLM 图片理解）
+python scripts/ingest.py --reset --vision
+
+# 纯文本嵌入（跳过图片理解，速度更快）
+python scripts/ingest.py --reset --no-vision
 
 # 增量添加文档
 # 1. 将文档放入 data/knowledge/ 目录（支持 .md .txt .pdf .docx）
 # 2. 重启服务或调用 /api/v1/knowledge/ingest 接口
 ```
+
+### Vision LLM 图片理解
+
+嵌入时自动识别 PDF/DOCX 中的图片，通过 `qwen-vl-plus` 生成文字描述并入库。相关配置见上方「环境变量」中的 `VISION_INGESTION_*` 系列变量。
+
+### 支持的文件格式
+
+| 格式 | 文本提取 | 图片理解 | 表格提取 |
+|------|--------|--------|--------|
+| .md   | ✅ | — | — |
+| .txt  | ✅ | — | — |
+| .pdf  | ✅ | ✅ (Vision LLM) | ✅ |
+| .docx | ✅ | ✅ (Vision LLM) | ✅ |
+| .xlsx | — | — | ✅ |
 
 ## 部署
 
@@ -455,3 +568,5 @@ cd frontend && nohup npm run dev > frontend.log 2>&1 &
 3. 首次启动自动嵌入知识库，向量数据保存在 `./chroma_db/`（已 gitignore）。
 4. 开启 `USE_SQLITE_CHECKPOINTER=true` 后，Agent 推理状态和对话摘要均持久化到 SQLite，服务重启后对话上下文完整恢复。
 5. 若需调试或测试，可设置 `USE_SQLITE_CHECKPOINTER=false` 切换为内存模式（重启后状态清空）。
+6. 知识库入库默认启用 Vision LLM 图片理解（`VISION_INGESTION_ENABLED=true`），如需加速可加 `--no-vision` 跳过图片处理。
+7. PDF 图片提取依赖 **PyMuPDF** (`pip install pymupdf`)，Word 图片提取依赖 **Pillow** (`pip install pillow`)，首次使用请确认已安装。
