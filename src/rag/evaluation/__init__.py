@@ -8,14 +8,38 @@ from .evaluator import (
     EvalSummary,
     get_evaluator,
     evaluate_rag,
-    evaluate_rag_batch
+    evaluate_rag_batch,
+)
+from .retrieval_grader import (
+    RetrievalGrader,
+    CorrectiveRAGPipeline,
+    GradeLevel,
+    DocumentGrade,
+    GradeResult,
+    get_retrieval_grader,
+    get_corrective_rag_pipeline,
+    grade_retrieval,
+    corrective_retrieve,
+    reset_crags,
 )
 
 __all__ = [
+    # RAG 事后评估（RAGEvaluator）
     "RAGEvaluator",
     "EvalResult",
     "EvalSummary",
     "get_evaluator",
     "evaluate_rag",
-    "evaluate_rag_batch"
+    "evaluate_rag_batch",
+    # Corrective RAG 检索评估
+    "RetrievalGrader",
+    "CorrectiveRAGPipeline",
+    "GradeLevel",
+    "DocumentGrade",
+    "GradeResult",
+    "get_retrieval_grader",
+    "get_corrective_rag_pipeline",
+    "grade_retrieval",
+    "corrective_retrieve",
+    "reset_crags",
 ]

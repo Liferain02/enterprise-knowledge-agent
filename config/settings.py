@@ -225,6 +225,46 @@ class Settings(BaseSettings):
         description="Mem0 记忆注入上下文的最大字符数"
     )
 
+    # ==================== Corrective RAG 配置 ====================
+    crag_enabled: bool = Field(
+        default=True,
+        description="是否启用 Corrective RAG（检索结果评估与自我纠错）"
+    )
+    crag_max_retries: int = Field(
+        default=2,
+        description="Corrective RAG 查询重写后的最大重试次数"
+    )
+    crag_grade_threshold: float = Field(
+        default=0.5,
+        description="CRAG 相关性阈值（0.0~1.0），>= 此值视为高相关"
+    )
+    crag_min_high_ratio: float = Field(
+        default=0.3,
+        description="CRAG 高相关文档占比阈值，低于此值则触发重检"
+    )
+    crag_candidate_multiplier: int = Field(
+        default=3,
+        description="CRAG 检索候选倍数：实际检索 k = top_k × 此值，用于评估筛选"
+    )
+
+    # ==================== 查询扩展配置 ====================
+    query_expand_enabled: bool = Field(
+        default=True,
+        description="是否启用查询扩展分解"
+    )
+    query_expand_strategy: str = Field(
+        default="hybrid",
+        description="查询扩展策略: rule_only(纯规则) / llm_only(纯LLM) / hybrid(规则+LLM) / hyde"
+    )
+    query_expand_max_sub_queries: int = Field(
+        default=5,
+        description="最大子查询数量"
+    )
+    query_expand_rerank_fusion_k: int = Field(
+        default=60,
+        description="RRF 排序参数 k"
+    )
+
     # 项目根目录
     @property
     def project_root(self) -> Path:
