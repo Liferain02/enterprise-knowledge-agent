@@ -15,7 +15,7 @@ class RerankerManager:
 
     def __init__(
         self,
-        reranker_model: str = "qwen3-rerank",
+        reranker_model: str = "gte-rerank-v2",
         provider: str = "qwen",  # "qwen" 或 "baai"
         top_n: int = 3,
         score_threshold: float = 0.3
@@ -133,7 +133,7 @@ class QwenReranker:
 
     def __init__(
         self,
-        model: str = "qwen3-rerank",
+        model: str = "gte-rerank-v2",
         api_key: str = None,
         top_n: int = 3,
         score_threshold: float = 0.3
@@ -307,7 +307,7 @@ def get_reranker_manager(
 
     if _reranker_manager is None:
         _reranker_manager = RerankerManager(
-            reranker_model=reranker_model or getattr(settings, 'reranker_model', 'qwen3-rerank'),
+            reranker_model=reranker_model or getattr(settings, 'reranker_model', 'gte-rerank-v2'),
             provider=provider or getattr(settings, 'reranker_provider', 'qwen'),
             top_n=top_n or getattr(settings, 'reranker_top_n', 3),
             score_threshold=score_threshold or getattr(settings, 'reranker_threshold', 0.3)

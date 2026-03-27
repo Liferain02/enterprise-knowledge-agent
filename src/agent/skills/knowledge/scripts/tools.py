@@ -1,33 +1,69 @@
 """
 Knowledge Skill Tools - 知识检索工具
 支持 Corrective RAG（检索结果评估与自我纠错）
+支持 Query Expansion（复杂查询主动分解）
 """
+import re
 from typing import Type
 from pydantic import BaseModel, Field
 from langchain_core.tools import BaseTool
 
 
+# ==================== 复杂查询识别 ====================
+
+# 需要主动触发 Query Expansion 的查询模式
+_QUERY_EXPANSION_PATTERNS = [
+    # 对比类
+    re.compile(r"对比|比较.{0,8}[和与跟]|和.{0,8}区别|差异|不同点|哪个.好", re.IGNORECASE),
+    re.compile(r"\bvs\b|VS|versus| versus ", re.IGNORECASE),
+    # 列举类
+    re.compile(r"有哪些|有些什么|都有哪些|都有什么", re.IGNORECASE),
+    # 多实体类
+    re.compile(r".{2,6}和.{2,6}.{0,8}职责|.{2,6}与.{2,6}.{0,8}区别", re.IGNORECASE),
+    re.compile(r".{2,6}和.{2,6}的|.{2,6}与.{2,6}的", re.IGNORECASE),
+    # 多问号类
+    re.compile(r"[？\?].{0,20}[和与跟][^和与跟]", re.IGNORECASE),
+]
+
+
+def needs_query_expansion(query: str) -> bool:
+    """
+    判断查询是否需要主动触发 Query Expansion。
+    在 CRAG 评估之前就识别复杂查询类型，避免等 CRAG 失败后再走 expansion。
+    """
+    for pattern in _QUERY_EXPANSION_PATTERNS:
+        if pattern.search(query):
+            return True
+    # 多个问号也触发
+    if query.count("？") >= 2 or query.count("?") >= 2:
+        return True
+    return False
+
+
+# ==================== Schema & Tools ====================
+
 class SearchInput(BaseModel):
     """搜索输入"""
     query: str = Field(description="搜索查询字符串")
     top_k: int = Field(default=5, description="返回结果数量")
+    use_query_expansion: bool = Field(
+        default=False,
+        description="是否强制使用 Query Expansion（复杂查询时由系统自动设置）"
+    )
 
 
-def knowledge_search(query: str, top_k: int = 5) -> str:
+def knowledge_search(query: str, top_k: int = 5, use_query_expansion: bool = False) -> str:
     """
     搜索企业知识库（同步封装，异步逻辑在内部处理）。
 
-    支持 Corrective RAG：
-    - 检索后评估文档与查询的相关性
-    - 低相关时自动重写查询并重新检索（最多重试 2 次）
-    - 最终返回真正相关的高质量结果
-
-    注意：此函数在同步和异步上下文中均可安全调用。
-    在已有事件循环时会复用现有循环，不会创建新的。
+    检索策略选择逻辑：
+    1. 复杂查询（对比/列举/多实体/多问号）→ 直接走 Query Expansion（跳过 CRAG rewrite）
+    2. 普通查询 → 走 CRAG 评估流程（HIGH/MEDIUM 直接用，LOW 才 rewrite）
 
     Args:
         query: 搜索查询字符串
         top_k: 返回结果数量
+        use_query_expansion: 是否强制使用 Query Expansion（由路由层设置）
 
     Returns:
         相关文档内容列表（包含分数、来源和评估信息）
@@ -39,10 +75,16 @@ def knowledge_search(query: str, top_k: int = 5) -> str:
     settings = get_settings()
     min_score = getattr(settings, 'reranker_threshold', 0.1) or 0.1
 
+    # 主动识别复杂查询，强制使用 Query Expansion
+    is_complex = needs_query_expansion(query)
+    force_expansion = is_complex or use_query_expansion
+
     try:
-        # 选择检索策略：Corrective RAG 或 传统 Rerank
-        if getattr(settings, 'crag_enabled', True):
-            # Corrective RAG：检索 → 评估 → 决策（使用/重写/放弃）
+        if force_expansion and getattr(settings, 'query_expand_enabled', True):
+            # 复杂查询：直接走 Query Expansion（避免 CRAG rewrite 的 24s 开销）
+            result = _run_query_expansion_search(query, top_k)
+        elif getattr(settings, 'crag_enabled', True):
+            # 普通查询：走 CRAG 评估流程
             result = _run_crag_search(query, top_k)
         else:
             # 传统 Rerank 流程
@@ -51,7 +93,7 @@ def knowledge_search(query: str, top_k: int = 5) -> str:
         return result
 
     except Exception as e:
-        # CRAG 降级：如果出现异常，回退到传统检索
+        # 降级：如果出现异常，回退到传统检索
         import traceback
         traceback.print_exc()
         return f"搜索知识库时出错: {str(e)}\n\n[降级模式] 尝试使用传统检索...\n" + \
@@ -69,18 +111,99 @@ def _run_crag_search(query: str, top_k: int) -> str:
     import asyncio
 
     try:
-        # 尝试直接获取当前事件循环
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        # 没有运行中的循环 → 可以安全使用 asyncio.run()
         return asyncio.run(_knowledge_search_cragn(query, top_k))
 
-    # 已有运行中的循环 → 创建 Task 在现有循环中执行
     import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor() as pool:
         future = pool.submit(
             asyncio.run,
             _knowledge_search_cragn(query, top_k)
+        )
+        return future.result()
+
+
+async def _run_query_expansion_async(query: str, top_k: int) -> str:
+    """
+    Query Expansion 检索流程：分解 → 并行检索 → RRF 合并 → 精排 → 返回
+
+    不经过 CRAG rewrite，避免 24s+ 的延迟。
+    """
+    from src.rag.retrieval.query_expander import decompose_and_retrieve
+    from src.rag.retrieval.retriever import get_retriever_manager
+
+    # 分解查询
+    results_with_meta, exp_result = await decompose_and_retrieve(
+        query=query,
+        top_k=top_k,
+        strategy=None,  # 使用默认配置
+    )
+
+    if not results_with_meta:
+        return (
+            "【检索结果】\n"
+            "Query Expansion 未找到相关内容。\n"
+            f"已分解为 {len(exp_result.all_queries)} 个子查询：{exp_result.all_queries}"
+        )
+
+    # 精排（如果有 reranker）
+    retriever_manager = get_retriever_manager()
+    docs = [doc for doc, _ in results_with_meta]
+
+    if retriever_manager.use_reranker and retriever_manager.reranker_manager:
+        reranked = retriever_manager.reranker_manager.rerank(query, docs)
+        results_with_score = [
+            (reranked[i], results_with_meta[i][1])
+            for i in range(len(reranked))
+        ]
+    else:
+        results_with_score = results_with_meta
+
+    # 过滤低分
+    threshold = getattr(
+        __import__('config.settings', fromlist=['get_settings']).get_settings(),
+        'reranker_threshold', 0.1
+    )
+    filtered = [(d, s) for d, s in results_with_score if s >= threshold]
+
+    # 格式化
+    formatted = []
+    for i, (doc, score) in enumerate(filtered[:top_k], 1):
+        source = doc.metadata.get("source", "未知来源") if doc.metadata else "未知来源"
+        formatted.append(
+            f"【结果 {i}】相关性: {round(score * 100, 1)}%\n"
+            f"来源: {source}\n"
+            f"内容: {doc.page_content}\n"
+        )
+
+    if not formatted:
+        return "【检索结果】\nQuery Expansion 未找到足够相关的内容。"
+
+    result_text = "【检索结果 (Query Expansion)】\n" + "\n---\n".join(formatted)
+    result_text += (
+        f"\n\n【Query Expansion 摘要】\n"
+        f"分解为 {len(exp_result.all_queries)} 个子查询：{exp_result.all_queries}\n"
+        f"融合策略: RRF (k=60)"
+    )
+    result_text += "\n\n【使用说明】\n以上结果按相关性分数排序。"
+    return result_text
+
+
+def _run_query_expansion_search(query: str, top_k: int) -> str:
+    """同步封装 Query Expansion 搜索"""
+    import asyncio
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_run_query_expansion_async(query, top_k))
+
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        future = pool.submit(
+            asyncio.run,
+            _run_query_expansion_async(query, top_k)
         )
         return future.result()
 
@@ -143,6 +266,8 @@ async def _knowledge_search_cragn(query: str, top_k: int) -> str:
         if grade_info:
             if grade_info.grade.value == "high":
                 grade_tag = " [高相关]"
+            elif grade_info.grade.value == "medium":
+                grade_tag = " [中等相关]"
             else:
                 grade_tag = " [低相关]"
 
@@ -158,8 +283,8 @@ async def _knowledge_search_cragn(query: str, top_k: int) -> str:
     crag_summary = (
         f"\n\n【CRAG 评估摘要】\n"
         f"决策: {grade_result.decision.value.upper()} | "
-        f"高相关: {grade_result.high_count}/{grade_result.total_docs} | "
-        f"平均相关分: {grade_result.avg_score:.2f}\n"
+        f"HIGH: {grade_result.high_count} | MEDIUM: {grade_result.medium_count} | LOW: {grade_result.low_count} | "
+        f"avg={grade_result.avg_score:.2f}\n"
         f"决策理由: {grade_result.decision_reason}"
     )
 

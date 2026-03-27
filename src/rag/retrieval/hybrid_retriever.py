@@ -52,6 +52,10 @@ class HybridRetrieverManager:
         self._documents: List[Document] = []
         self._vectorstore = None
 
+        # 预构建 BM25 索引（避免每次 search 重建）
+        self._tokenized_corpus: List[List[str]] = []
+        self._bm25_index: Optional[Any] = None
+
     @property
     def vectorstore(self):
         """获取向量存储实例"""
@@ -72,7 +76,7 @@ class HybridRetrieverManager:
 
     def set_documents(self, documents: List[Document]):
         """
-        设置 BM25 使用的文档集合
+        设置 BM25 使用的文档集合，并预构建索引
 
         Args:
             documents: 文档列表
@@ -83,6 +87,13 @@ class HybridRetrieverManager:
                 documents,
                 k=self.top_k * 2  # 检索更多候选
             )
+            # 预构建 BM25 索引（避免每次 search_with_score 重建）
+            texts = [doc.page_content for doc in documents]
+            self._tokenized_corpus = [
+                [w.lower() for w in jieba.cut(text) if w.strip()]
+                for text in texts
+            ]
+            self._bm25_index = BM25Okapi(self._tokenized_corpus)
 
     @property
     def bm25_retriever(self) -> Optional[BM25Retriever]:
@@ -205,14 +216,10 @@ class HybridRetrieverManager:
                 # 获取文档列表
                 bm25_docs = self.bm25_retriever.invoke(query)
                 if bm25_docs and self._documents:
-                    # 使用 jieba 分词 + rank_bm25 获取真实分数
+                    # 复用预构建的 BM25 索引和 tokenized 语料
                     texts = [doc.page_content for doc in self._documents]
-                    # 分词并过滤空白字符，转小写
-                    tokenized_corpus = [
-                        [w.lower() for w in jieba.cut(text) if w.strip()]
-                        for text in texts
-                    ]
-                    bm25 = BM25Okapi(tokenized_corpus)
+                    tokenized_corpus = self._tokenized_corpus
+                    bm25 = self._bm25_index
 
                     # 对查询分词并计算分数
                     query_tokens = [w.lower() for w in jieba.cut(query) if w.strip()]

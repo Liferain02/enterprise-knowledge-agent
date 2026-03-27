@@ -7,7 +7,7 @@ langchain-chroma==1.1.0        # LangChain ChromaDB 集成
 langchain-openai==1.1.10
 
 # 新增：阿里通义千问官方 SDK（必须）
-dashscope>=1.20.0          # 最新版建议 >=1.20，兼容 Qwen-Max 等
+dashscope>=1.20.0          # 最新版建议 >=1.20，兼容 qwen3.5-flash 等
 
 # 新增：Mem0 AI Memory
 mem0ai>=0.1.0              # Mem0 智能记忆管理层

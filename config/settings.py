@@ -29,7 +29,7 @@ class Settings(BaseSettings):
         description="阿里千问 API 基础URL"
     )
     dashscope_model: str = Field(
-        default="qwen-turbo",
+        default="qwen3.5-flash",
         description="使用的千问模型名称"
     )
 
@@ -186,8 +186,8 @@ class Settings(BaseSettings):
         description="是否启用 Reranker 重排序"
     )
     reranker_model: str = Field(
-        default="qwen3-rerank",
-        description="Reranker 模型名称"
+        default="gte-rerank-v2",
+        description="Reranker 模型名称 (gte-rerank-v2 / qwen3-rerank)"
     )
     reranker_provider: str = Field(
         default="qwen",
@@ -276,20 +276,28 @@ class Settings(BaseSettings):
         description="是否启用 Corrective RAG（检索结果评估与自我纠错）"
     )
     crag_max_retries: int = Field(
-        default=2,
-        description="Corrective RAG 查询重写后的最大重试次数"
+        default=1,
+        description="Corrective RAG 查询重写后的最大重试次数（降低以减少延迟）"
     )
     crag_grade_threshold: float = Field(
-        default=0.5,
-        description="CRAG 相关性阈值（0.0~1.0），>= 此值视为高相关"
+        default=0.25,
+        description="CRAG HIGH 相关性阈值（0.0~1.0），>= 此值视为高相关"
+    )
+    crag_medium_threshold: float = Field(
+        default=0.15,
+        description="CRAG MEDIUM 阈值（0.0~1.0），>= 此值视为中等相关（可用于生成）"
     )
     crag_min_high_ratio: float = Field(
-        default=0.3,
-        description="CRAG 高相关文档占比阈值，低于此值则触发重检"
+        default=0.2,
+        description="CRAG HIGH 决策的最低 HIGH 文档占比（防止单篇高分误判）"
     )
     crag_candidate_multiplier: int = Field(
-        default=3,
-        description="CRAG 检索候选倍数：实际检索 k = top_k × 此值，用于评估筛选"
+        default=2,
+        description="CRAG 检索候选倍数：实际检索 k = top_k × 此值，降低以减少 LLM 评估量"
+    )
+    crag_no_results_low_ratio: float = Field(
+        default=0.8,
+        description="触发 NO_RESULTS 的最低 LOW 文档比例（0.8 = 80%以上 LOW 才判定无结果）"
     )
 
     # ==================== 查询扩展配置 ====================

@@ -45,7 +45,7 @@ query = "什么是文本排序模型"
 
 try:
     resp = TextReRank.call(
-        model='qwen3-rerank',
+        model='gte-rerank-v2',
         query=query,
         documents=docs,
         top_n=3,
@@ -85,7 +85,7 @@ query = "Python编程语言"
 try:
     reranker_mgr = get_reranker_manager(
         provider='qwen',
-        reranker_model='qwen3-rerank',
+        reranker_model='gte-rerank-v2',
         top_n=3,
         score_threshold=0.3
     )

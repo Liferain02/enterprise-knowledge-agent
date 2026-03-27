@@ -1,0 +1,459 @@
+{
+  "summary": {
+    "total": 45,
+    "correct": 36,
+    "accuracy": 80.0
+  },
+  "results": [
+    {
+      "query": "公司的年假政策是什么？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "单一知识查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "你好",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "问候语",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "现在几点？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "时间查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "帮我计算一下 123 加 456",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "简单计算",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "报销流程是什么？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "单一知识查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "KPI考核标准有哪些？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "单一知识查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "新员工培训内容是什么？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "单一知识查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "客户投诉怎么处理？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "单一知识查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "请介绍一下弹性工作制",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "单一知识查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "试用期为多长时间？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "单一知识查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "年假有多少天？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "单一知识查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "门禁卡丢了怎么办？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "单一知识查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "你好！",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "问候语",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "在吗？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "问候语",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "今天天气怎么样？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "闲聊",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "这个bug怎么修？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "模糊请求",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "随便聊聊",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "闲聊",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "明天的会议几点开始？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "简单时间查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "帮我算平均值",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "简单计算",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "2024年有多少天？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "简单时间查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "对比年假和病假政策的差异",
+      "expected_complex": true,
+      "predicted_complex": true,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "对比类：需分别查询两个政策再对比",
+      "reasoning": "需要分别查询年假和病假政策，然后进行对比分析，因此需要拆解成多个步骤处理。",
+      "steps_count": 3
+    },
+    {
+      "query": "年假和病假有什么区别？",
+      "expected_complex": true,
+      "predicted_complex": true,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "对比类：需分别查询两个政策再对比",
+      "reasoning": "用户问题需要对比年假和病假的定义、使用条件、天数限制等信息，因此需要拆解成多个步骤来处理。",
+      "steps_count": 3
+    },
+    {
+      "query": "对比A政策和B政策的差异",
+      "expected_complex": true,
+      "predicted_complex": true,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "对比类：多政策对比",
+      "reasoning": "需要分别查询A政策和B政策的信息，然后进行对比分析，因此需要拆解为多个步骤。",
+      "steps_count": 3
+    },
+    {
+      "query": "对比Q1和Q2的业绩表现",
+      "expected_complex": true,
+      "predicted_complex": true,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "对比类：多季度数据对比",
+      "reasoning": "需要分别查询Q1和Q2的业绩数据，然后进行对比分析，因此需要拆解成多个步骤处理。",
+      "steps_count": 3
+    },
+    {
+      "query": "总结Q1和Q2的业绩表现",
+      "expected_complex": true,
+      "predicted_complex": true,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "总结类：多数据汇总",
+      "reasoning": "需要分别查询Q1和Q2的业绩数据，然后进行汇总总结。",
+      "steps_count": 3
+    },
+    {
+      "query": "对比内部培训和外部培训的优劣",
+      "expected_complex": true,
+      "predicted_complex": true,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "对比类：培训方式对比",
+      "reasoning": "对比内部培训和外部培训的优劣需要分别分析两者的优缺点，然后进行总结和比较，因此需要拆解成多个步骤。",
+      "steps_count": 3
+    },
+    {
+      "query": "报销标准是什么？加上已报销的金额，总额是多少？",
+      "expected_complex": true,
+      "predicted_complex": true,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "复合类：查询+计算",
+      "reasoning": "用户问题包含两个子问题：1. 报销标准是什么？2. 已报销的金额，总额是多少？需要分别查询报销标准和已报销金额，再进行汇总。",
+      "steps_count": 3
+    },
+    {
+      "query": "年假还剩多少？顺便告诉我政策规定",
+      "expected_complex": true,
+      "predicted_complex": false,
+      "correct": false,
+      "error_type": "complex→simple（漏判复杂任务）",
+      "reason": "复合类：计算+知识查询",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "先查年假政策，再算一下我能休几天",
+      "expected_complex": true,
+      "predicted_complex": true,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "顺序类：知识→计算",
+      "reasoning": "用户需要先查询年假政策，然后根据政策计算可休天数，这涉及两个独立但相关的步骤。",
+      "steps_count": 2
+    },
+    {
+      "query": "帮我查一下公司有哪些福利，再总结一下重点",
+      "expected_complex": true,
+      "predicted_complex": false,
+      "correct": false,
+      "error_type": "complex→simple（漏判复杂任务）",
+      "reason": "顺序类：查询→总结",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "查询张三和李四的绩效考核结果，然后对比差异",
+      "expected_complex": true,
+      "predicted_complex": true,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "对比类：多人员数据对比",
+      "reasoning": "用户需要查询张三和李四的绩效考核结果，并对比差异，这涉及两个独立的信息查询任务，然后进行对比分析。",
+      "steps_count": 3
+    },
+    {
+      "query": "先查年假政策，再查病假政策，最后对比两者的区别",
+      "expected_complex": true,
+      "predicted_complex": true,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "顺序+对比：多次查询+对比",
+      "reasoning": "用户需要先分别查询年假政策和病假政策，再对比两者的区别，因此需要拆解成多个步骤。",
+      "steps_count": 3
+    },
+    {
+      "query": "预算执行率怎么算？同时告诉我公司的预算制度",
+      "expected_complex": true,
+      "predicted_complex": false,
+      "correct": false,
+      "error_type": "complex→simple（漏判复杂任务）",
+      "reason": "复合类：计算+知识",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "介绍一下弹性工作制，然后帮我算一下本周工作时长",
+      "expected_complex": true,
+      "predicted_complex": false,
+      "correct": false,
+      "error_type": "complex→simple（漏判复杂任务）",
+      "reason": "复合类：知识介绍+计算",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "报销流程是什么？同时帮我算一下本月已报销多少",
+      "expected_complex": true,
+      "predicted_complex": false,
+      "correct": false,
+      "error_type": "complex→simple（漏判复杂任务）",
+      "reason": "复合类：流程+计算",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "KPI标准是什么？同时我的绩效数据在哪里查",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "同属知识库，Supervisor可处理",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "公司的福利政策和报销流程分别是什么？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "同属知识库，Supervisor可处理",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "员工手册和绩效考核制度各有什么规定？",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "同属知识库，Supervisor可处理",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "对比",
+      "expected_complex": true,
+      "predicted_complex": false,
+      "correct": false,
+      "error_type": "complex→simple（漏判复杂任务）",
+      "reason": "极短对比词",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "总结",
+      "expected_complex": true,
+      "predicted_complex": false,
+      "correct": false,
+      "error_type": "complex→simple（漏判复杂任务）",
+      "reason": "极短总结词",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "你好，请问病假怎么处理",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "问候+单一问题",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "在吗？我想了解一下医保报销",
+      "expected_complex": false,
+      "predicted_complex": false,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "问候+单一问题",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "帮我查一下张三的年假余额，然后算一下还剩多少",
+      "expected_complex": true,
+      "predicted_complex": false,
+      "correct": false,
+      "error_type": "complex→simple（漏判复杂任务）",
+      "reason": "顺序：查询→计算",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "张三和李四谁的KPI更高？",
+      "expected_complex": true,
+      "predicted_complex": false,
+      "correct": false,
+      "error_type": "complex→simple（漏判复杂任务）",
+      "reason": "对比类：两人数据对比",
+      "reasoning": "规则快速判断为简单任务",
+      "steps_count": 0
+    },
+    {
+      "query": "今年和去年的销售额对比怎么样？",
+      "expected_complex": true,
+      "predicted_complex": true,
+      "correct": true,
+      "error_type": "correct",
+      "reason": "对比类：跨年数据对比",
+      "reasoning": "需要先查询今年的销售额和去年的销售额，然后进行对比分析。",
+      "steps_count": 3
+    }
+  ]
+}

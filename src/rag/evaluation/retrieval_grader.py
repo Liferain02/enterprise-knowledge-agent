@@ -40,8 +40,9 @@ logger = logging.getLogger(__name__)
 
 class GradeLevel(str, Enum):
     """检索结果评级"""
-    HIGH = "high"      # 文档与查询高度相关，继续生成
-    LOW = "low"        # 文档相关性低，需要重写查询并重新检索
+    HIGH = "high"      # 文档与查询高度相关，直接用于生成
+    MEDIUM = "medium" # 文档部分相关，可用于生成但建议结合 rewrite
+    LOW = "low"       # 文档相关性低，需要重写查询并重新检索
     NO_RESULTS = "no_results"  # 知识库无相关信息
 
 
@@ -64,6 +65,7 @@ class GradeResult:
     # 汇总统计
     total_docs: int = field(init=False)
     high_count: int = field(init=False)
+    medium_count: int = field(init=False)
     low_count: int = field(init=False)
     avg_score: float = field(init=False)
 
@@ -77,6 +79,7 @@ class GradeResult:
     def __post_init__(self):
         self.total_docs = len(self.grades)
         self.high_count = sum(1 for g in self.grades if g.grade == GradeLevel.HIGH)
+        self.medium_count = sum(1 for g in self.grades if g.grade == GradeLevel.MEDIUM)
         self.low_count = sum(1 for g in self.grades if g.grade == GradeLevel.LOW)
 
         scores = [g.relevance_score for g in self.grades]
@@ -91,40 +94,64 @@ class GradeResult:
             self.decision_reason = "检索结果为空"
             return
 
+        settings = get_settings()
+        high_threshold = getattr(settings, 'crag_grade_threshold', 0.25)
+        medium_threshold = getattr(settings, 'crag_medium_threshold', 0.15)
+        min_high_ratio = getattr(settings, 'crag_min_high_ratio', 0.2)
+        no_results_low_ratio = getattr(settings, 'crag_no_results_low_ratio', 0.8)
+
         high_ratio = self.high_count / self.total_docs
+        medium_ratio = self.medium_count / self.total_docs
         low_ratio = self.low_count / self.total_docs
 
-        # 决策逻辑：
-        # - 没有任何高相关文档，且大多数是低相关 → NO_RESULTS
-        # - 高相关文档 ≥ 1 个，且平均分 ≥ 阈值 → HIGH
-        # - 其他情况 → LOW（需要 query rewrite）
-        settings = get_settings()
-        grade_threshold = getattr(settings, 'crag_grade_threshold', 0.5)
-        min_high_ratio = getattr(settings, 'crag_min_high_ratio', 0.3)
+        # 决策逻辑（优先级从高到低）：
+        # 1. 无任何相关文档 → NO_RESULTS（只有全部 LOW 且 70% 以上才触发）
+        # 2. 有足够 HIGH 文档 → HIGH（直接用于生成）
+        # 3. 有 HIGH + MEDIUM，且平均分 >= medium_threshold → MEDIUM（可用于生成）
+        # 4. 仅有 MEDIUM 或少量 HIGH → LOW（触发 rewrite）
 
-        if self.high_count == 0 and low_ratio >= 0.7:
+        # NO_RESULTS：全部都是 LOW（放宽阈值，由配置控制）
+        if self.high_count == 0 and self.medium_count == 0 and low_ratio >= no_results_low_ratio:
             self.decision = GradeLevel.NO_RESULTS
             self.decision_reason = (
-                f"所有 {self.total_docs} 篇文档相关性均较低（<{grade_threshold}），"
+                f"所有 {self.total_docs} 篇文档相关性均较低（avg={self.avg_score:.2f}），"
                 f"知识库中可能不存在相关信息"
             )
-        elif high_ratio >= min_high_ratio and self.avg_score >= grade_threshold:
+
+        # HIGH：有足够 HIGH 文档
+        elif high_ratio >= min_high_ratio and self.avg_score >= high_threshold:
             self.decision = GradeLevel.HIGH
             self.decision_reason = (
                 f"高相关文档 {self.high_count}/{self.total_docs} 篇，"
-                f"平均相关分 {self.avg_score:.2f} ≥ {grade_threshold}，可直接使用"
+                f"平均相关分 {self.avg_score:.2f} ≥ {high_threshold:.2f}，可直接使用"
             )
+
+        # MEDIUM：有 HIGH 或 MEDIUM，但不够 HIGH 阈值
+        elif (self.high_count > 0 or self.medium_count > 0) and self.avg_score >= medium_threshold:
+            self.decision = GradeLevel.MEDIUM
+            self.decision_reason = (
+                f"相关文档 {self.high_count} HIGH + {self.medium_count} MEDIUM，"
+                f"avg={self.avg_score:.2f} ≥ {medium_threshold:.2f}，可用于生成"
+            )
+
+        # LOW：其余情况，触发 rewrite
         else:
             self.decision = GradeLevel.LOW
             self.decision_reason = (
-                f"高相关文档 {self.high_count}/{self.total_docs} 篇，"
-                f"平均相关分 {self.avg_score:.2f} < {grade_threshold}，"
-                f"建议重写查询后重新检索"
+                f"高相关 {self.high_count} 篇，中等相关 {self.medium_count} 篇，"
+                f"avg={self.avg_score:.2f} < {medium_threshold:.2f}，建议重写查询"
             )
 
     def filter_high_grade(self) -> List[Document]:
-        """只返回高相关文档"""
+        """只返回 HIGH 文档"""
         return [g.doc for g in self.grades if g.grade == GradeLevel.HIGH]
+
+    def filter_usable(self) -> List[Document]:
+        """返回 HIGH + MEDIUM 文档（可用于生成）"""
+        return [
+            g.doc for g in self.grades
+            if g.grade in (GradeLevel.HIGH, GradeLevel.MEDIUM)
+        ]
 
     def filter_above_threshold(self, threshold: float) -> List[Document]:
         """返回相关分 >= threshold 的文档"""
@@ -137,6 +164,7 @@ class GradeResult:
             "decision_reason": self.decision_reason,
             "total_docs": self.total_docs,
             "high_count": self.high_count,
+            "medium_count": self.medium_count,
             "low_count": self.low_count,
             "avg_score": round(self.avg_score, 3),
             "latency_ms": round(self.latency_ms, 2),
@@ -219,41 +247,87 @@ class RetrievalGrader:
             DocumentGrade: 包含评分、理由和评级
         """
         start = time.time()
-
         prompt = self._build_grading_prompt(query, doc.page_content)
 
-        try:
-            response = await self.llm.ainvoke(prompt)
-            raw_text = response.content.strip()
+        max_retries = 3
+        last_error = None
 
-            score, reasoning = self._parse_grade_response(raw_text)
-            normalized = self._normalize_score(score)
+        for attempt in range(max_retries):
+            try:
+                response = await self.llm.ainvoke(prompt)
+                raw_text = response.content.strip()
 
-            grade_level = (
-                GradeLevel.HIGH if normalized >= self.grade_threshold
-                else GradeLevel.LOW
-            )
+                score, reasoning = self._parse_grade_response(raw_text)
+                normalized = self._normalize_score(score)
 
-            latency = (time.time() - start) * 1000
+                settings = get_settings()
+                high_thresh = self.grade_threshold
+                med_thresh = getattr(settings, 'crag_medium_threshold', 0.15)
 
-            return DocumentGrade(
-                doc=doc,
-                relevance_score=normalized,
-                raw_score=float(score),
-                reasoning=reasoning,
-                grade=grade_level,
-            )
+                if normalized >= high_thresh:
+                    grade_level = GradeLevel.HIGH
+                elif normalized >= med_thresh:
+                    grade_level = GradeLevel.MEDIUM
+                else:
+                    grade_level = GradeLevel.LOW
 
-        except Exception as e:
-            logger.warning(f"评估文档失败: {e}")
-            # 评估失败时保守处理，标记为 LOW
-            return DocumentGrade(
-                doc=doc,
-                relevance_score=0.0,
-                raw_score=1.0,
-                reasoning=f"评估失败: {str(e)}",
-                grade=GradeLevel.LOW,
-            )
+                latency = (time.time() - start) * 1000
+
+                return DocumentGrade(
+                    doc=doc,
+                    relevance_score=normalized,
+                    raw_score=float(score),
+                    reasoning=reasoning,
+                    grade=grade_level,
+                )
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+
+                # 检测 429 限流 / 500 服务器错误
+                is_rate_limited = "429" in error_str or "limit_requests" in error_str
+                is_server_error = "500" in error_str or "502" in error_str or "503" in error_str
+
+                if is_rate_limited or is_server_error:
+                    if attempt < max_retries - 1:
+                        wait = (2 ** attempt) * 1.5  # 指数退避: 1.5s, 3s, 6s
+                        logger.warning(
+                            f"评估请求失败 (attempt {attempt+1}/{max_retries}): {error_str[:80]}, "
+                            f"等待 {wait:.1f}s 后重试..."
+                        )
+                        await asyncio.sleep(wait)
+                        continue
+                    else:
+                        logger.warning(
+                            f"评估文档失败 (已重试 {max_retries} 次): {error_str[:80]}"
+                        )
+                        return DocumentGrade(
+                            doc=doc,
+                            relevance_score=0.0,
+                            raw_score=1.0,
+                            reasoning=f"评估失败(限流): {error_str[:100]}",
+                            grade=GradeLevel.LOW,
+                        )
+                else:
+                    # 非限流错误，不重试直接返回 LOW
+                    logger.warning(f"评估文档失败: {e}")
+                    return DocumentGrade(
+                        doc=doc,
+                        relevance_score=0.0,
+                        raw_score=1.0,
+                        reasoning=f"评估失败: {str(e)[:100]}",
+                        grade=GradeLevel.LOW,
+                    )
+
+        # 兜底（理论上不会走到这里）
+        return DocumentGrade(
+            doc=doc,
+            relevance_score=0.0,
+            raw_score=1.0,
+            reasoning=f"评估失败: {str(last_error)[:100]}" if last_error else "未知错误",
+            grade=GradeLevel.LOW,
+        )
 
     async def grade_batch(
         self,
@@ -347,9 +421,10 @@ class RetrievalGrader:
         result.latency_ms = (time.time() - start) * 1000
 
         logger.info(
-            f"[CRAG] query='{query[:30]}...' -> decision={result.decision.value}, "
-            f"high={result.high_count}/{result.total_docs}, "
-            f"avg={result.avg_score:.3f}, latency={result.latency_ms:.0f}ms"
+            f"[CRAG] query='{query[:30]}...' -> decision={grade_result.decision.value}, "
+            f"high={grade_result.high_count}/{grade_result.total_docs}, "
+            f"medium={grade_result.medium_count}/{grade_result.total_docs}, "
+            f"avg={grade_result.avg_score:.3f}, latency={grade_result.latency_ms:.0f}ms"
         )
 
         return result
@@ -426,19 +501,41 @@ class RetrievalGrader:
 改进后的查询："""
 
         try:
-            response = await self.llm.ainvoke(prompt)
-            rewritten = response.content.strip()
+            max_retries = 3
+            last_error = None
 
-            # 提取多行查询（如果有）
-            lines = [l.strip() for l in rewritten.split("\n") if l.strip()]
-            if len(lines) > 1:
-                # 返回第一个查询，主流程用第一个
-                # 后续可以用第二个做补充检索
-                logger.info(f"[CRAG] 查询改写：'{original_query}' -> '{lines[0]}'")
-                return lines[0]
+            for attempt in range(max_retries):
+                try:
+                    response = await self.llm.ainvoke(prompt)
+                    rewritten = response.content.strip()
 
-            logger.info(f"[CRAG] 查询改写：'{original_query}' -> '{rewritten}'")
-            return rewritten
+                    # 提取多行查询（如果有）
+                    lines = [l.strip() for l in rewritten.split("\n") if l.strip()]
+                    if len(lines) > 1:
+                        logger.info(f"[CRAG] 查询改写：'{original_query}' -> '{lines[0]}'")
+                        return lines[0]
+
+                    logger.info(f"[CRAG] 查询改写：'{original_query}' -> '{rewritten}'")
+                    return rewritten
+
+                except Exception as inner_e:
+                    last_error = inner_e
+                    error_str = str(inner_e)
+                    is_rate_limited = "429" in error_str or "limit_requests" in error_str
+                    is_server_error = "500" in error_str or "502" in error_str or "503" in error_str
+
+                    if is_rate_limited or is_server_error:
+                        if attempt < max_retries - 1:
+                            wait = (2 ** attempt) * 1.5
+                            logger.warning(
+                                f"查询改写请求失败 (attempt {attempt+1}/{max_retries}): "
+                                f"{error_str[:80]}, 等待 {wait:.1f}s 后重试..."
+                            )
+                            await asyncio.sleep(wait)
+                            continue
+                    raise  # 非限流错误直接抛出
+
+            raise last_error if last_error else Exception("查询改写未知错误")
 
         except Exception as e:
             logger.warning(f"查询改写失败: {e}")
@@ -463,12 +560,33 @@ class RetrievalGrader:
 ## 文档内容
 {doc_content}
 
-## 评估标准（请给出 1-5 分）：
-- 5分：文档**直接、明确**回答了用户问题，包含用户查询的核心概念
-- 4分：文档**高度相关**，包含查询的核心概念，但表述不够直接
-- 3分：文档**部分相关**，包含一些有用信息但不完整
-- 2分：文档**勉强相关**，只有零星信息点
+## 评分标准（1-5 分）
+
+- 5分：文档**直接、完整地**回答了用户问题，包含所有关键信息
+- 4分：文档**高度相关**，回答了大部分核心问题，只有次要细节缺失
+- 3分：文档**相关**，提供了有用的信息，能部分回答用户问题
+- 2分：文档**勉强相关**，只有零星信息点，无法有效回答问题
 - 1分：文档**完全不相关**，与查询毫无关系
+
+## Few-shot 示例
+
+**示例 1**
+查询：公司的年假政策是什么？
+文档：公司员工享受带薪年假，工作满1年可休5天，以后每年递增1天，最高不超过15天。
+评分：SCORE: 5
+理由：文档直接回答了年假政策，提供了完整的休假天数规则
+
+**示例 2**
+查询：年假和病假的区别
+文档：公司员工手册规定了各类假期制度，包括年假、病假、事假等。
+评分：SCORE: 3
+理由：文档涉及了相关主题（假期制度），但没有直接对比年假和病假的具体差异
+
+**示例 3**
+查询：KPI绩效考核
+文档：公司信息安全管理制度要求员工遵守网络安全规范。
+评分：SCORE: 1
+理由：文档内容与查询完全不相关，是信息安全而非绩效考核
 
 ## 输出格式
 请严格按以下格式输出（只输出这两行，不要其他内容）：
@@ -549,10 +667,11 @@ class CorrectiveRAGPipeline:
         self.max_retries = max_retries
         self.candidate_multiplier = candidate_multiplier
 
-        # 评估器
+        # 评估器（max_concurrent=2 避免触发 LLM 限流）
         self.grader = RetrievalGrader(
             grade_threshold=grade_threshold,
             llm_temperature=0.1,
+            max_concurrent=2,
         )
 
         # 查询扩展器（延迟初始化）
@@ -631,11 +750,21 @@ class CorrectiveRAGPipeline:
             if grade_result.decision == GradeLevel.HIGH:
                 # 高相关：直接返回
                 high_docs = grade_result.filter_high_grade()
-                # 用原始 rerank 分数排序
                 high_results = self._reorder_with_original_scores(
                     high_docs, candidates, top_k
                 )
                 return high_results, grade_result, rewrite_history
+
+            elif grade_result.decision == GradeLevel.MEDIUM:
+                # 中等相关：返回 HIGH + MEDIUM 文档（可用但质量一般）
+                usable_docs = grade_result.filter_usable()
+                usable_results = self._reorder_with_original_scores(
+                    usable_docs, candidates, top_k
+                )
+                logger.info(
+                    f"[CRAG] MEDIUM 决策: {len(usable_results)} 篇可用文档"
+                )
+                return usable_results, grade_result, rewrite_history
 
             elif grade_result.decision == GradeLevel.LOW:
                 # 低相关：重写查询 + 重试
@@ -780,7 +909,8 @@ def get_retrieval_grader(
         _grader = RetrievalGrader(
             grade_threshold=grade_threshold or getattr(
                 settings, 'crag_grade_threshold', 0.5
-            )
+            ),
+            max_concurrent=2,
         )
     return _grader
 
