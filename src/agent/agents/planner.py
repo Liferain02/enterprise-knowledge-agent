@@ -338,11 +338,15 @@ async def _execute_plan_parallel(state: Dict[str, Any]) -> Dict[str, Any]:
         plan_results
     )
 
+    # 追加最终答案到 messages，供 save_to_mem0_node 写入记忆
+    updated_messages = messages + [AIMessage(content=final_answer)]
+
     return {
         "current_step": -1,
         "completed_steps": completed,
         "plan_results": plan_results,
         "final_answer": final_answer,
+        "messages": updated_messages,
         "used_agent": "planner_parallel"
     }
 
@@ -434,11 +438,15 @@ async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
             plan_results
         )
 
+        # 追加最终答案到 messages，供 save_to_mem0_node 写入记忆
+        updated_messages = state.get("messages", []) + [AIMessage(content=final_answer)]
+
         return {
             "current_step": -1,
             "completed_steps": completed,
             "plan_results": plan_results,
             "final_answer": final_answer,
+            "messages": updated_messages,
             "used_agent": "planner"
         }
     else:
@@ -491,13 +499,13 @@ async def _summarize_results(messages: list, plan_results: list) -> str:
 def route_execute_plan(state: Dict[str, Any]) -> str:
     """
     从计划执行节点路由
-    
-    - current_step == -1 -> 所有步骤完成，结束
+
+    - current_step == -1 -> 所有步骤完成，保存到 Mem0
     - 否则 -> 继续执行下一个步骤
     """
     current_step = state.get("current_step", 0)
     
     if current_step == -1:
-        return "END"
+        return "save_to_mem0"
     else:
         return "execute_plan"

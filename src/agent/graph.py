@@ -284,13 +284,13 @@ def create_multi_agent_graph() -> StateGraph:
         }
     )
 
-    # Execute Plan → 下一步 或 END
+    # Execute Plan → 下一步 或 save_mem0
     workflow.add_conditional_edges(
         "execute_plan",
         route_execute_plan,
         {
             "execute_plan": "execute_plan",
-            "END": END,
+            "save_to_mem0": "save_to_mem0",
         }
     )
 
