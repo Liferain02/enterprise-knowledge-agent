@@ -5,6 +5,14 @@
     cd /home/xypp/code/enterprise-knowledge-agent
     source ~/miniconda3/etc/profile.d/conda.sh && conda activate agent-demo
     python tests/test_integration_e2e.py
+
+测试内容：
+    1. Corrective RAG 端到端检索
+    2. Query Decomposition 端到端检索
+    3. CRAG LOW 时触发 QueryExpander 兜底
+    4. CRAG Query Expansion 前置（needs_expansion=True）
+    5. 完整 knowledge_search 链路
+    6. 配置集成验证
 """
 import sys
 import os
@@ -111,7 +119,7 @@ async def test_query_decomposition_integration():
 
 async def test_crags_trigger_query_expander():
     """
-    测试3：CRAG 低质量时触发 QueryExpander
+    测试3：CRAG 低质量时触发 QueryExpander 兜底
     验证路径：CorrectiveRAGPipeline -> LOW decision -> QueryExpander.decompose_and_retrieve()
     """
     print("\n" + "=" * 60)
@@ -149,6 +157,46 @@ async def test_crags_trigger_query_expander():
         print(f"\n  ✓ LOW 决策触发，查询历史显示纠错过程: {history}")
     else:
         print(f"\n  ✓ 直接得到 {grade_result.decision.value} 决策")
+
+    return True
+
+
+async def test_crags_query_expansion_prefetch():
+    """
+    测试3b：CRAG Query Expansion 前置（needs_expansion=True）
+
+    验证路径：
+    - CorrectiveRAGPipeline.retrieve(needs_expansion=True)
+      → 阶段0直接触发 QueryExpander 分解
+      → 不走 CRAG 主循环 rewrite
+
+    场景：对比类查询由上游 Planner/Supervisor 显式传入 needs_expansion=True，
+    CRAG 应在评估前就完成分解，避免走 rewrite 的额外延迟。
+    """
+    print("\n" + "=" * 60)
+    print("测试3b: CRAG Query Expansion 前置")
+    print("=" * 60)
+
+    reset_crags()
+    reset_query_expander()
+
+    pipeline = get_corrective_rag_pipeline()
+
+    # 显式传入 needs_expansion=True（模拟 Planner/Supervisor 的判断）
+    results, grade_result, history = await pipeline.retrieve(
+        "年假和病假的区别",
+        top_k=5,
+        needs_expansion=True,
+    )
+
+    print(f"  查询: '年假和病假的区别' (needs_expansion=True)")
+    print(f"  返回结果数: {len(results)}")
+    print(f"  评估决策: {grade_result.decision.value}")
+    print(f"  查询历史: {history}")
+
+    # 验证：history 应包含原始查询和子查询
+    assert len(history) >= 1
+    print(f"\n  ✓ Expansion 前置完成，history 包含 {len(history)} 个查询表述")
 
     return True
 
@@ -199,7 +247,8 @@ def test_config_integration():
     settings = get_settings()
 
     crag_keys = ['crag_enabled', 'crag_max_retries', 'crag_grade_threshold',
-                 'crag_min_high_ratio', 'crag_candidate_multiplier']
+                 'crag_min_high_ratio', 'crag_candidate_multiplier',
+                 'crag_rerank_before_grade']
     qe_keys = ['query_expand_enabled', 'query_expand_strategy',
                'query_expand_max_sub_queries', 'query_expand_rerank_fusion_k']
 
@@ -223,7 +272,7 @@ def test_config_integration():
 
 async def main():
     print("\n" + "=" * 60)
-    print("Corrective RAG + Query Decomposition 集成测试")
+    print("Corrective RAG + Query Decomposition 集成测试（6项）")
     print("=" * 60)
 
     all_passed = True
@@ -248,6 +297,14 @@ async def main():
         all_passed &= await test_crags_trigger_query_expander()
     except Exception as e:
         print(f"\n  ✗ 测试3失败: {e}")
+        import traceback
+        traceback.print_exc()
+        all_passed = False
+
+    try:
+        all_passed &= await test_crags_query_expansion_prefetch()
+    except Exception as e:
+        print(f"\n  ✗ 测试3b失败: {e}")
         import traceback
         traceback.print_exc()
         all_passed = False

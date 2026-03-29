@@ -655,6 +655,7 @@ class CorrectiveRAGPipeline:
         grade_threshold: float = 0.5,
         use_reranker: bool = True,
         candidate_multiplier: int = 3,
+        rerank_before_grade: bool = True,  # 新增：评估前是否先 Rerank 精排
     ):
         """
         Args:
@@ -662,10 +663,15 @@ class CorrectiveRAGPipeline:
             grade_threshold: 相关性阈值
             use_reranker: 是否在检索时使用 Reranker
             candidate_multiplier: 检索候选文档数 = top_k × multiplier
+            rerank_before_grade: 是否在 LLM 评估前先 Rerank 精排，
+                                 可减少评估 LLM 调用量（评估 10 篇 vs 评估 15 篇）
         """
         settings = get_settings()
         self.max_retries = max_retries
-        self.candidate_multiplier = candidate_multiplier
+        self.candidate_multiplier = getattr(
+            settings, 'crag_candidate_multiplier', 2
+        )
+        self.rerank_before_grade = rerank_before_grade
 
         # 评估器（max_concurrent=2 避免触发 LLM 限流）
         self.grader = RetrievalGrader(
@@ -696,17 +702,61 @@ class CorrectiveRAGPipeline:
             self._retriever_manager = get_retriever_manager()
         return self._retriever_manager
 
+    @property
+    def reranker_manager(self):
+        """延迟加载 RerankerManager"""
+        from src.rag.retrieval.reranker import get_reranker_manager
+        return get_reranker_manager()
+
+    def _rerank_before_grade(
+        self,
+        query: str,
+        candidates: List[tuple[Document, float]],
+        top_n: int,
+    ) -> List[tuple[Document, float]]:
+        """
+        在 LLM 评估前先用 Reranker 精排候选文档
+
+        效果：评估量从 candidate_k(15) 篇减少到 rerank_top_n(3-5) 篇，
+              评估 LLM 调用量显著减少，同时不影响最终返回质量。
+        """
+        if not candidates:
+            return candidates
+
+        docs = [doc for doc, _ in candidates]
+
+        try:
+            reranked = self.reranker_manager.rerank(query, docs, top_n=top_n)
+            logger.info(
+                f"[CRAG] Rerank 精排: {len(candidates)} → {len(reranked)} 篇候选，"
+                f"评估量减少 {len(candidates) - len(reranked)} 篇"
+            )
+            return reranked
+        except Exception as e:
+            logger.warning(f"[CRAG] Rerank 失败，保留原始排序: {e}")
+            return candidates[:top_n]
+
     async def retrieve(
         self,
         query: str,
         top_k: int = 5,
+        needs_expansion: bool = None,
     ) -> tuple[List[tuple[Document, float]], GradeResult, List[str]]:
         """
-        Corrective RAG 检索
+        Corrective RAG 检索（统一入口）
+
+        完整流程：
+        1. Query Expansion 前置（复杂查询主动分解 → 多查询并行检索 → RRF 合并）
+        2. CRAG 主流程（检索 → Rerank → 评估 → 决策 → rewrite/分解兜底）
+
+        注意：
+        - expansion 成功时，分解检索结果仍经过 CRAG 评估（质量保证）
+        - expansion 失败或未触发时，退回标准 CRAG 流程
 
         Args:
             query: 用户查询
             top_k: 期望返回的高相关文档数量
+            needs_expansion: 是否需要 Query Expansion（None 时自动判断）
 
         Returns:
             (results, grade_result, rewrite_history)
@@ -717,6 +767,33 @@ class CorrectiveRAGPipeline:
         rewrite_history = [query]
         current_query = query
 
+        # ────────────────────────────────────────────────────────────
+        # 阶段 0: Query Expansion 前置（复杂查询主动分解）
+        # 与 CRAG 评估共用一个 grader，避免重复 LLM 调用
+        # ────────────────────────────────────────────────────────────
+        if needs_expansion is None:
+            from ..retrieval.query_expander import RuleBasedDecomposer
+            needs_expansion = RuleBasedDecomposer.needs_expansion(query)
+
+        if needs_expansion and getattr(get_settings(), 'query_expand_enabled', True):
+            logger.info(f"[CRAG] Query Expansion 前置触发: '{query}'")
+            try:
+                decomp_results, exp_result = await self._decompose_and_search(
+                    query, top_k
+                )
+                if decomp_results:
+                    # 评估分解检索结果（CRAG 质量保证）
+                    decomp_docs = [doc for doc, _ in decomp_results]
+                    decomp_grades = await self.grader.grade_retrieval(query, decomp_docs)
+                    rewrite_history.extend(exp_result.all_queries)
+                    logger.info(
+                        f"[CRAG] Expansion 找到 {len(decomp_results)} 篇文档，"
+                        f"评估 decision={decomp_grades.decision.value}"
+                    )
+                    return decomp_results, decomp_grades, rewrite_history
+            except Exception as e:
+                logger.warning(f"[CRAG] Query Expansion 前置失败，退回 CRAG: {e}")
+
         for attempt in range(self.max_retries + 1):
             # Step 1: 检索更多候选（用于评估和筛选）
             candidate_k = top_k * self.candidate_multiplier
@@ -724,6 +801,14 @@ class CorrectiveRAGPipeline:
             candidates = self.retriever_manager.search_with_score(
                 current_query, k=candidate_k
             )
+
+            # ────────────────────────────────────────────────────────────
+            # 评估前精排（可选）：减少 LLM 评估调用量
+            # ────────────────────────────────────────────────────────────
+            if self.rerank_before_grade:
+                candidates = self._rerank_before_grade(
+                    current_query, candidates, top_n=min(5, candidate_k)
+                )
 
             if not candidates:
                 logger.info(f"[CRAG] 第 {attempt + 1} 次检索为空: '{current_query}'")
@@ -918,6 +1003,7 @@ def get_retrieval_grader(
 def get_corrective_rag_pipeline(
     max_retries: int = None,
     grade_threshold: float = None,
+    rerank_before_grade: bool = None,
 ) -> CorrectiveRAGPipeline:
     """获取 CorrectiveRAGPipeline 单例"""
     global _pipeline
@@ -928,6 +1014,9 @@ def get_corrective_rag_pipeline(
             grade_threshold=grade_threshold or getattr(
                 settings, 'crag_grade_threshold', 0.5
             ),
+            rerank_before_grade=rerank_before_grade
+            if rerank_before_grade is not None
+            else getattr(settings, 'crag_rerank_before_grade', True),
         )
     return _pipeline
 
@@ -955,13 +1044,14 @@ async def grade_retrieval(
 async def corrective_retrieve(
     query: str,
     top_k: int = 5,
+    needs_expansion: bool = None,
 ) -> tuple[List[tuple[Document, float]], GradeResult, list]:
     """
     Corrective RAG 检索（便捷函数）
 
     等价于：
         pipeline = get_corrective_rag_pipeline()
-        return await pipeline.retrieve(query, top_k)
+        return await pipeline.retrieve(query, top_k, needs_expansion)
     """
     pipeline = get_corrective_rag_pipeline()
-    return await pipeline.retrieve(query, top_k)
+    return await pipeline.retrieve(query, top_k, needs_expansion=needs_expansion)

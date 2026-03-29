@@ -38,6 +38,10 @@ class SummaryOutput(TypedDict):
 # ==================== 快速复杂度预判 ====================
 
 # 命中任意一条 → 判定为复杂任务（走 LLM planner 拆步骤）
+#
+# ⚠️ 注意：此列表与 knowledge_search.needs_query_expansion() 保持同步。
+# 新增复杂 pattern 时，请同步更新两处，避免 Planner 判 simple 但
+# knowledge_search 仍触发 Query Expansion 的不一致行为。
 _COMPLEX_PATTERNS = [
     r"对比|比较|区别|差异|异同|不同点",          # 对比类
     r"\bvs\b|VS|versus",                          # 英文对比
@@ -46,6 +50,9 @@ _COMPLEX_PATTERNS = [
     r"总结.{0,15}和|汇总|综合.{0,15}和|梳理",    # 汇总类
     r"第一.{0,20}第二|①.{0,20}②",               # 列举多项
     r"多个.{0,10}政策|多个.{0,10}文档",          # 多文档
+    # ── 以下来自 knowledge_search._QUERY_EXPANSION_PATTERNS ──
+    r"有哪些|有些什么|都有哪些|都有什么",         # 列举类（Plannner ≤40字快速路径会跳过！）
+    r".{2,6}和.{2,6}.{0,8}职责|.{2,6}与.{2,6}.{0,8}区别",  # 多实体职责/区别
 ]
 
 # 命中任意一条 → 判定为简单任务（直接跳过 LLM planner）
@@ -74,29 +81,44 @@ def _quick_complexity_check(message: str) -> str:
     """
     msg = message.strip()
 
-    # 极短消息 → 必然简单（问候/单词回复）
+    # ── 列举类 / 多实体类 pattern 优先检查 ──────────────────────────
+    # 这些 pattern 命中即 complex，不受长度短路影响。
+    # 原因："列举类"（有哪些/有些什么）在短消息中也可能是复杂任务，
+    # 必须优先于 `len(msg) <= 40` 短路检查，否则 Planner 会漏判。
+    _HIGH_PRIORITY_PATTERNS = [
+        # 列举类
+        re.compile(r"有哪些|有些什么|都有哪些|都有什么", re.IGNORECASE),
+        # 多实体职责/区别
+        re.compile(r".{2,6}和.{2,6}.{0,8}职责|.{2,6}与.{2,6}.{0,8}区别"),
+    ]
+    for pattern in _HIGH_PRIORITY_PATTERNS:
+        if pattern.search(msg):
+            return "complex"
+
+    # ── 极短消息 → 必然简单（问候/单词回复）───
+    # 但对于上述列举类 query，由于已在上面特殊处理，不会落入此处
     if len(msg) <= 8:
         return "simple"
 
-    # 命中复杂信号 → 交给 LLM 拆步骤
+    # ── 其他复杂信号 → complex ──
     for pattern in _COMPILED_COMPLEX:
         if pattern.search(msg):
             return "complex"
 
-    # 命中简单信号 → 跳过 LLM
+    # ── 简单信号 → simple ──
     for pattern in _COMPILED_SIMPLE:
         if pattern.search(msg):
             return "simple"
 
-    # 多个问号 → 多问题 → complex
+    # ── 多个问号 → complex ──
     if msg.count("？") >= 2 or msg.count("?") >= 2:
         return "complex"
 
-    # 消息较短（≤ 40字）且无复杂信号 → 大概率简单
+    # ── 消息较短（≤ 40字）且无复杂信号 → 大概率 simple ──
     if len(msg) <= 40:
         return "simple"
 
-    # 其余交给 LLM 判断
+    # ── 其余交给 LLM 判断 ──
     return "uncertain"
 
 
@@ -253,6 +275,9 @@ def _get_last_user_message(messages: list) -> str:
 
 # ==================== 路由函数 ====================
 
+# Planner 返回的 state 中包含 is_complex 标记，
+# Supervisor / Agent 节点可以通过 state["is_complex"] 访问此信息，
+# 用于下游决策（如 knowledge_search 是否需要 Query Expansion）。
 def route_from_planner(state: Dict[str, Any]) -> str:
     """
     从 Planner 路由到下一个节点

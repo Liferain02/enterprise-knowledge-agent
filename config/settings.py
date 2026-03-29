@@ -299,6 +299,10 @@ class Settings(BaseSettings):
         default=0.8,
         description="触发 NO_RESULTS 的最低 LOW 文档比例（0.8 = 80%以上 LOW 才判定无结果）"
     )
+    crag_rerank_before_grade: bool = Field(
+        default=True,
+        description="CRAG LLM 评估前是否先 Rerank 精排候选文档（可减少评估 LLM 调用量）"
+    )
 
     # ==================== 查询扩展配置 ====================
     query_expand_enabled: bool = Field(

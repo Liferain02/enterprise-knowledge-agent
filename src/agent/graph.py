@@ -51,6 +51,10 @@ class AgentState(MessagesState):
     completed_steps: list  # 已完成的步骤
     plan_results: list     # 各步骤的执行结果
 
+    # ==================== Supervisor 决策 ====================
+    needs_expansion: bool          # 是否需要 Query Expansion
+    agent_inject_prompt: str      # 透传给子 agent 的 prompt 注入内容
+
 
 # ==================== 语义总结记忆节点 ====================
 

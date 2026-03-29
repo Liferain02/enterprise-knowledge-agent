@@ -9,9 +9,10 @@ from pydantic import BaseModel, Field
 from langchain_core.tools import BaseTool
 
 
-# ==================== 复杂查询识别 ====================
+# ==================== 复杂查询识别（供外部调用）====================
 
 # 需要主动触发 Query Expansion 的查询模式
+# ⚠️ 此列表与 Planner._quick_complexity_check() 的 _HIGH_PRIORITY_PATTERNS 保持同步
 _QUERY_EXPANSION_PATTERNS = [
     # 对比类
     re.compile(r"对比|比较.{0,8}[和与跟]|和.{0,8}区别|差异|不同点|哪个.好", re.IGNORECASE),
@@ -30,6 +31,10 @@ def needs_query_expansion(query: str) -> bool:
     """
     判断查询是否需要主动触发 Query Expansion。
     在 CRAG 评估之前就识别复杂查询类型，避免等 CRAG 失败后再走 expansion。
+
+    注意：此函数应与 Planner._quick_complexity_check() 保持同步，
+    两者使用相同的 pattern 定义。优先通过 state 传递 Planner 的判断结果，
+    此函数仅作为外部调用时的 fallback。
     """
     for pattern in _QUERY_EXPANSION_PATTERNS:
         if pattern.search(query):
@@ -46,24 +51,29 @@ class SearchInput(BaseModel):
     """搜索输入"""
     query: str = Field(description="搜索查询字符串")
     top_k: int = Field(default=5, description="返回结果数量")
-    use_query_expansion: bool = Field(
-        default=False,
-        description="是否强制使用 Query Expansion（复杂查询时由系统自动设置）"
+    needs_expansion: bool = Field(
+        default=None,
+        description="是否需要 Query Expansion（由 Planner 根据复杂度判断传入，为 None 时自动判断）"
     )
 
 
-def knowledge_search(query: str, top_k: int = 5, use_query_expansion: bool = False) -> str:
+def knowledge_search(
+    query: str,
+    top_k: int = 5,
+    needs_expansion: bool = None,
+) -> str:
     """
     搜索企业知识库（同步封装，异步逻辑在内部处理）。
 
-    检索策略选择逻辑：
-    1. 复杂查询（对比/列举/多实体/多问号）→ 直接走 Query Expansion（跳过 CRAG rewrite）
-    2. 普通查询 → 走 CRAG 评估流程（HIGH/MEDIUM 直接用，LOW 才 rewrite）
+    检索策略选择逻辑（统一由 Planner 复杂度判断）：
+    1. needs_expansion=True（Planner 判复杂）→ Query Expansion
+    2. needs_expansion=False（Planner 判简单）→ CRAG
+    3. needs_expansion=None（外部调用未传入）→ 回退到 needs_query_expansion() 自动判断
 
     Args:
         query: 搜索查询字符串
         top_k: 返回结果数量
-        use_query_expansion: 是否强制使用 Query Expansion（由路由层设置）
+        needs_expansion: Planner 传入的复杂度判断，None 时自动判断
 
     Returns:
         相关文档内容列表（包含分数、来源和评估信息）
@@ -75,17 +85,18 @@ def knowledge_search(query: str, top_k: int = 5, use_query_expansion: bool = Fal
     settings = get_settings()
     min_score = getattr(settings, 'reranker_threshold', 0.1) or 0.1
 
-    # 主动识别复杂查询，强制使用 Query Expansion
-    is_complex = needs_query_expansion(query)
-    force_expansion = is_complex or use_query_expansion
+    # 优先信任上游 Planner 的判断，None 时才自己做 fallback
+    force_expansion = (
+        needs_expansion
+        if needs_expansion is not None
+        else needs_query_expansion(query)
+    )
 
     try:
-        if force_expansion and getattr(settings, 'query_expand_enabled', True):
-            # 复杂查询：直接走 Query Expansion（避免 CRAG rewrite 的 24s 开销）
-            result = _run_query_expansion_search(query, top_k)
-        elif getattr(settings, 'crag_enabled', True):
-            # 普通查询：走 CRAG 评估流程
-            result = _run_crag_search(query, top_k)
+        if getattr(settings, 'crag_enabled', True):
+            # CRAG 主路径（内嵌 Query Expansion 前置 + 评估 + rewrite）
+            # needs_expansion=True 时，pipeline.retrieve() 会在评估前先分解查询
+            result = _run_crag_search(query, top_k, needs_expansion=force_expansion)
         else:
             # 传统 Rerank 流程
             result = _knowledge_search_rerank(query, top_k, min_score)
@@ -100,7 +111,7 @@ def knowledge_search(query: str, top_k: int = 5, use_query_expansion: bool = Fal
             _knowledge_search_rerank(query, top_k, min_score)
 
 
-def _run_crag_search(query: str, top_k: int) -> str:
+def _run_crag_search(query: str, top_k: int, needs_expansion: bool = None) -> str:
     """
     安全运行 CRAG 异步搜索。
 
@@ -113,13 +124,13 @@ def _run_crag_search(query: str, top_k: int) -> str:
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(_knowledge_search_cragn(query, top_k))
+        return asyncio.run(_knowledge_search_cragn(query, top_k, needs_expansion))
 
     import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor() as pool:
         future = pool.submit(
             asyncio.run,
-            _knowledge_search_cragn(query, top_k)
+            _knowledge_search_cragn(query, top_k, needs_expansion)
         )
         return future.result()
 
@@ -208,7 +219,11 @@ def _run_query_expansion_search(query: str, top_k: int) -> str:
         return future.result()
 
 
-async def _knowledge_search_cragn(query: str, top_k: int) -> str:
+async def _knowledge_search_cragn(
+    query: str,
+    top_k: int,
+    needs_expansion: bool = None,
+) -> str:
     """
     Corrective RAG 检索流程
 
@@ -220,7 +235,7 @@ async def _knowledge_search_cragn(query: str, top_k: int) -> str:
 
     pipeline = get_corrective_rag_pipeline()
     results_with_scores, grade_result, rewrite_history = await pipeline.retrieve(
-        query, top_k=top_k
+        query, top_k=top_k, needs_expansion=needs_expansion
     )
 
     # 无结果

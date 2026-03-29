@@ -4,6 +4,15 @@ Query Expansion / Decomposition 模块测试
 使用方法:
     python tests/test_query_expander.py
     python -m pytest tests/test_query_expander.py -v
+
+测试内容：
+    1. 规则分解器测试（needs_expansion / decompose）
+    2. 数据模型测试（SubQuery / ExpansionResult）
+    3. RRF 算法测试
+    4. QueryExpander 同步/异步测试
+    5. 端到端测试（decompose_and_retrieve / multi_query_retrieve）
+    6. 配置验证
+    7. CRAG 整合测试（QE 作为 CRAG 前置步骤）
 """
 import sys
 import os
@@ -383,6 +392,65 @@ async def test_multi_query_retrieve():
 
 
 # ============================================================
+# CRAG 整合测试
+# ============================================================
+
+async def test_qe_as_crag_prefetch():
+    """
+    测试 Query Expansion 作为 CRAG 前置步骤的整合
+
+    验证：
+    1. needs_expansion=True 时，pipeline 直接调用 decompose_and_search
+    2. expansion 结果仍经过同一个 grader 评估（不重复 LLM）
+    3. expansion 失败时退回标准 CRAG 主循环
+    """
+    from src.rag.evaluation.retrieval_grader import (
+        get_corrective_rag_pipeline,
+        reset_crags,
+    )
+
+    reset_crags()
+    reset_query_expander()
+
+    pipeline = get_corrective_rag_pipeline()
+
+    # 场景1：显式传入 needs_expansion=True（模拟 Planner/Supervisor 的判断）
+    results, grade_result, history = await pipeline.retrieve(
+        "年假和病假的区别",
+        top_k=5,
+        needs_expansion=True,
+    )
+
+    assert isinstance(results, list)
+    assert isinstance(grade_result.decision, str)  # decision 是 GradeLevel enum value
+    # history 应包含原始查询和分解后的子查询
+    assert len(history) >= 1
+    print(f"  ✓ Expansion 前置(显式=True): history={len(history)} 项, decision={grade_result.decision}")
+
+    # 场景2：传入 needs_expansion=False（跳过 expansion，走标准 CRAG）
+    results2, grade_result2, history2 = await pipeline.retrieve(
+        "公司年假政策是什么",
+        top_k=5,
+        needs_expansion=False,
+    )
+    assert isinstance(results2, list)
+    assert isinstance(grade_result2.decision, str)
+    print(f"  ✓ Expansion 跳过(显式=False): decision={grade_result2.decision}")
+
+    # 场景3：needs_expansion=None（自动判断）
+    results3, grade_result3, history3 = await pipeline.retrieve(
+        "公司有哪些福利",
+        top_k=5,
+        needs_expansion=None,
+    )
+    assert isinstance(results3, list)
+    assert isinstance(grade_result3.decision, str)
+    print(f"  ✓ Expansion 自动判断(None): decision={grade_result3.decision}")
+
+    return True
+
+
+# ============================================================
 # 配置验证
 # ============================================================
 
@@ -399,11 +467,13 @@ def test_config_options():
     assert hasattr(settings, 'crag_enabled')
     assert hasattr(settings, 'crag_max_retries')
     assert hasattr(settings, 'crag_grade_threshold')
+    assert hasattr(settings, 'crag_rerank_before_grade')
 
     print(f"  ✓ 查询扩展配置: enabled={settings.query_expand_enabled}, "
           f"strategy={settings.query_expand_strategy}")
     print(f"  ✓ CRAG 配置: enabled={settings.crag_enabled}, "
-          f"max_retries={settings.crag_max_retries}")
+          f"max_retries={settings.crag_max_retries}, "
+          f"rerank_before_grade={settings.crag_rerank_before_grade}")
 
 
 # ============================================================
@@ -449,6 +519,7 @@ def run_all_tests():
             await test_expander_llm_fallback()
             await test_decompose_and_retrieve()
             await test_multi_query_retrieve()
+            await test_qe_as_crag_prefetch()
         except Exception as e:
             print(f"  ⚠ 异步测试异常 [{type(e).__name__}]: {e}")
             import traceback

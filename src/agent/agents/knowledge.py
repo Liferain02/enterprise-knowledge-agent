@@ -4,6 +4,7 @@ Knowledge Agent 节点
 使用 Skill Loader 动态加载
 """
 from typing import Dict, Any
+from langchain_core.messages import SystemMessage
 from ..skills import get_skill_loader
 from ._utils import get_last_user_message, inject_summary_to_messages, inject_context_to_messages
 
@@ -43,6 +44,15 @@ async def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # 传递完整的 messages（含摘要和 Mem0 记忆注入）
         config = {"configurable": {"thread_id": session_id}}
         messages_with_context = inject_context_to_messages(messages, summary, mem0_memories)
+
+        # ── 注入 Supervisor 的 expansion 判断 ──────────────────────
+        # 若 Supervisor 判断需要 Query Expansion，通过 system prompt 告知子 LLM
+        agent_inject = state.get("agent_inject_prompt", "") or ""
+        if agent_inject:
+            inject_msg = SystemMessage(content=(
+                "【系统指令】" + agent_inject.strip()
+            ))
+            messages_with_context = [inject_msg] + messages_with_context
 
         # 执行 Agent
         result = await agent.ainvoke(

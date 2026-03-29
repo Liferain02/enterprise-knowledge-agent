@@ -6,6 +6,15 @@ Planner 复杂度判断准确率测试
     cd /home/xypp/code/enterprise-knowledge-agent
     conda activate agent-demo
     python scripts/test_planner_routing.py
+
+测试数据集说明：
+    - 第1类：简单任务（直接 Supervisor，跳过 LLM）
+    - 第2类：复杂任务（Execute Plan，LLM 拆步骤）
+    - 第3类：多子问题（同属知识库，Supervisor 可处理）
+    - 第4类：边界案例
+    - 第5类：高优先级 pattern（列举类/多实体，短查询但应判 complex）
+      新增原因：这些短查询命中 _HIGH_PRIORITY_PATTERNS（优先于 len ≤ 40 短路），
+      确保 "公司假期都有哪些？" 等列举类查询被正确判定为 complex。
 """
 import asyncio
 import json
@@ -91,6 +100,19 @@ PLANNER_TEST_CASES: list[tuple[str, bool, str]] = [
     ("帮我查一下张三的年假余额，然后算一下还剩多少", True, "顺序：查询→计算"),
     ("张三和李四谁的KPI更高？", True, "对比类：两人数据对比"),
     ("今年和去年的销售额对比怎么样？", True, "对比类：跨年数据对比"),
+
+    # =====================================================================
+    # 5. 高优先级 pattern（列举类/多实体）- 优先于 len ≤ 40 短路
+    #    这些短查询命中 _HIGH_PRIORITY_PATTERNS，应判定为 complex
+    #    之前因 len ≤ 40 被错误短路为 simple
+    # =====================================================================
+    ("公司假期都有哪些？", True, "列举类：短查询但含'有哪些'，应为 complex"),
+    ("有什么福利？", True, "列举类：短查询但含'有什么'，应为 complex"),
+    ("年假病假都有哪些？", True, "列举类：短查询但含'有哪些'，应为 complex"),
+    ("张三和李四的工作职责", True, "多实体类：短查询但含'和'字，应为 complex"),
+    ("年假有什么规定？", True, "列举类：短查询含'有什么'，应为 complex"),
+    ("福利有哪些？", True, "列举类：短查询含'有哪些'，应为 complex"),
+    ("报销制度都有哪些内容？", True, "列举类：短查询含'有哪些'，应为 complex"),
 ]
 
 

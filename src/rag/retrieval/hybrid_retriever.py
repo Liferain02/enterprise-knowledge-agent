@@ -144,7 +144,10 @@ class HybridRetrieverManager:
         filter: Optional[Dict] = None
     ) -> List[Document]:
         """
-        混合搜索
+        混合搜索（不带分数，用于不需要分数的场景）。
+
+        底层调用 search_with_scores()，丢弃分数后返回文档列表。
+        与 search_with_scores() 共用相同的向量 + BM25 混合逻辑。
 
         Args:
             query: 查询文本
@@ -156,11 +159,11 @@ class HybridRetrieverManager:
         """
         k = k or self.top_k
 
-        # 如果有集成检索器，使用集成检索
-        if self.ensemble_retriever:
-            return self.ensemble_retriever.invoke(query)[:k]
+        if self.enable_bm25:
+            results_with_scores = self.search_with_scores(query, k=k, filter=filter)
+            return [doc for doc, _, _ in results_with_scores]
 
-        # 否则回退到向量检索
+        # 纯向量检索
         return self.vector_retriever.invoke(query)[:k]
 
     def search_with_scores(
@@ -170,7 +173,17 @@ class HybridRetrieverManager:
         filter: Optional[Dict] = None
     ) -> List[Tuple[Document, float, str]]:
         """
-        带分数的混合搜索（包含来源信息）
+        带分数的混合搜索（标准分数级融合）
+
+        融合策略：
+        1. 向量 + BM25 分别检索，各自独立归一化
+        2. 按 page_content 合并同一文档的两路分数
+        3. 最终分数 = (1-α) × vec_norm + α × bm25_norm
+        4. 按融合分排序返回
+
+        与旧实现的区别（旧实现的问题）：
+        - 旧：BM25 丢弃向量已找到的文档（二选一）→ 丢失信号
+        - 新：同一文档同时持有两路分数 → 向量+BM25同时生效
 
         Args:
             query: 查询文本
@@ -178,105 +191,102 @@ class HybridRetrieverManager:
             filter: 元数据过滤条件
 
         Returns:
-            (文档, 分数, 来源类型) 元组列表
+            (文档, 融合分数, 主要来源) 元组列表，按融合分降序
         """
         k = k or self.top_k
-        results = []
+        # 候选放大：给两路归一化和去重留余量
+        candidate_k = k * 2
 
-        # 向量检索
+        # ── 第一路：向量检索 ─────────────────────────────────────────
+        vector_raw: Dict[str, float] = {}  # content_hash → raw score
+        vector_docs: Dict[str, Document] = {}
         if self.enable_vector:
             try:
-                # 使用 similarity_search_with_score 获取实际分数
-                vector_results = self.vectorstore.similarity_search_with_score(
-                    query, k=self.top_k * 2
-                )
-                vector_docs = [doc for doc, _ in vector_results]
-                vector_scores = [score for _, score in vector_results]
-
-                # ChromaDB 返回的是余弦距离（0-2，越小越相似）
-                # 转换为相似度分数：1 - (distance / 2)，范围 0-1
-                # 距离 0 → 相似度 1，距离 2 → 相似度 0
-                vector_similarities = [1.0 - (s / 2.0) for s in vector_scores]
-
-                # 对向量相似度分数进行 Min-Max 归一化到 0-1
-                vector_scores_normalized = self._min_max_normalize(vector_similarities)
-
-                for i, doc in enumerate(vector_docs[:k]):
-                    # 将原始分数和归一化分数都存入 metadata
-                    doc.metadata = doc.metadata or {}
-                    doc.metadata["score"] = vector_similarities[i]
-                    doc.metadata["score_normalized"] = vector_scores_normalized[i]
-                    results.append((doc, vector_scores_normalized[i], "vector"))
+                results = self.vectorstore.similarity_search_with_score(query, k=candidate_k)
+                for doc, raw_score in results:
+                    key = hash(doc.page_content)
+                    # ChromaDB distance (0-2) → similarity (0-1)
+                    vector_raw[key] = 1.0 - (raw_score / 2.0)
+                    if key not in vector_docs:
+                        vector_docs[key] = doc
             except Exception as e:
                 print(f"向量检索错误: {e}")
 
-        # BM25 检索
+        # ── 第二路：BM25 检索 ────────────────────────────────────────
+        bm25_raw: Dict[str, float] = {}  # content_hash → raw score
+        bm25_docs: Dict[str, Document] = {}
         if self.enable_bm25 and self.bm25_retriever:
             try:
-                # 获取文档列表
-                bm25_docs = self.bm25_retriever.invoke(query)
-                if bm25_docs and self._documents:
-                    # 复用预构建的 BM25 索引和 tokenized 语料
-                    texts = [doc.page_content for doc in self._documents]
-                    tokenized_corpus = self._tokenized_corpus
-                    bm25 = self._bm25_index
+                docs = self.bm25_retriever.invoke(query)
+                if docs and self._documents:
+                    texts = [d.page_content for d in self._documents]
+                    bm25_index = self._bm25_index
+                    tokens = [w.lower() for w in jieba.cut(query) if w.strip()]
+                    all_scores = bm25_index.get_scores(tokens)
 
-                    # 对查询分词并计算分数
-                    query_tokens = [w.lower() for w in jieba.cut(query) if w.strip()]
-                    all_scores = bm25.get_scores(query_tokens)
-
-                    # 检查是否有非零分数，如果没有则使用关键词匹配
                     if all(s == 0 for s in all_scores):
-                        # BM25 分数为 0（常见词/英文），使用关键词匹配
-                        # 简单的词匹配：统计查询词在文档中出现的次数
                         for i, text in enumerate(texts):
-                            text_lower = text.lower()
-                            match_count = sum(1 for token in query_tokens if token in text_lower)
-                            # 基于匹配比例给分
-                            all_scores[i] = match_count / max(len(query_tokens), 1)
+                            t_lower = text.lower()
+                            all_scores[i] = sum(
+                                1 for t in tokens if t in t_lower
+                            ) / max(len(tokens), 1)
 
-                    # 获取返回文档的分数
-                    doc_texts = {doc.page_content: i for i, doc in enumerate(self._documents)}
-                    bm25_scores = []
-                    for doc in bm25_docs:
-                        idx = doc_texts.get(doc.page_content)
+                    doc_index = {d.page_content: i for i, d in enumerate(self._documents)}
+                    for doc in docs:
+                        key = hash(doc.page_content)
+                        idx = doc_index.get(doc.page_content)
                         if idx is not None:
-                            bm25_scores.append(all_scores[idx])
-                        else:
-                            bm25_scores.append(0.0)
-
-                    # 对 BM25 分数进行 Min-Max 归一化到 0-1
-                    if max(bm25_scores) > 0:
-                        bm25_scores_normalized = self._min_max_normalize(bm25_scores)
-                    else:
-                        # 如果所有分数都是0，使用均匀分布
-                        bm25_scores_normalized = [1.0 / len(bm25_scores)] * len(bm25_scores)
-
-                    for i, doc in enumerate(bm25_docs[:k]):
-                        # 检查是否已存在（基于内容去重）
-                        doc_exists = any(
-                            doc.page_content == existing[0].page_content
-                            for existing in results
-                        )
-                        if not doc_exists:
-                            # 将原始分数和归一化分数都存入 metadata
-                            doc.metadata = doc.metadata or {}
-                            doc.metadata["score"] = bm25_scores[i]
-                            doc.metadata["score_normalized"] = bm25_scores_normalized[i]
-                            results.append((doc, bm25_scores_normalized[i], "bm25"))
+                            bm25_raw[key] = all_scores[idx]
+                            if key not in bm25_docs:
+                                bm25_docs[key] = doc
             except Exception as e:
                 print(f"BM25 检索错误: {e}")
 
-        # 按来源优先级和分数排序
-        # 权重: 向量 > BM25
-        def sort_key(item):
-            doc, score, source = item
-            source_priority = 1.0 if source == "vector" else 0.5
-            return source_priority * score
+        # ── 分数级融合 ──────────────────────────────────────────────
+        # 收集所有文档（两路并集）
+        all_keys = set(vector_raw) | set(bm25_raw)
 
-        results.sort(key=sort_key, reverse=True)
+        if not all_keys:
+            return []
 
-        return results[:k]
+        # 归一化
+        def minmax(d: Dict[str, float]) -> Dict[str, float]:
+            if not d:
+                return {}
+            vals = list(d.values())
+            mn, mx = min(vals), max(vals)
+            if mx == mn:
+                return {k: 1.0 for k in d}
+            return {k: (v - mn) / (mx - mn) for k, v in d.items()}
+
+        vec_norm = minmax(vector_raw)
+        bm25_norm = minmax(bm25_raw)
+
+        # 融合：权重可配置，α ∈ [0, 1]
+        α = self.bm25_weight  # BM25 权重，向量权重 = 1 - α
+        fused: List[Tuple[str, float]] = []
+        for key in all_keys:
+            vs = vec_norm.get(key, 0.0)
+            bs = bm25_norm.get(key, 0.0)
+            score = (1 - α) * vs + α * bs
+            fused.append((key, score))
+
+        fused.sort(key=lambda x: x[1], reverse=True)
+
+        # ── 组装返回 ────────────────────────────────────────────────
+        results = []
+        for key, score in fused[:k]:
+            # 优先使用向量来源的 Document（包含向量特有的 metadata）
+            doc = vector_docs.get(key) or bm25_docs.get(key)
+            if doc is None:
+                continue
+            # 判断主要来源（用于调试信息，不影响排序）
+            has_vec = key in vector_raw
+            has_bm = key in bm25_raw
+            source = "vector+bm25" if (has_vec and has_bm) else ("vector" if has_vec else "bm25")
+            results.append((doc, score, source))
+
+        return results
 
     def _get_vector_scores(self, documents: List[Document]) -> List[float]:
         """
