@@ -408,9 +408,6 @@ class RetrievalGrader:
             return GradeResult(
                 query=query,
                 grades=[],
-                decision=GradeLevel.NO_RESULTS,
-                decision_reason="检索结果为空",
-                latency_ms=0.0,
             )
 
         # 并行评估所有文档
@@ -421,10 +418,10 @@ class RetrievalGrader:
         result.latency_ms = (time.time() - start) * 1000
 
         logger.info(
-            f"[CRAG] query='{query[:30]}...' -> decision={grade_result.decision.value}, "
-            f"high={grade_result.high_count}/{grade_result.total_docs}, "
-            f"medium={grade_result.medium_count}/{grade_result.total_docs}, "
-            f"avg={grade_result.avg_score:.3f}, latency={grade_result.latency_ms:.0f}ms"
+            f"[CRAG] query='{query[:30]}...' -> decision={result.decision.value}, "
+            f"high={result.high_count}/{result.total_docs}, "
+            f"medium={result.medium_count}/{result.total_docs}, "
+            f"avg={result.avg_score:.3f}, latency={result.latency_ms:.0f}ms"
         )
 
         return result
@@ -823,8 +820,6 @@ class CorrectiveRAGPipeline:
                     return [], GradeResult(
                         query=query,
                         grades=[],
-                        decision=GradeLevel.NO_RESULTS,
-                        decision_reason="检索结果为空",
                     ), rewrite_history
 
             # Step 2: 评估检索结果
@@ -913,9 +908,8 @@ class CorrectiveRAGPipeline:
 
         # 理论上不会到达这里
         return [], GradeResult(
-            query=query, grades=[],
-            decision=GradeLevel.NO_RESULTS,
-            decision_reason="超出重试次数",
+            query=query,
+            grades=[],
         ), rewrite_history
 
     def _reorder_with_original_scores(

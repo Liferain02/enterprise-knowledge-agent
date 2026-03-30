@@ -511,7 +511,25 @@ class DocumentLoaderManager:
                 chunk_size, chunk_overlap, splitter_type
             )
             if splitter is not None:
-                chunks = splitter.split_documents(documents)
+                # MarkdownHeaderTextSplitter 只有 split_text，没有 split_documents
+                if hasattr(splitter, 'split_documents'):
+                    chunks = splitter.split_documents(documents)
+                else:
+                    # MarkdownHeaderTextSplitter / 其他不支持 split_documents 的处理
+                    # 注意：MarkdownHeaderTextSplitter.split_text 返回 List[Document]
+                    chunks = []
+                    from langchain_core.documents import Document as LCDocument
+                    for doc in documents:
+                        sub_chunks = splitter.split_text(doc.page_content)
+                        for sub in sub_chunks:
+                            if isinstance(sub, LCDocument):
+                                sub.metadata.update(doc.metadata)
+                                chunks.append(sub)
+                            else:
+                                chunks.append(LCDocument(
+                                    page_content=sub,
+                                    metadata=dict(doc.metadata),
+                                ))
             else:
                 # 兜底：返回原始文档
                 chunks = documents

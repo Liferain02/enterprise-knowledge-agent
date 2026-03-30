@@ -1,0 +1,2156 @@
+{
+  "stage1_baseline": {
+    "stage": "B-1",
+    "description": "基线向量检索",
+    "metrics": {
+      "recall_at_1": 0.631578947368421,
+      "recall_at_3": 0.7368421052631579,
+      "recall_at_5": 0.8157894736842105,
+      "precision_at_1": 0.631578947368421,
+      "precision_at_3": 0.5350877192982457,
+      "precision_at_5": 0.47368421052631576,
+      "mrr": 0.6938596491228071,
+      "ndcg_at_3": 1.1097838742402568,
+      "ndcg_at_5": 1.2981041302170073
+    },
+    "details": [
+      {
+        "query": "新员工入职流程是什么？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "员工手册",
+          "员工手册",
+          "招聘管理制度",
+          "招聘管理制度",
+          "员工手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 890.7
+      },
+      {
+        "query": "试用期多长时间？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "招聘管理制度",
+          "客户服务标准",
+          "财务报销制度",
+          "培训发展体系"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 374.4
+      },
+      {
+        "query": "公司工作时间是怎么规定的？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "行政办公管理制度",
+          "招聘管理制度",
+          "招聘管理制度",
+          "员工手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.2,
+        "latency_ms": 404.6
+      },
+      {
+        "query": "年假有多少天？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "绩效考核制度",
+          "员工手册",
+          "招聘管理制度",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.3333333333333333,
+        "latency_ms": 394.7
+      },
+      {
+        "query": "工资什么时候发放？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "绩效考核制度",
+          "绩效考核制度",
+          "绩效考核制度",
+          "员工手册",
+          "招聘管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.25,
+        "latency_ms": 410.2
+      },
+      {
+        "query": "公司有哪些福利？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "员工手册",
+          "招聘管理制度",
+          "培训发展体系",
+          "财务报销制度",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 387.2
+      },
+      {
+        "query": "离职流程是怎样的？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "员工手册",
+          "员工手册",
+          "招聘管理制度",
+          "培训发展体系",
+          "招聘管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 383.9
+      },
+      {
+        "query": "公司是哪一年成立的？",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "员工手册",
+          "行政办公管理制度",
+          "行政办公管理制度",
+          "商务合作流程",
+          "培训发展体系"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 386.9
+      },
+      {
+        "query": "公司发展历程",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "员工手册",
+          "商务合作流程",
+          "商务合作流程",
+          "培训发展体系",
+          "培训发展体系"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 376.5
+      },
+      {
+        "query": "公司的核心价值观是什么？",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "客户服务标准",
+          "信息安全管理制度",
+          "客户服务标准",
+          "绩效考核制度",
+          "行政办公管理制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 395.0
+      },
+      {
+        "query": "公司有哪些部门？",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "员工手册",
+          "培训发展体系",
+          "商务合作流程",
+          "行政办公管理制度",
+          "商务合作流程"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 368.6
+      },
+      {
+        "query": "公司的联系方式是什么？",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "商务合作流程",
+          "信息安全管理制度",
+          "商务合作流程",
+          "信息安全管理制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 387.5
+      },
+      {
+        "query": "社会招聘的流程是什么？",
+        "relevant": [
+          "招聘管理制度"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "招聘管理制度",
+          "招聘管理制度",
+          "培训发展体系",
+          "招聘管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 410.2
+      },
+      {
+        "query": "内部推荐有奖励吗？",
+        "relevant": [
+          "招聘管理制度"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "财务报销制度",
+          "绩效考核制度",
+          "财务报销制度",
+          "员工手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 377.6
+      },
+      {
+        "query": "面试有几轮？",
+        "relevant": [
+          "招聘管理制度"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "招聘管理制度",
+          "商务合作流程",
+          "客户服务标准",
+          "绩效考核制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 375.0
+      },
+      {
+        "query": "绩效考核有哪些维度？",
+        "relevant": [
+          "绩效考核制度"
+        ],
+        "retrieved_top5": [
+          "绩效考核制度",
+          "绩效考核制度",
+          "绩效考核制度",
+          "商务合作流程",
+          "招聘管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 376.0
+      },
+      {
+        "query": "绩效考核等级有哪些？",
+        "relevant": [
+          "绩效考核制度"
+        ],
+        "retrieved_top5": [
+          "绩效考核制度",
+          "绩效考核制度",
+          "绩效考核制度",
+          "招聘管理制度",
+          "商务合作流程"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 359.9
+      },
+      {
+        "query": "年终奖怎么发放？",
+        "relevant": [
+          "绩效考核制度"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "绩效考核制度",
+          "财务报销制度",
+          "员工手册",
+          "绩效考核制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 368.7
+      },
+      {
+        "query": "新员工培训多长时间？",
+        "relevant": [
+          "培训发展体系"
+        ],
+        "retrieved_top5": [
+          "培训发展体系",
+          "培训发展体系",
+          "培训发展体系",
+          "培训发展体系",
+          "招聘管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 435.5
+      },
+      {
+        "query": "技术发展通道是什么？",
+        "relevant": [
+          "培训发展体系"
+        ],
+        "retrieved_top5": [
+          "培训发展体系",
+          "培训发展体系",
+          "培训发展体系",
+          "客户服务标准",
+          "思路"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 440.5
+      },
+      {
+        "query": "外部培训费用可以报销吗？",
+        "relevant": [
+          "培训发展体系"
+        ],
+        "retrieved_top5": [
+          "培训发展体系",
+          "财务报销制度",
+          "财务报销制度",
+          "培训发展体系",
+          "培训发展体系"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 309.7
+      },
+      {
+        "query": "差旅费报销标准是多少？",
+        "relevant": [
+          "财务报销制度"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "财务报销制度",
+          "财务报销制度",
+          "财务报销制度",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 315.9
+      },
+      {
+        "query": "报销需要多长时间？",
+        "relevant": [
+          "财务报销制度"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "财务报销制度",
+          "财务报销制度",
+          "财务报销制度",
+          "绩效考核制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 316.8
+      },
+      {
+        "query": "招待客户费用标准是多少？",
+        "relevant": [
+          "财务报销制度"
+        ],
+        "retrieved_top5": [
+          "客户服务标准",
+          "客户服务标准",
+          "财务报销制度",
+          "财务报销制度",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.3333333333333333,
+        "latency_ms": 325.5
+      },
+      {
+        "query": "上班时间是几点？",
+        "relevant": [
+          "行政办公管理制度"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "行政办公管理制度",
+          "招聘管理制度",
+          "员工手册",
+          "员工手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 325.7
+      },
+      {
+        "query": "访客如何进入公司？",
+        "relevant": [
+          "行政办公管理制度"
+        ],
+        "retrieved_top5": [
+          "信息安全管理制度",
+          "信息安全管理制度",
+          "信息安全管理制度",
+          "客户服务标准",
+          "客户服务标准"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 321.6
+      },
+      {
+        "query": "IT服务热线是多少？",
+        "relevant": [
+          "IT支持服务手册"
+        ],
+        "retrieved_top5": [
+          "IT支持服务手册",
+          "IT支持服务手册",
+          "客户服务标准",
+          "客户服务标准",
+          "客户服务标准"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 318.9
+      },
+      {
+        "query": "电脑无法开机怎么办？",
+        "relevant": [
+          "IT支持服务手册"
+        ],
+        "retrieved_top5": [
+          "IT支持服务手册",
+          "IT支持服务手册",
+          "IT支持服务手册",
+          "信息安全管理制度",
+          "IT支持服务手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 340.7
+      },
+      {
+        "query": "客户服务目标是什么？",
+        "relevant": [
+          "客户服务标准"
+        ],
+        "retrieved_top5": [
+          "客户服务标准",
+          "客户服务标准",
+          "客户服务标准",
+          "客户服务标准",
+          "客户服务标准"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 298.0
+      },
+      {
+        "query": "客户投诉怎么处理？",
+        "relevant": [
+          "客户服务标准"
+        ],
+        "retrieved_top5": [
+          "客户服务标准",
+          "客户服务标准",
+          "客户服务标准",
+          "客户服务标准",
+          "客户服务标准"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 322.2
+      },
+      {
+        "query": "合同签订流程是什么？",
+        "relevant": [
+          "合同管理规定"
+        ],
+        "retrieved_top5": [
+          "合同管理规定",
+          "合同管理规定",
+          "合同管理规定",
+          "商务合作流程",
+          "合同管理规定"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 312.2
+      },
+      {
+        "query": "合同要保存多久？",
+        "relevant": [
+          "合同管理规定"
+        ],
+        "retrieved_top5": [
+          "合同管理规定",
+          "合同管理规定",
+          "合同管理规定",
+          "合同管理规定",
+          "商务合作流程"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 292.7
+      },
+      {
+        "query": "信息密级如何划分？",
+        "relevant": [
+          "信息安全管理制度"
+        ],
+        "retrieved_top5": [
+          "信息安全管理制度",
+          "信息安全管理制度",
+          "信息安全管理制度",
+          "信息安全管理制度",
+          "信息安全管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 331.8
+      },
+      {
+        "query": "密码要求是什么？",
+        "relevant": [
+          "信息安全管理制度"
+        ],
+        "retrieved_top5": [
+          "信息安全管理制度",
+          "信息安全管理制度",
+          "IT支持服务手册",
+          "IT支持服务手册",
+          "信息安全管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 322.3
+      },
+      {
+        "query": "数据如何备份？",
+        "relevant": [
+          "信息安全管理制度"
+        ],
+        "retrieved_top5": [
+          "信息安全管理制度",
+          "信息安全管理制度",
+          "产品技术文档",
+          "信息安全管理制度",
+          "信息安全管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 326.5
+      },
+      {
+        "query": "产品有哪些核心功能？",
+        "relevant": [
+          "产品技术文档"
+        ],
+        "retrieved_top5": [
+          "产品技术文档",
+          "客户服务标准",
+          "产品技术文档",
+          "产品技术文档",
+          "信息安全管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 330.1
+      },
+      {
+        "query": "技术架构是什么？",
+        "relevant": [
+          "产品技术文档"
+        ],
+        "retrieved_top5": [
+          "培训发展体系",
+          "培训发展体系",
+          "培训发展体系",
+          "产品技术文档",
+          "产品技术文档"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.25,
+        "latency_ms": 311.8
+      },
+      {
+        "query": "部署要求是什么？",
+        "relevant": [
+          "产品技术文档"
+        ],
+        "retrieved_top5": [
+          "产品技术文档",
+          "IT支持服务手册",
+          "IT支持服务手册",
+          "产品技术文档",
+          "IT支持服务手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 309.8
+      }
+    ],
+    "total_queries": 38,
+    "hit_count": 31,
+    "avg_latency_ms": 369.36629445929276
+  },
+  "stage2_hybrid": {
+    "stage": "B-2",
+    "description": "BM25+向量混合检索",
+    "metrics": {
+      "recall_at_1": 0.23684210526315788,
+      "recall_at_3": 0.6052631578947368,
+      "recall_at_5": 0.6842105263157895,
+      "precision_at_1": 0.23684210526315788,
+      "precision_at_3": 0.3245614035087719,
+      "precision_at_5": 0.2842105263157894,
+      "mrr": 0.4344611528822055,
+      "ndcg_at_3": 0.5992941574511774,
+      "ndcg_at_5": 0.7140351685210383
+    },
+    "details": [
+      {
+        "query": "新员工入职流程是什么？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "员工手册",
+          "员工手册",
+          "招聘管理制度",
+          "绩效考核制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 645.3
+      },
+      {
+        "query": "试用期多长时间？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "招聘管理制度",
+          "绩效考核制度",
+          "客户服务标准",
+          "财务报销制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 327.9
+      },
+      {
+        "query": "公司工作时间是怎么规定的？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "绩效考核制度",
+          "财务报销制度",
+          "招聘管理制度",
+          "行政办公管理制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.14285714285714285,
+        "latency_ms": 368.7
+      },
+      {
+        "query": "年假有多少天？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "招聘管理制度",
+          "绩效考核制度",
+          "员工手册",
+          "预算管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.25,
+        "latency_ms": 373.9
+      },
+      {
+        "query": "工资什么时候发放？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "绩效考核制度",
+          "招聘管理制度",
+          "绩效考核制度",
+          "绩效考核制度",
+          "员工手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.2,
+        "latency_ms": 324.2
+      },
+      {
+        "query": "公司有哪些福利？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "预算管理制度",
+          "员工手册",
+          "招聘管理制度",
+          "财务报销制度",
+          "招聘管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 347.6
+      },
+      {
+        "query": "离职流程是怎样的？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "员工手册",
+          "财务报销制度",
+          "绩效考核制度",
+          "绩效考核制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 319.1
+      },
+      {
+        "query": "公司是哪一年成立的？",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "员工手册",
+          "绩效考核制度",
+          "招聘管理制度",
+          "财务报销制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 323.2
+      },
+      {
+        "query": "公司发展历程",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "公司简介",
+          "员工手册",
+          "商务合作流程",
+          "商务合作流程",
+          "培训发展体系"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 351.5
+      },
+      {
+        "query": "公司的核心价值观是什么？",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "绩效考核制度",
+          "客户服务标准",
+          "信息安全管理制度",
+          "客户服务标准",
+          "招聘管理制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 339.9
+      },
+      {
+        "query": "公司有哪些部门？",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "员工手册",
+          "招聘管理制度",
+          "财务报销制度",
+          "预算管理制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 335.0
+      },
+      {
+        "query": "公司的联系方式是什么？",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "招聘管理制度",
+          "商务合作流程",
+          "招聘管理制度",
+          "信息安全管理制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 330.5
+      },
+      {
+        "query": "社会招聘的流程是什么？",
+        "relevant": [
+          "招聘管理制度"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "招聘管理制度",
+          "招聘管理制度",
+          "财务报销制度",
+          "绩效考核制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 309.1
+      },
+      {
+        "query": "内部推荐有奖励吗？",
+        "relevant": [
+          "招聘管理制度"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "财务报销制度",
+          "财务报销制度",
+          "绩效考核制度",
+          "员工手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 322.1
+      },
+      {
+        "query": "面试有几轮？",
+        "relevant": [
+          "招聘管理制度"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "绩效考核制度",
+          "绩效考核制度",
+          "预算管理制度",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 332.1
+      },
+      {
+        "query": "绩效考核有哪些维度？",
+        "relevant": [
+          "绩效考核制度"
+        ],
+        "retrieved_top5": [
+          "绩效考核制度",
+          "绩效考核制度",
+          "绩效考核制度",
+          "招聘管理制度",
+          "商务合作流程"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 300.6
+      },
+      {
+        "query": "绩效考核等级有哪些？",
+        "relevant": [
+          "绩效考核制度"
+        ],
+        "retrieved_top5": [
+          "绩效考核制度",
+          "绩效考核制度",
+          "招聘管理制度",
+          "绩效考核制度",
+          "商务合作流程"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 327.1
+      },
+      {
+        "query": "年终奖怎么发放？",
+        "relevant": [
+          "绩效考核制度"
+        ],
+        "retrieved_top5": [
+          "绩效考核制度",
+          "财务报销制度",
+          "财务报销制度",
+          "招聘管理制度",
+          "员工手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 333.7
+      },
+      {
+        "query": "新员工培训多长时间？",
+        "relevant": [
+          "培训发展体系"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "财务报销制度",
+          "培训发展体系",
+          "培训发展体系",
+          "招聘管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.3333333333333333,
+        "latency_ms": 325.4
+      },
+      {
+        "query": "技术发展通道是什么？",
+        "relevant": [
+          "培训发展体系"
+        ],
+        "retrieved_top5": [
+          ".gitkeep",
+          "预算管理制度",
+          "财务报销制度",
+          "招聘管理制度",
+          "财务报销制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 320.5
+      },
+      {
+        "query": "外部培训费用可以报销吗？",
+        "relevant": [
+          "培训发展体系"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "财务报销制度",
+          "培训发展体系",
+          "财务报销制度",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.3333333333333333,
+        "latency_ms": 324.2
+      },
+      {
+        "query": "差旅费报销标准是多少？",
+        "relevant": [
+          "财务报销制度"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "财务报销制度",
+          "财务报销制度",
+          "财务报销制度",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 331.4
+      },
+      {
+        "query": "报销需要多长时间？",
+        "relevant": [
+          "财务报销制度"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "财务报销制度",
+          "绩效考核制度",
+          "财务报销制度",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 332.6
+      },
+      {
+        "query": "招待客户费用标准是多少？",
+        "relevant": [
+          "财务报销制度"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "财务报销制度",
+          "财务报销制度",
+          "客户服务标准",
+          "客户服务标准"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 312.3
+      },
+      {
+        "query": "上班时间是几点？",
+        "relevant": [
+          "行政办公管理制度"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "财务报销制度",
+          "绩效考核制度",
+          "预算管理制度",
+          "财务报销制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 313.3
+      },
+      {
+        "query": "访客如何进入公司？",
+        "relevant": [
+          "行政办公管理制度"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "信息安全管理制度",
+          "信息安全管理制度",
+          "招聘管理制度",
+          "信息安全管理制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 294.9
+      },
+      {
+        "query": "IT服务热线是多少？",
+        "relevant": [
+          "IT支持服务手册"
+        ],
+        "retrieved_top5": [
+          "预算管理制度",
+          "财务报销制度",
+          "招聘管理制度",
+          "IT支持服务手册",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.25,
+        "latency_ms": 324.9
+      },
+      {
+        "query": "电脑无法开机怎么办？",
+        "relevant": [
+          "IT支持服务手册"
+        ],
+        "retrieved_top5": [
+          ".gitkeep",
+          "绩效考核制度",
+          "预算管理制度",
+          "财务报销制度",
+          "招聘管理制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.16666666666666666,
+        "latency_ms": 306.9
+      },
+      {
+        "query": "客户服务目标是什么？",
+        "relevant": [
+          "客户服务标准"
+        ],
+        "retrieved_top5": [
+          "预算管理制度",
+          "客户服务标准",
+          "客户服务标准",
+          "客户服务标准",
+          "预算管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 303.1
+      },
+      {
+        "query": "客户投诉怎么处理？",
+        "relevant": [
+          "客户服务标准"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "客户服务标准",
+          "客户服务标准",
+          "客户服务标准",
+          "客户服务标准"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 315.8
+      },
+      {
+        "query": "合同签订流程是什么？",
+        "relevant": [
+          "合同管理规定"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "合同管理规定",
+          "合同管理规定",
+          "合同管理规定",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 346.4
+      },
+      {
+        "query": "合同要保存多久？",
+        "relevant": [
+          "合同管理规定"
+        ],
+        "retrieved_top5": [
+          "预算管理制度",
+          "预算管理制度",
+          "财务报销制度",
+          "招聘管理制度",
+          "财务报销制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 338.3
+      },
+      {
+        "query": "信息密级如何划分？",
+        "relevant": [
+          "信息安全管理制度"
+        ],
+        "retrieved_top5": [
+          "预算管理制度",
+          "财务报销制度",
+          "信息安全管理制度",
+          "招聘管理制度",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.3333333333333333,
+        "latency_ms": 345.8
+      },
+      {
+        "query": "密码要求是什么？",
+        "relevant": [
+          "信息安全管理制度"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "信息安全管理制度",
+          "财务报销制度",
+          "信息安全管理制度",
+          "IT支持服务手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 296.3
+      },
+      {
+        "query": "数据如何备份？",
+        "relevant": [
+          "信息安全管理制度"
+        ],
+        "retrieved_top5": [
+          "预算管理制度",
+          "信息安全管理制度",
+          "信息安全管理制度",
+          "产品技术文档",
+          "信息安全管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 306.7
+      },
+      {
+        "query": "产品有哪些核心功能？",
+        "relevant": [
+          "产品技术文档"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "产品技术文档",
+          "客户服务标准",
+          "产品技术文档",
+          "产品技术文档"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 300.7
+      },
+      {
+        "query": "技术架构是什么？",
+        "relevant": [
+          "产品技术文档"
+        ],
+        "retrieved_top5": [
+          "预算管理制度",
+          "财务报销制度",
+          "招聘管理制度",
+          "财务报销制度",
+          "预算管理制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 319.2
+      },
+      {
+        "query": "部署要求是什么？",
+        "relevant": [
+          "产品技术文档"
+        ],
+        "retrieved_top5": [
+          "财务报销制度",
+          "产品技术文档",
+          "财务报销制度",
+          "招聘管理制度",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 322.7
+      }
+    ],
+    "total_queries": 38,
+    "hit_count": 26,
+    "avg_latency_ms": 334.01810495476974
+  },
+  "stage3_chunking": {
+    "stage": "C",
+    "description": "分块策略测试",
+    "strategies": {
+      "recursive": {
+        "chunk_count": 2,
+        "avg_tokens": 329.5,
+        "min_tokens": 178,
+        "max_tokens": 481,
+        "over_limit_count": 0,
+        "over_limit_ratio": 0.0
+      },
+      "semantic": {
+        "chunk_count": 1,
+        "avg_tokens": 631.0,
+        "min_tokens": 631,
+        "max_tokens": 631,
+        "over_limit_count": 0,
+        "over_limit_ratio": 0.0
+      },
+      "hybrid": {
+        "chunk_count": 3,
+        "avg_tokens": 220.33333333333334,
+        "min_tokens": 82,
+        "max_tokens": 413,
+        "over_limit_count": 0,
+        "over_limit_ratio": 0.0
+      },
+      "markdown": {
+        "error": "'MarkdownHeaderTextSplitter' object has no attribute 'split_documents'"
+      }
+    },
+    "sentence_split": {
+      "total": 4,
+      "passed": 3,
+      "rate": 0.75
+    }
+  },
+  "stage4_filter": {
+    "stage": "B-6",
+    "description": "候选过滤率分析",
+    "source_distribution": {
+      "vector": 1.0,
+      "bm25": 0.0,
+      "vector+bm25": 0.0
+    },
+    "total_sources": {
+      "vector": 380,
+      "bm25": 0,
+      "vector+bm25": 0
+    },
+    "hit@5_rate": 0.6842105263157895,
+    "details": [
+      {
+        "query": "新员工入职流程是什么？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "试用期多长时间？",
+        "hit@5": false,
+        "hit@10": false,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "公司工作时间是怎么规定的？",
+        "hit@5": false,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "年假有多少天？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "工资什么时候发放？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "公司有哪些福利？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "离职流程是怎样的？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "公司是哪一年成立的？",
+        "hit@5": false,
+        "hit@10": false,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "公司发展历程",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "公司的核心价值观是什么？",
+        "hit@5": false,
+        "hit@10": false,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "公司有哪些部门？",
+        "hit@5": false,
+        "hit@10": false,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "公司的联系方式是什么？",
+        "hit@5": false,
+        "hit@10": false,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "社会招聘的流程是什么？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "内部推荐有奖励吗？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "面试有几轮？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "绩效考核有哪些维度？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "绩效考核等级有哪些？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "年终奖怎么发放？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "新员工培训多长时间？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "技术发展通道是什么？",
+        "hit@5": false,
+        "hit@10": false,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "外部培训费用可以报销吗？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "差旅费报销标准是多少？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "报销需要多长时间？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "招待客户费用标准是多少？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "上班时间是几点？",
+        "hit@5": false,
+        "hit@10": false,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "访客如何进入公司？",
+        "hit@5": false,
+        "hit@10": false,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "IT服务热线是多少？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "电脑无法开机怎么办？",
+        "hit@5": false,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "客户服务目标是什么？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "客户投诉怎么处理？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "合同签订流程是什么？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "合同要保存多久？",
+        "hit@5": false,
+        "hit@10": false,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "信息密级如何划分？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "密码要求是什么？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "数据如何备份？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "产品有哪些核心功能？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "技术架构是什么？",
+        "hit@5": false,
+        "hit@10": false,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      },
+      {
+        "query": "部署要求是什么？",
+        "hit@5": true,
+        "hit@10": true,
+        "source_dist": {
+          "vector": 10,
+          "bm25": 0,
+          "vector+bm25": 0
+        },
+        "top_score": 0
+      }
+    ]
+  },
+  "stage5_rerank": {
+    "stage": "B-3",
+    "description": "多阶段+Rerank精排",
+    "metrics": {
+      "recall_at_1": 0.7,
+      "recall_at_3": 0.7,
+      "recall_at_5": 0.7,
+      "precision_at_1": 0.7,
+      "precision_at_3": 0.4333333333333333,
+      "precision_at_5": 0.3,
+      "mrr": 0.7,
+      "ndcg_at_3": 1.006533002277696,
+      "ndcg_at_5": 1.0501765803248944
+    },
+    "details": [
+      {
+        "query": "新员工入职流程是什么？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "员工手册",
+          "员工手册",
+          "培训发展体系",
+          "培训发展体系",
+          "招聘管理制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "candidates": 15,
+        "after_rerank": 5,
+        "rerank_scores": [
+          "0.890",
+          "0.861",
+          "0.187",
+          "0.184",
+          "0.170"
+        ],
+        "latency_ms": 742.6
+      },
+      {
+        "query": "试用期多长时间？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "招聘管理制度",
+          "招聘管理制度",
+          "招聘管理制度",
+          "绩效考核制度"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "candidates": 15,
+        "after_rerank": 4,
+        "rerank_scores": [
+          "0.205",
+          "0.192",
+          "0.174",
+          "0.123"
+        ],
+        "latency_ms": 600.0
+      },
+      {
+        "query": "公司工作时间是怎么规定的？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "员工手册",
+          "行政办公管理制度",
+          "员工手册",
+          "行政办公管理制度",
+          "员工手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "candidates": 15,
+        "after_rerank": 5,
+        "rerank_scores": [
+          "0.198",
+          "0.195",
+          "0.195",
+          "0.184",
+          "0.136"
+        ],
+        "latency_ms": 562.3
+      },
+      {
+        "query": "年假有多少天？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "员工手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "candidates": 15,
+        "after_rerank": 1,
+        "rerank_scores": [
+          "0.188"
+        ],
+        "latency_ms": 577.8
+      },
+      {
+        "query": "工资什么时候发放？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "员工手册",
+          "员工手册",
+          "员工手册",
+          "绩效考核制度",
+          "绩效考核制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "candidates": 15,
+        "after_rerank": 5,
+        "rerank_scores": [
+          "0.213",
+          "0.199",
+          "0.135",
+          "0.132",
+          "0.116"
+        ],
+        "latency_ms": 559.4
+      },
+      {
+        "query": "公司有哪些福利？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "员工手册",
+          "员工手册",
+          "招聘管理制度",
+          "培训发展体系",
+          "财务报销制度"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "candidates": 15,
+        "after_rerank": 5,
+        "rerank_scores": [
+          "0.296",
+          "0.197",
+          "0.124",
+          "0.116",
+          "0.101"
+        ],
+        "latency_ms": 577.8
+      },
+      {
+        "query": "离职流程是怎样的？",
+        "relevant": [
+          "员工手册"
+        ],
+        "retrieved_top5": [
+          "员工手册",
+          "员工手册",
+          "招聘管理制度",
+          "招聘管理制度",
+          "员工手册"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "candidates": 15,
+        "after_rerank": 5,
+        "rerank_scores": [
+          "0.474",
+          "0.197",
+          "0.167",
+          "0.154",
+          "0.134"
+        ],
+        "latency_ms": 572.2
+      },
+      {
+        "query": "公司是哪一年成立的？",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "candidates": 15,
+        "after_rerank": 0,
+        "rerank_scores": [],
+        "latency_ms": 587.5
+      },
+      {
+        "query": "公司发展历程",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "公司简介",
+          "培训发展体系",
+          "培训发展体系",
+          "培训发展体系"
+        ],
+        "hit": true,
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "candidates": 15,
+        "after_rerank": 4,
+        "rerank_scores": [
+          "0.790",
+          "0.152",
+          "0.140",
+          "0.121"
+        ],
+        "latency_ms": 597.4
+      },
+      {
+        "query": "公司的核心价值观是什么？",
+        "relevant": [
+          "公司简介"
+        ],
+        "retrieved_top5": [
+          "客户服务标准",
+          "客户服务标准",
+          "绩效考核制度",
+          "员工手册"
+        ],
+        "hit": false,
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "candidates": 15,
+        "after_rerank": 4,
+        "rerank_scores": [
+          "0.185",
+          "0.177",
+          "0.125",
+          "0.119"
+        ],
+        "latency_ms": 585.0
+      }
+    ],
+    "total_queries": 10,
+    "hit_count": 7,
+    "avg_latency_ms": 596.2023258209229,
+    "total_candidates": 150,
+    "total_after_rerank": 38,
+    "filter_rate": 74.66666666666667
+  },
+  "stage6_crag": {
+    "stage": "B-4",
+    "description": "CRAG正确性反馈",
+    "total_queries": 10,
+    "crag_decisions": {
+      "HIGH": 0,
+      "MEDIUM": 0,
+      "LOW": 0,
+      "NO_RESULTS": 0
+    },
+    "avg_high_ratio": 0,
+    "avg_avg_score": 0,
+    "rewrite_count": 0,
+    "avg_latency_ms": 0.0,
+    "details": [
+      {
+        "query": "新员工入职流程是什么？",
+        "decision": "ERROR",
+        "error": "name 'grade_result' is not defined"
+      },
+      {
+        "query": "试用期多长时间？",
+        "decision": "ERROR",
+        "error": "name 'grade_result' is not defined"
+      },
+      {
+        "query": "公司工作时间是怎么规定的？",
+        "decision": "ERROR",
+        "error": "name 'grade_result' is not defined"
+      },
+      {
+        "query": "年假有多少天？",
+        "decision": "ERROR",
+        "error": "GradeResult.__init__() got an unexpected keyword argument 'decision'"
+      },
+      {
+        "query": "工资什么时候发放？",
+        "decision": "ERROR",
+        "error": "name 'grade_result' is not defined"
+      },
+      {
+        "query": "公司有哪些福利？",
+        "decision": "ERROR",
+        "error": "name 'grade_result' is not defined"
+      },
+      {
+        "query": "离职流程是怎样的？",
+        "decision": "ERROR",
+        "error": "name 'grade_result' is not defined"
+      },
+      {
+        "query": "公司是哪一年成立的？",
+        "decision": "ERROR",
+        "error": "GradeResult.__init__() got an unexpected keyword argument 'decision'"
+      },
+      {
+        "query": "公司发展历程",
+        "decision": "ERROR",
+        "error": "name 'grade_result' is not defined"
+      },
+      {
+        "query": "公司的核心价值观是什么？",
+        "decision": "ERROR",
+        "error": "name 'grade_result' is not defined"
+      }
+    ]
+  },
+  "stage7_query_expansion": {
+    "stage": "B-5",
+    "description": "Query Expansion查询扩展",
+    "total_queries": 1,
+    "rule_decomposed": 1,
+    "llm_decomposed": 1,
+    "rule_rate": 1.0,
+    "llm_rate": 1.0,
+    "avg_latency_ms": 89.36715126037598,
+    "details": [
+      {
+        "query": "公司有哪些福利？",
+        "rule_sub_queries": [
+          "公司政策"
+        ],
+        "llm_sub_queries": [
+          "公司政策"
+        ],
+        "rule_strategy": "rule",
+        "llm_strategy": "hybrid",
+        "used_llm": false,
+        "latency_ms": 89.4
+      }
+    ]
+  }
+}
