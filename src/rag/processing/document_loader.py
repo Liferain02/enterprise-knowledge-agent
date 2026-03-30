@@ -168,6 +168,7 @@ class DocumentLoaderManager:
         self.chunk_token_overlap = getattr(self.settings, 'chunk_token_overlap', 100)
         self.chunk_concat_title = getattr(self.settings, 'chunk_concat_title', True)
         self.chunk_semantic_overlap = getattr(self.settings, 'chunk_semantic_overlap', True)
+        self.chunk_buffer_size = getattr(self.settings, 'chunk_buffer_size', 1)
         self.embedding_model = getattr(self.settings, 'embedding_model_for_token', 'text-embedding-3-small')
 
         # Token 编码器
@@ -488,8 +489,9 @@ class DocumentLoaderManager:
                     threshold=self.semantic_threshold,
                     min_chunk_size=100,
                     max_chunk_size=self.chunk_token_size * 2,  # 近似 token
-                    min_tokens=self.chunk_token_overlap * 2,
+                    min_tokens=self.chunk_token_size // 3,      # 约 1/3 目标大小
                     max_tokens=self.chunk_token_size * 2,
+                    buffer_size=self.chunk_buffer_size,
                     concat_title=self.chunk_concat_title,
                     semantic_overlap=self.chunk_semantic_overlap,
                     encoder=self.encoder,
@@ -499,6 +501,9 @@ class DocumentLoaderManager:
                     chunk_token_size=self.chunk_token_size,
                     chunk_token_overlap=self.chunk_token_overlap,
                     semantic_threshold=self.semantic_threshold,
+                    min_tokens=self.chunk_token_size // 3,
+                    max_tokens=self.chunk_token_size * 2,
+                    buffer_size=self.chunk_buffer_size,
                     concat_title=self.chunk_concat_title,
                     semantic_overlap=self.chunk_semantic_overlap,
                     encoder=self.encoder,

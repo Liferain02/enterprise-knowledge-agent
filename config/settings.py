@@ -173,12 +173,12 @@ class Settings(BaseSettings):
         description="文档分块重叠大小（字符数）"
     )
     chunking_strategy: str = Field(
-        default="semantic",
-        description="分块策略: recursive(固定长度) / markdown(标题) / semantic(语义) / hybrid(混合)"
+        default="hybrid",
+        description="分块策略: recursive(固定长度) / markdown(标题) / semantic(语义) / hybrid(混合，推荐)"
     )
     semantic_threshold: float = Field(
-        default=0.3,
-        description="语义分块阈值 (0-1，越高越敏感)"
+        default=0.35,
+        description="语义分块阈值 (0-1，越高越敏感，越低越聚合)"
     )
     # --- Token 数配置（主导推荐） ---
     chunk_token_size: int = Field(
@@ -188,6 +188,10 @@ class Settings(BaseSettings):
     chunk_token_overlap: int = Field(
         default=100,
         description="分块 overlap token 数"
+    )
+    chunk_buffer_size: int = Field(
+        default=1,
+        description="语义 overlap 句子数（默认 1，建议不超过 2）"
     )
     # --- 块内容增强 ---
     chunk_concat_title: bool = Field(

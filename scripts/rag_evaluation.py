@@ -479,9 +479,9 @@ async def eval_chunk_level(test_cases: List[EvalQuery],
     # 按文档分组 chunks
     doc_chunks: Dict[str, List[str]] = defaultdict(list)
     for i, (doc, meta) in enumerate(zip(all_docs, all_metadatas)):
-        source = meta.get("source", "") if meta else ""
-        doc_name = os.path.splitext(os.path.basename(source))[0] if source else f"doc_{i}"
-        doc_chunks[doc_name].append(f"chunk_{i}")
+        doc_obj = Document(page_content=doc, metadata=meta or {})
+        chunk_id = extract_chunk_id(doc_obj, i)
+        doc_chunks[os.path.splitext(os.path.basename(meta.get("source", "") if meta else ""))[0]].append(chunk_id)
 
     all_metrics = []
     details = []
@@ -544,7 +544,7 @@ async def eval_e2e_rag(test_cases: List[EvalQuery],
     print(f"【端到端 RAG 评估】（限制 {max_cases} 条，控制 token 消耗）")
     print(f"{'='*70}")
 
-    from src.agent.graph import run_agent
+    from src.agent.graph import arun_agent
 
     all_metrics = []
     details = []
@@ -554,7 +554,7 @@ async def eval_e2e_rag(test_cases: List[EvalQuery],
     for eq in test_cases[:max_cases]:
         start = time.time()
         try:
-            result = run_agent(eq.query, session_id=f"e2e-test-{hash(eq.query)}")
+            result = await arun_agent(eq.query, session_id=f"e2e-test-{hash(eq.query)}")
             answer = result.get("final_answer", "")
             latency = (time.time() - start) * 1000
             total_latency += latency
