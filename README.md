@@ -344,6 +344,33 @@ enterprise-knowledge-agent/
 [6/6] 验证结果
 ```
 
+### 文档分块策略
+
+项目提供 4 种分块策略，通过 `chunking_strategy` 配置或 `scripts/ingest.py --strategy` 指定：
+
+| 策略 | 说明 | 适用场景 |
+|------|------|---------|
+| `recursive`（默认） | Token-based 递归分割：按分隔符层级逐级拆分，最终以 token 数控制块大小 | 通用场景，稳定可靠 |
+| `semantic` | 基于 Embedding 变化率识别语义边界 + token 硬切兜底 | 需要语义连贯性的长文 |
+| `hybrid` | 粗分割（token 递归）+ 语义边界精调 + token 兜底 | 兼顾稳定性和语义质量 |
+| `markdown` | 按 Markdown 标题层级分割（字符数兜底） | 结构清晰的文档 |
+
+**Token-based 核心机制**：分块大小以 token 数为控制目标（推荐 500），而非字符数。在分割器的最终兜底（无可用分隔符时），采用句子粒度分割，避免在句子中间截断。
+
+**语义 Overlap**：块之间保留前后句作为重叠内容，提升跨块上下文的连贯性。
+
+**Title + Content 拼接**：每个 chunk 开头自动拼接父级 Markdown 标题，帮助 LLM 感知章节上下文。
+
+关键配置（`config/settings.py` / `config/.env`）：
+
+```bash
+CHUNK_TOKEN_SIZE=500        # 分块目标 token 数（推荐 300-800）
+CHUNK_TOKEN_OVERLAP=100     # overlap token 数
+CHUNK_SEMANTIC_OVERLAP=true # 是否启用语义 overlap
+CHUNK_CONCAT_TITLE=true     # 是否拼接父级标题
+SEMANTIC_THRESHOLD=0.3      # 语义分块敏感度（越高越敏感）
+```
+
 ### Agent 问答流程
 
 ```
@@ -414,6 +441,10 @@ Planner
 ```
 
 ### CorrectiveRAGPipeline 详解
+
+**CRAG（Corrective Retrieval-Augmented Generation）是什么**：CRAG 是一种检索后处理机制，在向量检索完成后、交给 LLM 生成答案之前，增加一个"检索质量评估 + 自我纠错"的环节。核心思想是——检索结果不一定完美，如果相关性低，就主动改写查询重新检索，而不是把劣质结果喂给 LLM 导致误导性回答。
+
+CRAG 在本项目中的定位：Knowledge Agent 在执行检索后，先评估检索结果的相关性，若质量过低则 rewrite 查询重试，最多重试 2 次；重试仍失败则触发 QueryExpander 兜底分解。相比"直接返回检索结果"，CRAG 能显著提升低相关或歧义查询的答案质量。
 
 完整流程分为三个阶段：
 
@@ -610,6 +641,40 @@ python scripts/ingest.py --reset --no-vision
 | .pdf  | ✅ | ✅ (Vision LLM) | ✅ |
 | .docx | ✅ | ✅ (Vision LLM) | ✅ |
 | .xlsx | — | — | ✅ |
+
+## 测试
+
+运行测试前需激活 conda 环境并配置代理：
+
+```bash
+conda activate agent-demo
+export HTTPS_PROXY=http://127.0.0.1:7897
+export HTTP_PROXY=http://127.0.0.1:7897
+```
+
+### 测试文件说明
+
+| 文件 | 说明 |
+|------|------|
+| `tests/test_chunking.py` | 文档分块策略测试：Token 估算、句子分割、各策略分块效果 |
+| `tests/test_crags.py` | CRAG 模块测试：评估决策、查询改写、端到端流程 |
+| `tests/test_retrieval_eval.py` | 检索评估测试 |
+| `tests/test_evaluation.py` | 综合评估测试 |
+| `tests/test_integration_e2e.py` | 端到端集成测试 |
+| `tests/test_reranker.py` | Reranker 测试 |
+| `tests/test_hybrid_reranker.py` | 混合检索 + Rerank 测试 |
+| `tests/test_query_expander.py` | 查询扩展测试 |
+
+运行测试：
+
+```bash
+# 运行单个测试文件
+python tests/test_chunking.py
+python tests/test_crags.py
+
+# 运行所有测试（需 pytest）
+pytest tests/ -v
+```
 
 ## 部署
 

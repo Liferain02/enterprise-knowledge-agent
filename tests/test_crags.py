@@ -576,9 +576,8 @@ async def test_corrective_retrieve_convenience_func():
     print("  ✓ corrective_retrieve() 支持 needs_expansion 参数")
 
 
-# ============================================================
-# 主函数
-# ============================================================
+if __name__ == "__main__":
+    import sys as _sys
 
     # 同步测试
     print("\n【同步测试】")
@@ -613,7 +612,3 @@ async def test_corrective_retrieve_convenience_func():
     print("\n" + "=" * 60)
     print("测试完成")
     print("=" * 60)
-
-
-if __name__ == "__main__":
-    run_all_tests()

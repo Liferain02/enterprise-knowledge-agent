@@ -207,14 +207,14 @@ def main():
     parser.add_argument(
         "--chunk-size",
         type=int,
-        default=1000,
-        help="分块大小 (默认: 1000)"
+        default=2000,
+        help="分块大小（字符数，仅用于 markdown 策略，默认: 2000）"
     )
     parser.add_argument(
         "--chunk-overlap",
         type=int,
-        default=200,
-        help="分块重叠大小 (默认: 200)"
+        default=300,
+        help="分块重叠大小（字符数，默认: 300）"
     )
     parser.add_argument(
         "--strategy", "-s",

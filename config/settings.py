@@ -163,21 +163,45 @@ class Settings(BaseSettings):
         default=0.7,
         description="相似度阈值 (0-1，越低越宽松)"
     )
+    # --- 字符数配置（保留兼容，仅用于 MarkdownHeader 分块） ---
     chunk_size: int = Field(
-        default=1000,
-        description="文档分块大小"
+        default=2000,
+        description="文档分块大小（字符数，用于 MarkdownHeader 分块策略）"
     )
     chunk_overlap: int = Field(
-        default=200,
-        description="文档分块重叠大小"
+        default=300,
+        description="文档分块重叠大小（字符数）"
     )
     chunking_strategy: str = Field(
-        default="recursive",
+        default="semantic",
         description="分块策略: recursive(固定长度) / markdown(标题) / semantic(语义) / hybrid(混合)"
     )
     semantic_threshold: float = Field(
         default=0.3,
         description="语义分块阈值 (0-1，越高越敏感)"
+    )
+    # --- Token 数配置（主导推荐） ---
+    chunk_token_size: int = Field(
+        default=500,
+        description="分块目标 token 数（推荐 300-800，用于 Recursive/Hybrid 分块）"
+    )
+    chunk_token_overlap: int = Field(
+        default=100,
+        description="分块 overlap token 数"
+    )
+    # --- 块内容增强 ---
+    chunk_concat_title: bool = Field(
+        default=True,
+        description="是否将父级 Markdown 标题拼接到每个 chunk 内容前"
+    )
+    chunk_semantic_overlap: bool = Field(
+        default=True,
+        description="是否使用语义 overlap（保留前后句）而非固定字符 overlap"
+    )
+    # --- Embedding 模型（用于估算 token） ---
+    embedding_model_for_token: str = Field(
+        default="text-embedding-3-small",
+        description="Embedding 模型名称（用于 tiktoken token 估算）"
     )
 
     # Reranker 配置

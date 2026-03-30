@@ -3,8 +3,13 @@ RAG 模块 - 检索增强生成
 """
 from .storage.vectorstore import get_vectorstore_manager, VectorStoreManager
 from .retrieval.retriever import get_retriever_manager
-from .processing.document_loader import get_document_loader_manager
-from .processing.chunker import SemanticChunker
+from .processing.document_loader import (
+    get_document_loader_manager,
+    TokenRecursiveTextSplitter,
+    estimate_tokens,
+    split_sentences,
+)
+from .processing.chunker import SemanticChunker, HybridChunker
 
 # 评估模块
 try:
@@ -25,7 +30,11 @@ __all__ = [
     "VectorStoreManager",
     "get_retriever_manager",
     "get_document_loader_manager",
+    "TokenRecursiveTextSplitter",
+    "estimate_tokens",
+    "split_sentences",
     "SemanticChunker",
+    "HybridChunker",
 ]
 
 # 条件性导出评估模块
