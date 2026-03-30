@@ -13,6 +13,30 @@ from ..storage.vectorstore import get_vectorstore
 from config.settings import get_settings
 
 
+# RRF 融合常数（通常 k=60，k 越大各方法贡献越均衡）
+RRF_K = 60
+
+# jieba 用户词典全局加载（只加载一次）
+_JIEBA_DICT_LOADED = False
+
+
+def _ensure_jieba_dict():
+    """确保 jieba 用户词典只加载一次"""
+    global _JIEBA_DICT_LOADED
+    if not _JIEBA_DICT_LOADED:
+        import os as _os
+        dict_path = _os.path.join(
+            _os.path.dirname(__file__),
+            "..", "..", "..",  # src/rag/retrieval/ -> project root
+            "data", "knowledge", "dicts", "jieba_user_dict.txt"
+        )
+        dict_path = _os.path.normpath(dict_path)
+        if _os.path.exists(dict_path):
+            import jieba as _jieba
+            _jieba.load_userdict(dict_path)
+            _JIEBA_DICT_LOADED = True
+
+
 class HybridRetrieverManager:
     """混合检索管理器 - 结合 BM25 和向量检索"""
 
@@ -23,7 +47,8 @@ class HybridRetrieverManager:
         vector_weight: float = 0.5,
         bm25_weight: float = 0.5,
         enable_bm25: bool = True,
-        enable_vector: bool = True
+        enable_vector: bool = True,
+        fusion_strategy: str = "rrf",
     ):
         """
         初始化混合检索管理器
@@ -31,10 +56,11 @@ class HybridRetrieverManager:
         Args:
             collection_name: 向量数据库集合名
             top_k: 返回结果数
-            vector_weight: 向量检索权重 (0-1)
-            bm25_weight: BM25 检索权重 (0-1)
+            vector_weight: 向量检索权重 (0-1)，仅用于 score fusion
+            bm25_weight: BM25 检索权重 (0-1)，仅用于 score fusion
             enable_bm25: 是否启用 BM25
             enable_vector: 是否启用向量检索
+            fusion_strategy: 融合策略: "rrf"（推荐）或 "score"
         """
         self.settings = get_settings()
         self.collection_name = collection_name
@@ -43,6 +69,7 @@ class HybridRetrieverManager:
         self.bm25_weight = bm25_weight
         self.enable_bm25 = enable_bm25
         self.enable_vector = enable_vector
+        self.fusion_strategy = fusion_strategy
 
         self._vector_retriever = None
         self._bm25_retriever = None
@@ -55,6 +82,9 @@ class HybridRetrieverManager:
         # 预构建 BM25 索引（避免每次 search 重建）
         self._tokenized_corpus: List[List[str]] = []
         self._bm25_index: Optional[Any] = None
+
+        # 加载 jieba 用户词典（只需加载一次）
+        _ensure_jieba_dict()
 
     @property
     def vectorstore(self):
@@ -173,17 +203,13 @@ class HybridRetrieverManager:
         filter: Optional[Dict] = None
     ) -> List[Tuple[Document, float, str]]:
         """
-        带分数的混合搜索（标准分数级融合）
+        带分数的混合搜索
 
         融合策略：
-        1. 向量 + BM25 分别检索，各自独立归一化
-        2. 按 page_content 合并同一文档的两路分数
-        3. 最终分数 = (1-α) × vec_norm + α × bm25_norm
-        4. 按融合分排序返回
-
-        与旧实现的区别（旧实现的问题）：
-        - 旧：BM25 丢弃向量已找到的文档（二选一）→ 丢失信号
-        - 新：同一文档同时持有两路分数 → 向量+BM25同时生效
+        - RRF（Reciprocal Rank Fusion）：按排名融合，不依赖分数绝对值
+          RRF_score(d) = Σ weight_i / (k + rank_i(d))
+          其中 k=60（融合常数），weight_i 来自配置权重
+        - 优势：不受两路分数范围差异影响，BM25 和向量各凭排名贡献
 
         Args:
             query: 查询文本
@@ -194,99 +220,141 @@ class HybridRetrieverManager:
             (文档, 融合分数, 主要来源) 元组列表，按融合分降序
         """
         k = k or self.top_k
-        # 候选放大：给两路归一化和去重留余量
-        candidate_k = k * 2
+        candidate_k = k * 2  # 两路各取 2k，留足融合余量
 
-        # ── 第一路：向量检索 ─────────────────────────────────────────
-        vector_raw: Dict[str, float] = {}  # content_hash → raw score
-        vector_docs: Dict[str, Document] = {}
+        # ── 自适应权重：根据查询长度动态调整 BM25 vs 向量权重 ─────────────
+        # 短查询（≤8字）：BM25 更擅长精确关键词匹配，提升其权重
+        # 长查询（>8字）：向量语义检索更强，降低 BM25 权重
+        _ensure_jieba_dict()  # 安全加载用户词典
+        query_len = len(query.strip())
+        if query_len <= 4:
+            # 极短查询（≤4字）：BM25 占主导
+            vec_w = 0.3
+            bm_w = 0.7
+        elif query_len <= 8:
+            # 短查询（5-8字）：BM25 稍强
+            vec_w = 0.4
+            bm_w = 0.6
+        else:
+            # 正常查询（>8字）：保持配置权重
+            vec_w = self.vector_weight
+            bm_w = self.bm25_weight
+
+        # ── 第一路：向量检索（返回 rank）────────────────────────────────
+        vector_ranked: Dict[str, Tuple[Document, int]] = {}  # key → (doc, rank)
         if self.enable_vector:
             try:
-                results = self.vectorstore.similarity_search_with_score(query, k=candidate_k)
-                for doc, raw_score in results:
+                results = self.vectorstore.similarity_search_with_score(
+                    query, k=candidate_k
+                )
+                for rank, (doc, raw_score) in enumerate(results, 1):
                     key = hash(doc.page_content)
-                    # ChromaDB distance (0-2) → similarity (0-1)
-                    vector_raw[key] = 1.0 - (raw_score / 2.0)
-                    if key not in vector_docs:
-                        vector_docs[key] = doc
+                    if key not in vector_ranked:
+                        vector_ranked[key] = (doc, rank)
             except Exception as e:
                 print(f"向量检索错误: {e}")
 
-        # ── 第二路：BM25 检索 ────────────────────────────────────────
-        bm25_raw: Dict[str, float] = {}  # content_hash → raw score
-        bm25_docs: Dict[str, Document] = {}
-        if self.enable_bm25 and self.bm25_retriever:
+        # ── 第二路：BM25 检索（返回 rank）─────────────────────────────
+        bm25_ranked: Dict[str, Tuple[Document, int]] = {}  # key → (doc, rank)
+        if self.enable_bm25 and self._bm25_index and self._documents:
             try:
-                docs = self.bm25_retriever.invoke(query)
-                if docs and self._documents:
-                    texts = [d.page_content for d in self._documents]
-                    bm25_index = self._bm25_index
-                    tokens = [w.lower() for w in jieba.cut(query) if w.strip()]
-                    all_scores = bm25_index.get_scores(tokens)
+                tokens = [w.lower() for w in jieba.cut(query) if w.strip()]
+                all_scores = self._bm25_index.get_scores(tokens)
 
-                    if all(s == 0 for s in all_scores):
-                        for i, text in enumerate(texts):
-                            t_lower = text.lower()
-                            all_scores[i] = sum(
-                                1 for t in tokens if t in t_lower
-                            ) / max(len(tokens), 1)
+                if all(s == 0 for s in all_scores):
+                    for i, text in enumerate(self._documents):
+                        t_lower = text.page_content.lower()
+                        all_scores[i] = sum(
+                            1 for t in tokens if t in t_lower
+                        ) / max(len(tokens), 1)
 
-                    doc_index = {d.page_content: i for i, d in enumerate(self._documents)}
-                    for doc in docs:
-                        key = hash(doc.page_content)
-                        idx = doc_index.get(doc.page_content)
-                        if idx is not None:
-                            bm25_raw[key] = all_scores[idx]
-                            if key not in bm25_docs:
-                                bm25_docs[key] = doc
+                scored = [(all_scores[i], doc) for i, doc in enumerate(self._documents) if all_scores[i] > 0]
+                scored.sort(key=lambda x: x[0], reverse=True)
+
+                for rank, (_, doc) in enumerate(scored[:candidate_k], 1):
+                    key = hash(doc.page_content)
+                    if key not in bm25_ranked:
+                        bm25_ranked[key] = (doc, rank)
             except Exception as e:
                 print(f"BM25 检索错误: {e}")
 
-        # ── 分数级融合 ──────────────────────────────────────────────
-        # 收集所有文档（两路并集）
-        all_keys = set(vector_raw) | set(bm25_raw)
-
+        # ── 融合 ──────────────────────────────────────────────────────
+        all_keys = set(vector_ranked) | set(bm25_ranked)
         if not all_keys:
             return []
 
-        # 归一化
-        def minmax(d: Dict[str, float]) -> Dict[str, float]:
-            if not d:
-                return {}
-            vals = list(d.values())
-            mn, mx = min(vals), max(vals)
-            if mx == mn:
-                return {k: 1.0 for k in d}
-            return {k: (v - mn) / (mx - mn) for k, v in d.items()}
+        if self.fusion_strategy == "rrf":
+            # RRF：按排名融合，与分数范围无关
+            w_vec = vec_w
+            w_bm = bm_w
 
-        vec_norm = minmax(vector_raw)
-        bm25_norm = minmax(bm25_raw)
-
-        # 融合：权重可配置，α ∈ [0, 1]
-        α = self.bm25_weight  # BM25 权重，向量权重 = 1 - α
-        fused: List[Tuple[str, float]] = []
-        for key in all_keys:
-            vs = vec_norm.get(key, 0.0)
-            bs = bm25_norm.get(key, 0.0)
-            score = (1 - α) * vs + α * bs
-            fused.append((key, score))
+            fused = []
+            for key in all_keys:
+                vec_score = 0.0
+                bm_score = 0.0
+                if key in vector_ranked:
+                    _, rank = vector_ranked[key]
+                    vec_score = w_vec / (RRF_K + rank)
+                if key in bm25_ranked:
+                    _, rank = bm25_ranked[key]
+                    bm_score = w_bm / (RRF_K + rank)
+                fused.append((key, vec_score + bm_score))
+        else:
+            # Score-level fusion（降级兼容）
+            fused = self._score_fusion(all_keys, vector_ranked, bm25_ranked, vec_w, bm_w)
 
         fused.sort(key=lambda x: x[1], reverse=True)
 
-        # ── 组装返回 ────────────────────────────────────────────────
+        # ── 组装返回 ──────────────────────────────────────────────────
         results = []
         for key, score in fused[:k]:
-            # 优先使用向量来源的 Document（包含向量特有的 metadata）
-            doc = vector_docs.get(key) or bm25_docs.get(key)
+            doc = (
+                vector_ranked.get(key, bm25_ranked.get(key, (None, None)))[0]
+                if key in vector_ranked or key in bm25_ranked
+                else None
+            )
             if doc is None:
                 continue
-            # 判断主要来源（用于调试信息，不影响排序）
-            has_vec = key in vector_raw
-            has_bm = key in bm25_raw
+            has_vec = key in vector_ranked
+            has_bm = key in bm25_ranked
             source = "vector+bm25" if (has_vec and has_bm) else ("vector" if has_vec else "bm25")
             results.append((doc, score, source))
 
         return results
+
+    def _score_fusion(
+        self,
+        all_keys: set,
+        vector_ranked: Dict,
+        bm25_ranked: Dict,
+        vec_weight: float = 0.5,
+        bm_weight: float = 0.5,
+    ) -> List[Tuple[str, float]]:
+        """
+        降级：Score-level 融合（仅在 fusion_strategy != "rrf" 时使用）
+
+        对两路分数分别做 Min-Max 归一化后加权求和。
+        注意：此方法不如 RRF 稳健，仅作降级兼容。
+        """
+        def minmax_normalize(
+            ranked: Dict[str, Tuple[Document, int]]
+        ) -> Dict[str, float]:
+            if not ranked:
+                return {}
+            # 将 rank (1-based, lower=better) 转为相似分 (0-1, higher=better)
+            max_rank = max(rank for _, rank in ranked.values())
+            return {key: (max_rank - rank + 1) / max_rank for key, (_, rank) in ranked.items()}
+
+        vec_norm = minmax_normalize(vector_ranked)
+        bm_norm = minmax_normalize(bm25_ranked)
+
+        fused = []
+        for key in all_keys:
+            vs = vec_norm.get(key, 0.0)
+            bs = bm_norm.get(key, 0.0)
+            score = (1 - bm_weight) * vs + bm_weight * bs
+            fused.append((key, score))
+        return fused
 
     def _get_vector_scores(self, documents: List[Document]) -> List[float]:
         """
@@ -396,9 +464,14 @@ def get_hybrid_retriever_manager(
     collection_name: str = "enterprise_knowledge",
     top_k: int = None,
     vector_weight: float = 0.5,
-    bm25_weight: float = 0.5
+    bm25_weight: float = 0.5,
+    fusion_strategy: str = "rrf",
 ) -> HybridRetrieverManager:
-    """获取混合检索管理器实例"""
+    """获取混合检索管理器实例
+
+    Args:
+        fusion_strategy: 融合策略，"rrf"（推荐）或 "score"
+    """
     global _hybrid_retriever_manager
 
     settings = get_settings()
@@ -408,7 +481,8 @@ def get_hybrid_retriever_manager(
             collection_name=collection_name,
             top_k=top_k or settings.retrieval_top_k,
             vector_weight=vector_weight,
-            bm25_weight=bm25_weight
+            bm25_weight=bm25_weight,
+            fusion_strategy=fusion_strategy,
         )
 
     return _hybrid_retriever_manager

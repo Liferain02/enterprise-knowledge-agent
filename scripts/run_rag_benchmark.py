@@ -42,27 +42,47 @@ from tests.eval_dataset import EVAL_DATASET, EvalQuery
 
 @dataclass
 class RetrievalMetrics:
+    """检索层评估指标"""
+    # 召回率 (Recall@K)
     recall_at_1: float = 0.0
     recall_at_3: float = 0.0
     recall_at_5: float = 0.0
+    recall_at_10: float = 0.0
+    # 精确率 (Precision@K)
     precision_at_1: float = 0.0
     precision_at_3: float = 0.0
     precision_at_5: float = 0.0
-    mrr: float = 0.0
+    # F1 分数 (综合评估)
+    f1_at_1: float = 0.0
+    f1_at_3: float = 0.0
+    f1_at_5: float = 0.0
+    # 排序质量
+    mrr: float = 0.0          # Mean Reciprocal Rank
     ndcg_at_3: float = 0.0
     ndcg_at_5: float = 0.0
+    # MAP (Mean Average Precision)
+    map: float = 0.0
 
     def to_dict(self) -> Dict[str, float]:
         return {
-            "Recall@1": self.recall_at_1,
-            "Recall@3": self.recall_at_3,
-            "Recall@5": self.recall_at_5,
-            "Precision@1": self.precision_at_1,
-            "Precision@3": self.precision_at_3,
-            "Precision@5": self.precision_at_5,
+            # 召回率
+            "R@1": self.recall_at_1,
+            "R@3": self.recall_at_3,
+            "R@5": self.recall_at_5,
+            "R@10": self.recall_at_10,
+            # 精确率
+            "P@1": self.precision_at_1,
+            "P@3": self.precision_at_3,
+            "P@5": self.precision_at_5,
+            # F1
+            "F1@1": self.f1_at_1,
+            "F1@3": self.f1_at_3,
+            "F1@5": self.f1_at_5,
+            # 排序质量
             "MRR": self.mrr,
             "NDCG@3": self.ndcg_at_3,
             "NDCG@5": self.ndcg_at_5,
+            "MAP": self.map,
         }
 
 
@@ -109,15 +129,43 @@ def calculate_ndcg(retrieved_ids: List[str], relevant_ids: List[str], k: int) ->
     return dcg / idcg if idcg else 0.0
 
 
+def calculate_f1(precision: float, recall: float) -> float:
+    """计算 F1 分数"""
+    if precision + recall == 0:
+        return 0.0
+    return 2 * (precision * recall) / (precision + recall)
+
+
+def calculate_map(retrieved_ids: List[str], relevant_ids: List[str]) -> float:
+    """计算 Average Precision (AP)，用于 MAP"""
+    if not relevant_ids:
+        return 0.0
+    relevant_set = set(relevant_ids)
+    ap = 0.0
+    num_hits = 0
+    for i, doc_id in enumerate(retrieved_ids, 1):
+        if doc_id in relevant_set:
+            num_hits += 1
+            ap += num_hits / i
+    return ap / len(relevant_ids) if relevant_ids else 0.0
+
+
 def evaluate_retrieval(retrieved_docs: List[Document], eval_query: EvalQuery) -> Tuple[RetrievalMetrics, List[str]]:
     retrieved_ids = [extract_doc_id(doc, i) for i, doc in enumerate(retrieved_docs)]
     metrics = RetrievalMetrics()
-    for k in [1, 3, 5]:
-        setattr(metrics, f"recall_at_{k}", calculate_recall(retrieved_ids, eval_query.relevant_doc_ids, k))
-        setattr(metrics, f"precision_at_{k}", calculate_precision(retrieved_ids, eval_query.relevant_doc_ids, k))
+    for k in [1, 3, 5, 10]:
+        recall = calculate_recall(retrieved_ids, eval_query.relevant_doc_ids, k)
+        precision = calculate_precision(retrieved_ids, eval_query.relevant_doc_ids, k)
+        if k <= 5:
+            setattr(metrics, f"recall_at_{k}", recall)
+            setattr(metrics, f"precision_at_{k}", precision)
+            setattr(metrics, f"f1_at_{k}", calculate_f1(precision, recall))
+        elif k == 10:
+            setattr(metrics, f"recall_at_{k}", recall)
     metrics.mrr = calculate_mrr(retrieved_ids, eval_query.relevant_doc_ids)
     metrics.ndcg_at_3 = calculate_ndcg(retrieved_ids, eval_query.relevant_doc_ids, 3)
     metrics.ndcg_at_5 = calculate_ndcg(retrieved_ids, eval_query.relevant_doc_ids, 5)
+    metrics.map = calculate_map(retrieved_ids, eval_query.relevant_doc_ids)
     return metrics, retrieved_ids
 
 
@@ -126,9 +174,10 @@ def average_metrics(metrics_list: List[RetrievalMetrics]) -> RetrievalMetrics:
         return RetrievalMetrics()
     avg = RetrievalMetrics()
     n = len(metrics_list)
-    for attr in ['recall_at_1', 'recall_at_3', 'recall_at_5',
+    for attr in ['recall_at_1', 'recall_at_3', 'recall_at_5', 'recall_at_10',
                  'precision_at_1', 'precision_at_3', 'precision_at_5',
-                 'mrr', 'ndcg_at_3', 'ndcg_at_5']:
+                 'f1_at_1', 'f1_at_3', 'f1_at_5',
+                 'mrr', 'ndcg_at_3', 'ndcg_at_5', 'map']:
         setattr(avg, attr, sum(getattr(m, attr) for m in metrics_list) / n)
     return avg
 
@@ -728,8 +777,8 @@ async def run_benchmark():
     print(f"#{'#'*70}")
 
     # 指标对比表
-    print(f"\n{'阶段':<32} {'R@1':>6} {'R@3':>6} {'R@5':>6} {'MRR':>6} {'NDCG@3':>8} {'NDCG@5':>8}")
-    print("-" * 80)
+    print(f"\n{'阶段':<32} {'R@1':>6} {'R@3':>6} {'R@5':>6} {'P@1':>6} {'F1@1':>6} {'MRR':>6} {'MAP':>6} {'NDCG@5':>7}")
+    print("-" * 100)
     stage_labels = [
         ("stage1_baseline", "① B-1 基线-向量检索"),
         ("stage2_hybrid", "② B-2 混合-BM25+向量"),
@@ -739,8 +788,8 @@ async def run_benchmark():
         if key in all_results and "metrics" in all_results[key]:
             m = all_results[key]["metrics"]
             print(f"{label:<32} {m['recall_at_1']:>6.2f} {m['recall_at_3']:>6.2f} "
-                  f"{m['recall_at_5']:>6.2f} {m['mrr']:>6.2f} "
-                  f"{m['ndcg_at_3']:>8.2f} {m['ndcg_at_5']:>8.2f}")
+                  f"{m['recall_at_5']:>6.2f} {m['precision_at_1']:>6.2f} {m['f1_at_1']:>6.2f} "
+                  f"{m['mrr']:>6.2f} {m['map']:>6.2f} {m['ndcg_at_5']:>7.2f}")
 
     # 提升幅度
     b1 = all_results.get("stage1_baseline", {}).get("metrics", {})
