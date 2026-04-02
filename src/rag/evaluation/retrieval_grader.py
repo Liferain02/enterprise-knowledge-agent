@@ -19,6 +19,7 @@ Corrective RAG - 检索结果评估与自我纠错
 """
 import asyncio
 import time
+import random
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from enum import Enum
@@ -291,10 +292,11 @@ class RetrievalGrader:
 
                 if is_rate_limited or is_server_error:
                     if attempt < max_retries - 1:
-                        wait = (2 ** attempt) * 1.5  # 指数退避: 1.5s, 3s, 6s
+                        base_wait = 1.5
+                        wait = base_wait * (2 ** attempt) * random.uniform(0.5, 1.5)
                         logger.warning(
                             f"评估请求失败 (attempt {attempt+1}/{max_retries}): {error_str[:80]}, "
-                            f"等待 {wait:.1f}s 后重试..."
+                            f"等待 {wait:.1f}s 后重试 (jitter)"
                         )
                         await asyncio.sleep(wait)
                         continue
@@ -523,7 +525,8 @@ class RetrievalGrader:
 
                     if is_rate_limited or is_server_error:
                         if attempt < max_retries - 1:
-                            wait = (2 ** attempt) * 1.5
+                            base_wait = 1.5
+                            wait = base_wait * (2 ** attempt) * random.uniform(0.5, 1.5)
                             logger.warning(
                                 f"查询改写请求失败 (attempt {attempt+1}/{max_retries}): "
                                 f"{error_str[:80]}, 等待 {wait:.1f}s 后重试..."
@@ -670,11 +673,11 @@ class CorrectiveRAGPipeline:
         )
         self.rerank_before_grade = rerank_before_grade
 
-        # 评估器（max_concurrent=2 避免触发 LLM 限流）
+        # 评估器（并发数从配置读取，默认 5 减少延迟）
         self.grader = RetrievalGrader(
             grade_threshold=grade_threshold,
             llm_temperature=0.1,
-            max_concurrent=2,
+            max_concurrent=getattr(settings, 'crag_max_concurrent', 5),
         )
 
         # 查询扩展器（延迟初始化）
@@ -989,7 +992,7 @@ def get_retrieval_grader(
             grade_threshold=grade_threshold or getattr(
                 settings, 'crag_grade_threshold', 0.5
             ),
-            max_concurrent=2,
+            max_concurrent=getattr(settings, 'crag_max_concurrent', 5),
         )
     return _grader
 

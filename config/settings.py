@@ -307,6 +307,10 @@ class Settings(BaseSettings):
         default=1,
         description="Corrective RAG 查询重写后的最大重试次数（降低以减少延迟）"
     )
+    crag_max_concurrent: int = Field(
+        default=5,
+        description="CRAG LLM 评估并发数（提高并发减少延迟，但可能触发 LLM 限流）"
+    )
     crag_grade_threshold: float = Field(
         default=0.25,
         description="CRAG HIGH 相关性阈值（0.0~1.0），>= 此值视为高相关"
