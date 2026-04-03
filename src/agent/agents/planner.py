@@ -157,16 +157,30 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     if quick_result == "simple":
         print(f"[Planner] 快速判断: 简单任务（跳过 LLM）")
+        # 简单任务也可快速确定 Agent → 设置 _quick_agent，跳过 Supervisor
+        agent = _quick_route(last_user_message)
         return {
             "is_complex": False,
             "plan_steps": [],
-            "plan_reasoning": "规则快速判断为简单任务",
+            "plan_reasoning": f"快速路由: {agent}",
             "current_step": 0,
+            "_quick_agent": agent,
         }
 
     if quick_result == "complex":
         print(f"[Planner] 快速判断: 复杂任务（进入 LLM 拆步骤）")
     else:
+        # ── 中等复杂度（< 40字 + 无复杂信号）：快速路由不调 LLM ──────────
+        if len(last_user_message) <= 40:
+            print(f"[Planner] 快速判断: 中等任务（快速路由，不调 LLM）")
+            agent = _quick_route(last_user_message)
+            return {
+                "is_complex": False,
+                "plan_steps": [],
+                "plan_reasoning": f"快速路由: {agent}",
+                "current_step": 0,
+                "_quick_agent": agent,
+            }
         print(f"[Planner] 快速判断: 不确定（进入 LLM 精确判断）")
 
     # ── LLM 路径：精确判断（仅 complex / uncertain 到达此处）─────────
@@ -265,6 +279,39 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
+def _quick_route(question: str) -> str:
+    """
+    快速路由（纯规则，无 LLM 调用）
+
+    根据关键词快速判断应该路由到哪个 Agent。
+    """
+    q = question.lower().strip()
+
+    # 问候、寒暄
+    greetings = ["你好", "hello", "hi", "早上好", "下午好", "晚上好", "最近怎样", "在吗", "嗨", "您好"]
+    if any(g in q for g in greetings):
+        return "general_agent"
+
+    # 明确的时间查询（不涉及知识库）
+    time_keywords = ["现在几点", "几点钟", "当前时间", "今天星期几", "几点了", "今天几号"]
+    if any(k in q for k in time_keywords):
+        return "operation_agent"
+
+    # 明确的历史查询
+    history_keywords = ["上一", "之前的问题", "之前的对话", "前一次", "刚才"]
+    if any(k in q for k in history_keywords):
+        return "operation_agent"
+
+    # 明确的计算（只涉及纯数字计算）
+    calc_only = ["1+1", "2*3", "计算器", "算术"]
+    if any(k in q for k in calc_only):
+        return "operation_agent"
+
+    # 默认路由到知识库（处理公司制度、政策、具体信息查询）
+    # 包括：年假、病假、报销、请假、流程、制度等问题
+    return "knowledge_agent"
+
+
 def _get_last_user_message(messages: list) -> str:
     """获取最后一条用户消息"""
     for msg in reversed(messages):
@@ -281,18 +328,24 @@ def _get_last_user_message(messages: list) -> str:
 def route_from_planner(state: Dict[str, Any]) -> str:
     """
     从 Planner 路由到下一个节点
-    
-    - 如果是复杂任务 -> 执行第一个步骤
-    - 如果是简单任务 -> 交给 Supervisor 处理
+
+    - 复杂任务 -> execute_plan
+    - 简单任务 + 有 _quick_agent（快速路由）-> 直接跳转到对应 Worker Agent，跳过 Supervisor
+    - 简单任务 + 无 _quick_agent -> 交给 Supervisor 决策
     """
     is_complex = state.get("is_complex", False)
-    
+
     if is_complex:
-        # 复杂任务：开始执行步骤
         return "execute_plan"
-    else:
-        # 简单任务：交给 Supervisor
-        return "supervisor"
+
+    # Planner 已经通过快速路由确定了 Agent → 直接跳转，跳过 Supervisor（省去一次 LLM 调用）
+    quick_agent = state.get("_quick_agent")
+    if quick_agent:
+        print(f"[Planner → Agent] 快速路由，跳过 Supervisor，直接 → {quick_agent}")
+        return quick_agent
+
+    # Planner 无法快速确定 → 交给 Supervisor 决策
+    return "supervisor"
 
 
 # ==================== 计划执行节点 ====================

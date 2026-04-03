@@ -3,6 +3,7 @@ LangGraph Multi-Agent 工作流图
 架构：maybe_summarize → retrieve_mem0_memories → Planner → Supervisor → Worker Agents → END
 """
 import asyncio
+import time as _time
 from typing import Dict, Any, List
 from langgraph.graph import StateGraph, END
 from langgraph.graph import MessagesState
@@ -83,6 +84,8 @@ async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
     if len(messages) <= threshold:
         return {}
 
+    t0 = _time.time()
+
     old_messages = messages[:-keep_recent]
     # 若旧消息过少则不值得总结
     if len(old_messages) < 2:
@@ -129,6 +132,7 @@ async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
     print(
         f"[Summarize] 触发摘要：原 {len(messages)} 条消息 → "
         f"删除 {len(remove_ops)} 条，保留最近 {keep_recent} 条"
+        f" | 耗时: {_time.time() - t0:.2f}s"
     )
 
     return {
@@ -156,16 +160,31 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
         print("[Mem0] 未启用，跳过检索")
         return {}
 
+    # 问候语跳过（无上下文可关联，且节省一次 LLM 检索开销）
+    _GREETING_PATTERNS = (
+        r"^(你好|hi|hello|您好|早上好|下午好|晚上好|在吗|嗨|你好！|你好。|hi！|hi。|hello！|hello。)"
+    )
+    import re
+    messages = state.get("messages", [])
+    last_msg = ""
+    for msg in reversed(messages):
+        msg_type = getattr(msg, "type", None) or type(msg).__name__
+        if msg_type in ("human", "HumanMessage"):
+            last_msg = getattr(msg, "content", "")
+            break
+    if last_msg and re.match(_GREETING_PATTERNS, last_msg.strip(), re.IGNORECASE):
+        print("[Mem0] 问候语，跳过检索")
+        return {}
+
     try:
         from .memory import get_mem0_manager
 
-        # 获取当前消息
-        messages = state.get("messages", [])
         if not messages:
             print("[Mem0] 无消息，跳过检索")
             return {}
 
         print(f"[Mem0] 开始检索，消息数量: {len(messages)}")
+        t0 = _time.time()
 
         # 提取当前用户问题
         current_query = ""
@@ -184,23 +203,27 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
 
         # 检索 Mem0 记忆 - 同时检索当前会话和跨会话记忆
         mem0_manager = get_mem0_manager()
-        
+
         # 1. 优先检索当前会话记忆
+        t1 = _time.time()
         current_session_memories = await mem0_manager.search(
             query=current_query,
             user_id=user_id,
             session_id=session_id,
             limit=2
         )
-        
+        print(f"[Mem0] 检索当前会话: {len(current_session_memories)} 条 | 耗时: {_time.time()-t1:.2f}s")
+
         # 2. 检索跨会话记忆（不限制会话）
+        t2 = _time.time()
         cross_session_memories = await mem0_manager.search(
             query=current_query,
             user_id=user_id,
             session_id=None,  # 跨会话检索
             limit=3
         )
-        
+        print(f"[Mem0] 检索跨会话: {len(cross_session_memories)} 条 | 耗时: {_time.time()-t2:.2f}s")
+
         # 合并记忆，去重
         all_memories = {m["id"]: m for m in current_session_memories}
         for m in cross_session_memories:
@@ -209,6 +232,7 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
         memories = list(all_memories.values())[:5]
 
         if not memories:
+            print(f"[Mem0] 无相关记忆 | 总耗时: {_time.time()-t0:.2f}s")
             return {}
 
         # 格式化记忆
@@ -217,7 +241,7 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
             max_chars=getattr(settings, "mem0_max_context_chars", 500)
         )
 
-        print(f"[Mem0] 检索到 {len(memories)} 条相关记忆")
+        print(f"[Mem0] 检索到 {len(memories)} 条相关记忆 | 总耗时: {_time.time()-t0:.2f}s")
 
         return {"mem0_memories": formatted_memories}
 
@@ -267,13 +291,17 @@ def create_multi_agent_graph() -> StateGraph:
     workflow.add_edge("maybe_summarize", "retrieve_mem0_memories")
     workflow.add_edge("retrieve_mem0_memories", "planner")
 
-    # Planner → Supervisor（简单）或 Execute Plan（复杂）
+    # Planner → Supervisor / Worker Agent（简单）或 Execute Plan（复杂）
+    # route_from_planner 可能返回：supervisor / general_agent / operation_agent / knowledge_agent / execute_plan
     workflow.add_conditional_edges(
         "planner",
         route_from_planner,
         {
             "supervisor": "supervisor",
             "execute_plan": "execute_plan",
+            "general_agent": "general_agent",
+            "operation_agent": "operation_agent",
+            "knowledge_agent": "knowledge_agent",
         }
     )
 
@@ -325,15 +353,31 @@ async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
         print("[Mem0] 未启用，跳过保存")
         return {}
 
+    # 问候语跳过（无上下文可关联，且节省一次 LLM 保存开销）
+    _GREETING_PATTERNS = (
+        r"^(你好|hi|hello|您好|早上好|下午好|晚上好|在吗|嗨|你好！|你好。|hi！|hi。|hello！|hello。)"
+    )
+    import re
+    messages = state.get("messages", [])
+    last_msg = ""
+    for msg in reversed(messages):
+        msg_type = getattr(msg, "type", None) or type(msg).__name__
+        if msg_type in ("human", "HumanMessage"):
+            last_msg = getattr(msg, "content", "")
+            break
+    if last_msg and re.match(_GREETING_PATTERNS, last_msg.strip(), re.IGNORECASE):
+        print("[Mem0] 问候语，跳过保存")
+        return {}
+
     try:
         from .memory import get_mem0_manager
 
-        messages = state.get("messages", [])
         if not messages or len(messages) < 2:
             print("[Mem0] 消息不足，跳过保存")
             return {}
 
         print(f"[Mem0] 开始保存，消息数量: {len(messages)}")
+        t0 = _time.time()
 
         # 获取用户ID和会话ID
         session_id = state.get("session_id", "default")
@@ -353,26 +397,30 @@ async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
 
         # 保存到 Mem0 - 同时保存当前会话和跨会话记忆
         mem0_manager = get_mem0_manager()
-        
+
         # 1. 保存当前会话记忆
+        t1 = _time.time()
         result = await mem0_manager.add_conversation(
             messages=msg_list,
             user_id=user_id,
             session_id=session_id
         )
-        
+        print(f"[Mem0] 保存当前会话 | 耗时: {_time.time()-t1:.2f}s")
+
         # 2. 保存跨会话记忆（不带 session_id 限制，用于跨会话检索）
         cross_session_msg_list = [
-            {"role": m["role"], "content": m["content"]} 
+            {"role": m["role"], "content": m["content"]}
             for m in msg_list
         ]
+        t2 = _time.time()
         await mem0_manager.add_conversation(
             messages=cross_session_msg_list,
             user_id=user_id,
             session_id=None  # 跨会话记忆
         )
+        print(f"[Mem0] 保存跨会话 | 耗时: {_time.time()-t2:.2f}s")
 
-        print(f"[Mem0] 保存对话到记忆: user={user_id}, session={session_id}")
+        print(f"[Mem0] 保存完成 | 总耗时: {_time.time()-t0:.2f}s")
 
         return {}
 
@@ -512,8 +560,10 @@ async def arun_agent(
         "user_id": user_id,
     }
 
+    t0 = _time.time()
     try:
         result = await graph.ainvoke(initial_state, run_config)
+        print(f"[PERF] arun_agent 总耗时: {_time.time()-t0:.2f}s")
         return _extract_result(result)
     except Exception as e:
         print(f"Agent 执行出错: {e}")

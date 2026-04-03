@@ -1,13 +1,19 @@
 """
 检索器模块
-支持基础向量检索、混合检索（BM25 + 向量）和带 Reranker 的重排序检索
+支持基础向量检索、混合检索（BM25 + 向量）和带 Reranker 的重排序检索。
+集成 ACL 权限过滤：在 Chroma filter 层面实现"检索前过滤"。
 """
+import time
+import logging
 from typing import List, Optional, Dict, Any
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from ..storage.vectorstore import get_vectorstore, VectorStoreManager
 from .reranker import get_reranker_manager
 from config.settings import get_settings
+from .acl_filter import build_acl_filter, UserContext, check_doc_access
+
+logger = logging.getLogger(__name__)
 
 
 class RetrieverManager:
@@ -118,35 +124,166 @@ class RetrieverManager:
             filter=filter
         )
 
+    def _build_filter(
+        self,
+        base_filter: Optional[Dict] = None,
+        user: Optional[UserContext] = None,
+        include_expired: bool = False,
+    ) -> Optional[Dict]:
+        """
+        合并 Chroma filter：基础 filter + ACL filter。
+        ACL filter 通过 build_acl_filter() 构建，在检索前完成权限过滤。
+        """
+        acl_filter = build_acl_filter(user=user, include_expired=include_expired)
+
+        if base_filter is None and acl_filter is None:
+            return None
+        if base_filter is None:
+            return acl_filter
+        if acl_filter is None:
+            return base_filter
+
+        # AND 组合：同时满足基础过滤和 ACL 权限
+        return {"$and": [base_filter, acl_filter]}
+
+    def search_with_acl(
+        self,
+        query: str,
+        k: Optional[int] = None,
+        user: Optional[UserContext] = None,
+        base_filter: Optional[Dict] = None,
+        include_expired: bool = False,
+    ) -> List[Document]:
+        """
+        带 ACL 权限过滤的检索。
+        检索前先通过 build_acl_filter() 过滤，仅返回用户有权限看到的文档。
+
+        Args:
+            query: 查询文本
+            k: 返回数量
+            user: 当前用户上下文（用于构建 ACL filter）
+            base_filter: 额外的 Chroma filter（如分类过滤）
+            include_expired: 是否包含过期文档
+
+        Returns:
+            用户有权限访问的文档列表
+        """
+        k = k or self.top_k
+
+        # 合并 ACL filter 和 base_filter
+        final_filter = self._build_filter(
+            base_filter=base_filter,
+            user=user,
+            include_expired=include_expired,
+        )
+
+        # ACL 审计日志
+        if user:
+            logger.debug(
+                f"[Retriever] user={user.username}({user.role}), "
+                f"filter_keys={list(final_filter.keys()) if final_filter else None}"
+            )
+
+        # 检索
+        if self.use_hybrid and self.hybrid_manager:
+            return self.hybrid_manager.search(query, k=k)
+
+        vectorstore = get_vectorstore(self.collection_name)
+        return vectorstore.similarity_search(query, k=k, filter=final_filter)
+
+    def search_with_score_acl(
+        self,
+        query: str,
+        k: Optional[int] = None,
+        user: Optional[UserContext] = None,
+        base_filter: Optional[Dict] = None,
+        include_expired: bool = False,
+    ) -> List[tuple[Document, float]]:
+        """
+        带 ACL 权限过滤和分数的检索。
+
+        Returns:
+            (文档, 相关分) 列表，仅包含用户有权限的文档
+        """
+        k = k or self.top_k
+        final_filter = self._build_filter(
+            base_filter=base_filter,
+            user=user,
+            include_expired=include_expired,
+        )
+
+        if self.use_hybrid and self.hybrid_manager:
+            results = self.hybrid_manager.search_with_scores(query, k=k)
+            return [(doc, score) for doc, score, _ in results]
+
+        vectorstore = get_vectorstore(self.collection_name)
+        return vectorstore.similarity_search_with_score(query, k=k, filter=final_filter)
+
     def search_with_rerank(
         self,
         query: str,
         k: Optional[int] = None,
-        filter: Optional[Dict] = None
+        user: Optional[UserContext] = None,
+        base_filter: Optional[Dict] = None,
+        include_expired: bool = False,
     ) -> List[tuple[Document, float]]:
         """
-        带重排序的搜索
-        先检索更多候选文档，然后用 Reranker 重排序
+        带重排序的检索（集成 ACL 权限过滤）。
+
+        Args:
+            user: 当前用户上下文（用于 ACL 过滤）
+            base_filter: 额外的 Chroma filter
+            include_expired: 是否包含过期文档
         """
         k = k or self.top_k
 
-        # 1. 先检索更多候选文档（通常是 top_n 的 2-3 倍）
+        # 1. 带 ACL 过滤检索候选文档
         candidate_k = k * 3
-
-        # 使用 search_with_score 获取带分数的结果
-        scored_candidates = self.search_with_score(query, k=candidate_k, filter=filter)
+        scored_candidates = self.search_with_score_acl(
+            query=query,
+            k=candidate_k,
+            user=user,
+            base_filter=base_filter,
+            include_expired=include_expired,
+        )
         candidates = [doc for doc, score in scored_candidates]
 
         if not candidates:
             return []
 
-        # 2. 使用 Reranker 重排序
+        # 2. Reranker 重排序
         if self.use_reranker and self.reranker_manager:
             results = self.reranker_manager.rerank(query, candidates, top_n=k)
             return results
         else:
-            # 如果没有 Reranker，返回原始排序
             return [(doc, 1.0 - i * 0.01) for i, doc in enumerate(candidates[:k])]
+
+    def filter_results_by_acl(
+        self,
+        results: List[tuple[Document, float]],
+        user: Optional[UserContext],
+    ) -> List[tuple[Document, float]]:
+        """
+        在已有检索结果上做二次 ACL 过滤。
+        用于回答后验证：防止 ACL filter 绕过。
+
+        Returns:
+            仅保留用户有权限访问的文档
+        """
+        if not results or not user:
+            return results
+
+        filtered = []
+        for doc, score in results:
+            if check_doc_access(doc.metadata or {}, user):
+                filtered.append((doc, score))
+            else:
+                logger.warning(
+                    f"[Retriever] ACL 二次验证过滤："
+                    f"用户 {user.username} 无权访问 {doc.metadata.get('source', '?')}"
+                )
+
+        return filtered
 
     def format_search_results(
         self,

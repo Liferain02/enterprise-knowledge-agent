@@ -77,6 +77,9 @@ class ChatService:
         Returns:
             包含 answer, sources, used_agent, image_understood 的字典
         """
+        import time
+        total_start = time.time()
+
         logger.info(f"收到聊天请求(异步) - session: {session_id}, message: {message[:50]}..., images={len(images) if images else 0}")
 
         # 确保会话存在
@@ -137,10 +140,18 @@ class ChatService:
         sources = result.get("sources", "")
         used_agent = result.get("used_agent", "unknown")
 
-        # 如果是第一条消息，生成标题
-        session = session_service.get_session(session_id)
-        if session and session.get("message_count", 0) == 0:
-            title = session_service.generate_title(message)
+        # 如果是第一条消息，生成标题（问候语跳过，节省一次 LLM 调用）
+        _GREETING_PATTERNS = r"^(你好|hi|hello|您好|早上好|下午好|晚上好|在吗|嗨)"
+        import re
+        if re.match(_GREETING_PATTERNS, message.strip(), re.IGNORECASE):
+            title = "问候"
+        else:
+            session = session_service.get_session(session_id)
+            if session and session.get("message_count", 0) == 0:
+                title = session_service.generate_title(message)
+            else:
+                title = None
+        if title:
             session_service.update_session_title(session_id, title)
 
         # 保存消息（使用原始消息，不含图片上下文）
@@ -151,7 +162,12 @@ class ChatService:
         if sources and isinstance(sources, str):
             sources_list = [{"content": sources[:200], "metadata": {}}]
 
-        logger.info(f"聊天请求完成 - agent: {used_agent}, answer_length: {len(answer)}")
+        # 性能日志
+        elapsed = time.time() - total_start
+        if elapsed > 10:
+            logger.warning(f"[PERF] 慢查询警告 - 总耗时: {elapsed:.1f}秒, agent: {used_agent}, query: {message[:30]}...")
+        else:
+            logger.info(f"[PERF] 聊天完成 - 耗时: {elapsed:.1f}秒, agent: {used_agent}")
 
         return {
             "answer": answer,
@@ -159,6 +175,168 @@ class ChatService:
             "used_agent": used_agent,
             "image_understood": image_understood,
         }
+
+    async def achat_stream(
+        self,
+        message: str,
+        session_id: str,
+        username: str = "anonymous",
+        images: list = None,
+    ):
+        """
+        流式聊天（Generator）。供 StreamingResponse 使用。
+
+        通过 graph.astream_events() 流式输出。
+        SSE 事件类型：
+        - session_id: 当前会话 ID
+        - tool_start: 开始调用某个 tool
+        - tool_end: tool 调用结束
+        - agent_step: 当前在哪个 Agent 节点
+        - llm_token: LLM 输出的 token（逐字流）
+        - thinking: 系统思考状态
+        - sources: 引用来源
+        - done: 完成标识
+
+        Usage:
+            generator = await service.achat_stream(message, session_id, username)
+            return StreamingResponse(generator, media_type="text/event-stream")
+        """
+        import json
+        import time
+        import asyncio
+        from src.agent.graph import get_agent_graph_async
+        from langchain_core.messages import HumanMessage
+
+        session_service.ensure_session_exists(session_id)
+
+        # 图片理解（与 achat 相同）
+        if images:
+            try:
+                from src.models.vision import understand_images
+                from src.api.schemas import ImageContent
+
+                parsed_images = [
+                    ImageContent(**img) if isinstance(img, dict) else img
+                    for img in images
+                ]
+                vision_prompt = (
+                    f"用户的问题是：「{message}」。"
+                    f"请仔细看图，然后回答这个问题。"
+                )
+                image_context = await understand_images(parsed_images, prompt=vision_prompt)
+                if image_context and not image_context.startswith("[图片理解失败"):
+                    message = (
+                        f"【用户上传的图片内容如下，请结合图片回答用户问题】\n"
+                        f"{image_context}\n\n"
+                        f"【用户问题】\n{message}"
+                    )
+                yield self._sse_event("thinking", "图片理解完成，开始检索知识库...")
+            except Exception as e:
+                yield self._sse_event("thinking", f"[Vision] 图片理解出错: {e}，继续处理...")
+
+        # 构建 Agent 配置
+        graph = await get_agent_graph_async()
+        config = {
+            "configurable": {
+                "thread_id": session_id,
+            }
+        }
+        initial_state = {
+            "messages": [HumanMessage(content=message)],
+            "session_id": session_id,
+            "user_id": username,
+        }
+
+        # 流式输出 Agent 事件
+        collected_tokens = []
+
+        try:
+            # 使用 astream_events 获取每个 LLM token
+            async for event in graph.astream_events(
+                initial_state,
+                config,
+                version="v2",
+            ):
+                event_type = event.get("event", "")
+
+                if event_type == "on_chat_model_stream":
+                    # LLM token 输出
+                    chunk = event.get("data", {}).get("chunk", {})
+                    token = getattr(chunk, "content", "") or ""
+                    if token:
+                        collected_tokens.append(token)
+                        yield self._sse_event("llm_token", token)
+
+                elif event_type == "on_tool_start":
+                    tool_name = event.get("name", "unknown")
+                    yield self._sse_event("tool_start", tool_name)
+                    yield self._sse_event(
+                        "thinking",
+                        f"正在调用工具: {tool_name}..."
+                    )
+
+                elif event_type == "on_tool_end":
+                    tool_name = event.get("name", "unknown")
+                    input_data = event.get("data", {}).get("input", {})
+                    # 提取简短描述
+                    summary = str(input_data)[:100] if input_data else ""
+                    yield self._sse_event("tool_end", {"tool": tool_name, "summary": summary})
+                    yield self._sse_event("thinking", f"工具 {tool_name} 执行完成")
+
+                elif event_type == "on_chain_start":
+                    name = event.get("name", "")
+                    if name and name not in ("LangGraph",):
+                        yield self._sse_event("agent_step", name)
+
+                elif event_type == "on_chain_end":
+                    name = event.get("name", "")
+                    if name == "maybe_summarize":
+                        yield self._sse_event("thinking", "对话摘要已完成")
+
+            # 最终结果
+            final_answer = "".join(collected_tokens)
+
+            # 提取 sources（从最终 state）
+            config2 = {"configurable": {"thread_id": session_id}}
+            checkpoint = graph.checkpointer.get(config2)
+            sources_raw = ""
+            used_agent = "unknown"
+            if checkpoint:
+                state = checkpoint
+                sources_raw = state.get("sources", "")
+                used_agent = state.get("used_agent", "unknown")
+
+            # 保存消息
+            self._save_session_message(session_id, message, final_answer, used_agent)
+
+            # 生成标题（首条消息，跳过问候语节省 LLM 调用）
+            import re
+            _GREETING_PATTERNS = r"^(你好|hi|hello|您好|早上好|下午好|晚上好|在吗|嗨)"
+            if re.match(_GREETING_PATTERNS, message.strip(), re.IGNORECASE):
+                title = "问候"
+            else:
+                session = session_service.get_session(session_id)
+                if session and session.get("message_count", 0) == 0:
+                    title = session_service.generate_title(message)
+                else:
+                    title = None
+            if title:
+                session_service.update_session_title(session_id, title)
+
+            yield self._sse_event("sources", sources_raw[:500] if sources_raw else "")
+            yield self._sse_event("used_agent", used_agent)
+            yield self._sse_event("done", final_answer[:100])
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield self._sse_event("error", str(e))
+
+    def _sse_event(self, event_type: str, data) -> str:
+        """格式化为 SSE 事件"""
+        import json
+        content = json.dumps({"type": event_type, "data": data}, ensure_ascii=False)
+        return f"data: {content}\n\n"
 
     def _save_session_message(self, session_id: str, user_message: str, ai_message: str, used_agent: str = None):
         """保存用户和AI的消息"""

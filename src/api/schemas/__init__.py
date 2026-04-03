@@ -20,6 +20,20 @@ class ChatRequest(BaseModel):
     images: Optional[List[ImageContent]] = Field(default=None, description="附带的图片（支持多张）")
 
 
+class ChatStreamRequest(BaseModel):
+    """流式聊天请求"""
+    message: str = Field(description="用户消息")
+    session_id: str = Field(default="default", description="会话ID")
+    images: Optional[List[ImageContent]] = Field(default=None, description="附带的图片（支持多张）")
+
+
+class ChatStreamRequest(BaseModel):
+    """流式聊天请求"""
+    message: str = Field(description="用户消息")
+    session_id: str = Field(default="default", description="会话ID")
+    images: Optional[List[ImageContent]] = Field(default=None, description="附带的图片（支持多张）")
+
+
 class CreateSessionRequest(BaseModel):
     """创建会话请求"""
     title: Optional[str] = Field(default=None, description="会话标题（可选）")

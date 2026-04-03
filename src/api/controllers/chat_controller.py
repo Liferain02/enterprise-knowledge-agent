@@ -3,10 +3,11 @@
 """
 import logging
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 
 from ..schemas import (
     ChatRequest, ChatResponse,
-    CreateSessionRequest, UpdateTitleRequest
+    CreateSessionRequest, UpdateTitleRequest, ChatStreamRequest
 )
 from ..services import chat_service
 from ..security import get_current_user
@@ -29,16 +30,11 @@ async def health_check():
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, current_user: dict = Depends(get_current_user)):
     """
-    聊天接口（支持多模态）
-
-    1. 接收用户的 session_id、message 和可选的 images
-    2. 调用 ChatService 处理业务逻辑（支持 Vision LLM 图片理解）
-    3. 返回结果
+    聊天接口（同步版本，返回完整答案）
     """
     try:
         username = current_user.get("username", "anonymous")
 
-        # 将 Pydantic 模型转为 dict 列表传给 service
         images_data = None
         if request.images:
             images_data = [img.model_dump() if hasattr(img, "model_dump") else img for img in request.images]
@@ -59,6 +55,56 @@ async def chat(request: ChatRequest, current_user: dict = Depends(get_current_us
         )
     except Exception as e:
         logger.exception(f"聊天请求失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"处理请求时出错: {str(e)}")
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    request: ChatStreamRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    流式聊天接口（SSE）。
+
+    实时流式返回 LLM token、工具调用状态、思考进度。
+    前端通过 EventSource 消费 /api/v1/chat/stream。
+
+    SSE 事件格式：
+        data: {"type": "thinking", "data": "正在检索知识库..."}
+        data: {"type": "llm_token", "data": "根据"}
+        data: {"type": "llm_token", "data": "公司"}
+        ...
+        data: {"type": "done", "data": "..."}
+    """
+    try:
+        username = current_user.get("username", "anonymous")
+
+        images_data = None
+        if request.images:
+            images_data = [
+                img.model_dump() if hasattr(img, "model_dump") else img
+                for img in request.images
+            ]
+
+        # achat_stream 是异步生成器
+        generator = await chat_service.achat_stream(
+            message=request.message,
+            session_id=request.session_id,
+            username=username,
+            images=images_data,
+        )
+
+        return StreamingResponse(
+            generator,
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            }
+        )
+    except Exception as e:
+        logger.exception(f"流式聊天请求失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"处理请求时出错: {str(e)}")
 
 

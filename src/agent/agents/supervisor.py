@@ -54,10 +54,22 @@ async def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "needs_expansion": False,
         }
 
-    # ── 获取 Planner 的复杂度判断（通过 state 传递）───
-    # Planner 判复杂 → is_complex=True → knowledge_search 应优先走 Query Expansion
-    # Planner 判简单 → is_complex=False → 知识检索时仍由 knowledge_search 自行判断
-    is_complex_from_planner = state.get("is_complex", False)
+    # ── 获取 Planner 的快速路由结果（已做判断则跳过 LLM）───
+    # Planner 已判断了简单任务，直接复用其路由结果
+    quick_agent = state.get("_quick_agent")
+    if quick_agent:
+        print(f"[Supervisor] 复用 Planner 快速路由: {quick_agent}（跳过 LLM）")
+        needs_expansion = (quick_agent == "knowledge_agent") and _needs_expansion_for_agent(
+            last_user_message
+        )
+        return {
+            "next_agent": quick_agent,
+            "supervisor_reasoning": "复用 Planner 快速路由",
+            "supervisor_reason": "",
+            "needs_expansion": needs_expansion,
+        }
+
+    # Planner 没有快速结果，继续正常的 LLM 路由
 
     # 构建提示词
     prompt = f"""请分析以下用户问题，决定应该路由到哪个 Agent 处理。
@@ -93,6 +105,7 @@ async def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
 """
 
     # 使用 with_structured_output 强制结构化输出
+    is_complex_from_planner = state.get("is_complex", False)
     try:
         llm_structured = llm.with_structured_output(RouteDecision)
         # 使用 ainvoke
@@ -126,6 +139,17 @@ async def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
             f"当调用 knowledge_search 工具时，请将 needs_expansion 参数设置为上述值。"
         ) if next_agent == "knowledge_agent" and needs_expansion else "",
     }
+
+
+def _needs_expansion_for_agent(question: str) -> bool:
+    """
+    判断 knowledge_agent 是否需要 Query Expansion（纯规则，无 LLM）
+
+    用于快速路径：Supervisor 复用 Planner 快速路由结果时，
+    需要判断是否需要 expansion。
+    """
+    from ..skills.knowledge.scripts.tools import needs_query_expansion
+    return needs_query_expansion(question)
 
 
 def fallback_routing(question: str) -> tuple:

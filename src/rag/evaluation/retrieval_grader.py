@@ -20,7 +20,7 @@ Corrective RAG - 检索结果评估与自我纠错
 import asyncio
 import time
 import random
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
@@ -238,7 +238,7 @@ class RetrievalGrader:
 
     async def grade_single(self, query: str, doc: Document) -> DocumentGrade:
         """
-        评估单篇文档与查询的相关性
+        评估单篇文档与查询的相关性（带缓存）
 
         Args:
             query: 用户查询
@@ -247,6 +247,31 @@ class RetrievalGrader:
         Returns:
             DocumentGrade: 包含评分、理由和评级
         """
+        # ── 缓存检查 ──────────────────────────────────────────────
+        cache_key = _get_cache_key(query, doc.page_content)
+        cached = _get_cached_grade(cache_key)
+        if cached:
+            # 从缓存恢复 DocumentGrade
+            score, reasoning = cached
+            normalized = self._normalize_score(score)
+            settings = get_settings()
+            high_thresh = self.grade_threshold
+            med_thresh = getattr(settings, 'crag_medium_threshold', 0.15)
+            if normalized >= high_thresh:
+                grade_level = GradeLevel.HIGH
+            elif normalized >= med_thresh:
+                grade_level = GradeLevel.MEDIUM
+            else:
+                grade_level = GradeLevel.LOW
+            return DocumentGrade(
+                doc=doc,
+                relevance_score=normalized,
+                raw_score=float(score),
+                reasoning=f"[缓存]{reasoning}",
+                grade=grade_level,
+            )
+
+        # ── 正常评估流程 ──────────────────────────────────────────
         start = time.time()
         prompt = self._build_grading_prompt(query, doc.page_content)
 
@@ -273,6 +298,9 @@ class RetrievalGrader:
                     grade_level = GradeLevel.LOW
 
                 latency = (time.time() - start) * 1000
+
+                # ── 写入缓存 ──────────────────────────────────────
+                _cache_grade(cache_key, (score, reasoning))
 
                 return DocumentGrade(
                     doc=doc,
@@ -467,37 +495,16 @@ class RetrievalGrader:
             for g in high_docs[:3]
         ) if high_docs else "  （无高相关文档）"
 
-        prompt = f"""你是一个查询优化专家。用户的原始查询在知识库中检索效果不佳，
-请分析原因并生成改进的查询。
+        # 精简重写 prompt
+        prompt = f"""原始查询在知识库中检索效果不佳，请生成改进的查询。
 
-## 原始查询
-{original_query}
+原始查询：{original_query}
 
-## 检索结果分析
+检索结果：
+高相关文档（{len(high_docs)} 篇）：{high_summary}
+低相关文档（{len(low_docs)} 篇）：{low_summary}
 
-【高相关文档】（{len(high_docs)} 篇）：
-{high_summary}
-
-【低相关文档】（{len(low_docs)} 篇）：
-{low_summary}
-
-## 评估总结
-{grade_result.decision_reason}
-
-## 任务
-请分析为什么检索效果不佳，可能的原因包括：
-1. 查询过于口语化或模糊
-2. 缺少关键实体名称
-3. 对比类查询需要分别指定对比对象
-4. 关键词不匹配文档中的表述
-
-请生成 1-2 个改进的查询，要求：
-1. 更精确地表达信息需求
-2. 包含可能的关键词
-3. 如果原查询是对比类，请拆分为多个具体查询
-4. 直接输出改进后的查询，不要解释
-
-改进后的查询："""
+请生成1-2个改进的查询（更精确、包含关键词），直接输出，不要解释。"""
 
         try:
             max_retries = 3
@@ -546,52 +553,26 @@ class RetrievalGrader:
     # ========================================================
 
     def _build_grading_prompt(self, query: str, doc_content: str) -> str:
-        """构建评估 prompt"""
+        """构建评估 prompt（精简版，减少 token 消耗）"""
         # 截断文档内容避免超出 token 限制
-        max_chars = 2000
+        max_chars = 1500
         if len(doc_content) > max_chars:
             doc_content = doc_content[:max_chars] + "..."
 
-        return f"""你是一个检索质量评估专家。请评估以下文档片段与用户查询的相关程度。
+        return f"""评估文档与查询的相关性（1-5分）：
+查询：{query}
+文档：{doc_content}
 
-## 用户查询
-{query}
+评分标准：
+- 5分：直接完整回答问题
+- 4分：高度相关
+- 3分：部分相关
+- 2分：勉强相关
+- 1分：完全不相关
 
-## 文档内容
-{doc_content}
-
-## 评分标准（1-5 分）
-
-- 5分：文档**直接、完整地**回答了用户问题，包含所有关键信息
-- 4分：文档**高度相关**，回答了大部分核心问题，只有次要细节缺失
-- 3分：文档**相关**，提供了有用的信息，能部分回答用户问题
-- 2分：文档**勉强相关**，只有零星信息点，无法有效回答问题
-- 1分：文档**完全不相关**，与查询毫无关系
-
-## Few-shot 示例
-
-**示例 1**
-查询：公司的年假政策是什么？
-文档：公司员工享受带薪年假，工作满1年可休5天，以后每年递增1天，最高不超过15天。
-评分：SCORE: 5
-理由：文档直接回答了年假政策，提供了完整的休假天数规则
-
-**示例 2**
-查询：年假和病假的区别
-文档：公司员工手册规定了各类假期制度，包括年假、病假、事假等。
-评分：SCORE: 3
-理由：文档涉及了相关主题（假期制度），但没有直接对比年假和病假的具体差异
-
-**示例 3**
-查询：KPI绩效考核
-文档：公司信息安全管理制度要求员工遵守网络安全规范。
-评分：SCORE: 1
-理由：文档内容与查询完全不相关，是信息安全而非绩效考核
-
-## 输出格式
-请严格按以下格式输出（只输出这两行，不要其他内容）：
-SCORE: <数字1-5>
-REASONING: <一句话说明评分理由>"""
+输出格式（只输出两行）：
+SCORE: <1-5>
+REASONING: <一句话理由>"""
 
     def _parse_grade_response(self, text: str) -> tuple[int, str]:
         """解析 LLM 的评估响应"""
@@ -806,8 +787,9 @@ class CorrectiveRAGPipeline:
             # 评估前精排（可选）：减少 LLM 评估调用量
             # ────────────────────────────────────────────────────────────
             if self.rerank_before_grade:
+                # 减少评估数量：只评估 top 3（减少 LLM 调用次数）
                 candidates = self._rerank_before_grade(
-                    current_query, candidates, top_n=min(5, candidate_k)
+                    current_query, candidates, top_n=min(3, candidate_k)
                 )
 
             if not candidates:
@@ -1023,6 +1005,44 @@ def reset_crags():
     global _grader, _pipeline
     _grader = None
     _pipeline = None
+
+
+# ============================================================
+# LLM 评估响应缓存（减少重复调用）
+# ============================================================
+import hashlib
+import time as time_module
+
+_grade_cache: dict = {}
+_CACHE_TTL = 300  # 缓存 5 分钟
+
+
+def _get_cache_key(query: str, doc_content: str) -> str:
+    """生成缓存 key"""
+    key_str = f"{query}|{doc_content[:500]}"
+    return hashlib.md5(key_str.encode()).hexdigest()
+
+
+def _get_cached_grade(cache_key: str) -> Optional[tuple]:
+    """获取缓存的评估结果"""
+    if cache_key in _grade_cache:
+        result, timestamp = _grade_cache[cache_key]
+        if time_module.time() - timestamp < _CACHE_TTL:
+            return result
+        else:
+            del _grade_cache[cache_key]
+    return None
+
+
+def _cache_grade(cache_key: str, result: tuple):
+    """缓存评估结果"""
+    _grade_cache[cache_key] = (result, time_module.time())
+
+
+def _clear_grade_cache():
+    """清空缓存"""
+    global _grade_cache
+    _grade_cache = {}
 
 
 # ============================================================
