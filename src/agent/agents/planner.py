@@ -7,8 +7,10 @@ import re
 import json
 from typing import Dict, Any, List
 from typing_extensions import TypedDict
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
+from langgraph.types import Send
 from src.models.llm import get_llm
+from src.observability import traced
 
 
 # 使用 TypedDict 而非 Pydantic BaseModel：
@@ -88,6 +90,10 @@ def _quick_complexity_check(message: str) -> str:
     _HIGH_PRIORITY_PATTERNS = [
         # 列举类
         re.compile(r"有哪些|有些什么|都有哪些|都有什么", re.IGNORECASE),
+        # 对比类关键词（即使很短也是复杂任务）
+        re.compile(r"对比|比较|区别|差异|异同", re.IGNORECASE),
+        # 顺序执行关键词（即使很短也是复杂任务）
+        re.compile(r"先.{0,10}再|先.{0,10}然后|然后再|之后再", re.IGNORECASE),
         # 多实体职责/区别
         re.compile(r".{2,6}和.{2,6}.{0,8}职责|.{2,6}与.{2,6}.{0,8}区别"),
     ]
@@ -124,6 +130,7 @@ def _quick_complexity_check(message: str) -> str:
 
 # ==================== Planner 节点 ====================
 
+@traced("agent.planner.node")
 async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Planner 节点 - 分析任务复杂度并拆解步骤
@@ -350,20 +357,28 @@ def route_from_planner(state: Dict[str, Any]) -> str:
 
 # ==================== 计划执行节点 ====================
 
-# 是否启用并行执行（可以通过配置控制）
-PARALLEL_EXECUTION_ENABLED = True
+# ==================== Send-based Fan-out/Fan-in 执行节点 ====================
+
+# 是否使用 LangGraph Send 模式（替代 asyncio.gather）
+# Send 模式：LangGraph 自动完成 fan-out（并行分发）和 fan-in（结果收集）
+# 优势：失败隔离（单步骤失败不影响其他步骤）、断点续跑、天然状态可见性
+USE_LANGGRAPH_SEND = True
+
+# 后备：是否启用 asyncio.gather 并行模式（当 Send 模式不可用时）
+PARALLEL_EXECUTION_ENABLED = False
 
 
+@traced("agent.planner.execute_plan")
 async def execute_plan_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     执行计划步骤的节点
 
-    支持并行执行独立步骤以提高效率：
-    - 分析步骤之间的依赖关系
-    - 将没有依赖关系的步骤并行执行
-    - 有依赖关系的步骤按顺序执行
+    支持两种并行执行模式：
+    - Send 模式（默认）：使用 LangGraph Send 原语，实现真正的 fan-out/fan-in
+      优势：失败隔离、断点续跑、天然状态管理
+    - Gather 模式（后备）：使用 asyncio.gather()，保留原有逻辑
     """
-    global PARALLEL_EXECUTION_ENABLED
+    global PARALLEL_EXECUTION_ENABLED, USE_LANGGRAPH_SEND
 
     plan_steps = state.get("plan_steps", [])
     current_step = state.get("current_step", 0)
@@ -371,13 +386,377 @@ async def execute_plan_node(state: Dict[str, Any]) -> Dict[str, Any]:
     if not plan_steps:
         return {"current_step": -1}
 
-    # 检查是否启用并行执行
-    if PARALLEL_EXECUTION_ENABLED and current_step == 0:
-        # 使用并行执行器
+    # 检查是否启用 Send 模式
+    if USE_LANGGRAPH_SEND and current_step == 0:
+        return await _execute_plan_with_send(state)
+
+    # 后备：使用 asyncio.gather 模式
+    if PARALLEL_EXECUTION_ENABLED:
         return await _execute_plan_parallel(state)
 
-    # 原有顺序执行逻辑（保留作为后备）
     return await _execute_plan_sequential(state)
+
+
+async def _execute_plan_with_send(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    使用 LangGraph Send 实现真正的 fan-out/fan-in 并行执行。
+
+    工作原理：
+    1. analyze_dependencies 将步骤分批（拓扑排序）
+    2. 同一批次内的步骤通过 Send 同时分发（fan-out）
+    3. LangGraph 自动等待所有分支完成（fan-in）
+    4. 收集所有批次结果后进入下一步
+
+    关键优势：
+    - 失败隔离：一个步骤崩溃不会影响同批次其他步骤
+    - 断点续跑：图结构天然支持部分节点恢复
+    - 状态可见：每个分支独立更新状态
+
+    注意：本函数只返回 Send 列表，实际执行由 LangGraph 调度。
+    返回 Send 列表时，LangGraph 会在当前节点完成后立即分发所有 Send。
+    """
+    from .parallel_executor import analyze_step_dependencies
+
+    plan_steps = state.get("plan_steps", [])
+    messages = state.get("messages", [])
+    session_id = state.get("session_id", "default")
+    summary = state.get("summary", "") or ""
+    mem0_memories = state.get("mem0_memories", "") or ""
+
+    if not plan_steps:
+        return {"current_step": -1}
+
+    # ── 预注入 Mem0 + 摘要上下文 ────────────────────────────────────
+    from ._utils import inject_worker_context
+    messages_with_context = inject_worker_context(messages, summary, mem0_memories)
+
+    # ── 拓扑排序分批 ────────────────────────────────────────────────
+    batches = analyze_step_dependencies(plan_steps)
+    print(f"[Execute Plan (Send)] 并行执行：分 {len(batches)} 批处理 {len(plan_steps)} 个步骤")
+
+    if len(batches) == 1:
+        # 单批次：直接用 Send 分发所有步骤
+        return _send_batch(plan_steps, batches[0], messages_with_context, session_id, summary)
+
+    # 多批次：使用 Send 循环分发
+    # 每个 Send 会使 LangGraph 在当前节点完成后立即分发到目标节点
+    # 注意：返回多个 Send 时，LangGraph 会将它们合并为一个 Send 列表
+    # 然后同时分发——这意味着第一批次会立即执行，其他批次会在第一批次完成后执行
+    #
+    # 实现方式：第一个批次返回 Send，后续批次通过 state 记录，
+    # route_execute_plan 判断 current_batch_idx 决定是否继续分发
+    first_batch = batches[0]
+    remaining_batches = batches[1:]
+
+    # 记录剩余批次信息到 state
+    remaining_batches_data = [
+        {"indices": list(batch), "steps": [plan_steps[i] for i in batch]}
+        for batch in remaining_batches
+    ]
+
+    # Fan-out：第一批次的所有步骤通过 Send 并行分发
+    first_send = _send_batch(plan_steps, first_batch, messages_with_context, session_id, summary)
+
+    # 如果只有一批，直接返回 Send
+    if not remaining_batches_data:
+        return first_send
+
+    # 多批次：返回 Send 并更新 state 记录后续批次
+    result = dict(first_send) if isinstance(first_send, dict) else {}
+    if not isinstance(first_send, list):
+        # 第一个 Send 可能返回 dict（single Send）
+        result = first_send if isinstance(first_send, list) else [first_send]
+
+    return {
+        **result,  # 第一批次的 Send 列表
+        "current_batch_index": 1,  # 下一批次索引
+        "remaining_batches": remaining_batches_data,  # 剩余批次信息
+        "pending_batch_count": len(remaining_batches_data),
+    }
+
+
+def _send_batch(
+    plan_steps: List[Dict[str, Any]],
+    batch: set,
+    messages_with_context: list,
+    session_id: str,
+    summary: str,
+) -> List[Send]:
+    """
+    将一个批次的所有步骤通过 Send 分发到对应的 Worker 节点。
+
+    Args:
+        plan_steps: 所有步骤列表
+        batch: 当前批次的步骤索引集合
+        messages_with_context: 预注入上下文的消息列表
+        session_id: 会话 ID
+        summary: 对话摘要
+
+    Returns:
+        Send 列表，每个 Send 对应一个步骤
+    """
+    sends = []
+    for step_idx in batch:
+        step = plan_steps[step_idx]
+        agent = step.get("agent", "general_agent")
+
+        # 映射 agent → 节点名
+        node_map = {
+            "knowledge_agent": "knowledge_step_node",
+            "operation_agent": "operation_step_node",
+            "general_agent": "general_step_node",
+        }
+        node_name = node_map.get(agent, "general_step_node")
+
+        # 通过 Send 将步骤分派到对应的 Worker 节点
+        # 注意：LangGraph Send 会将 state 的副本传递给目标节点
+        # 这里我们覆盖 messages 为预注入后的版本，避免每个 Worker 重复序列化
+        step_state = {
+            # 步骤数据（供 Worker 节点使用）
+            "step": step,
+            "step_id": step["step_id"],
+            "step_agent": agent,
+            # 预注入的上下文（避免重复序列化）
+            "messages": messages_with_context,
+            "session_id": session_id,
+            "summary": summary,
+        }
+
+        sends.append(Send(node_name, step_state))
+
+    return sends
+
+
+@traced("agent.planner.execute_plan_continue")
+async def execute_plan_continue_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    继续执行下一批次的节点。
+
+    当 execute_plan 通过 Send 完成了第一批次的 fan-out 后，
+    本节点负责分发下一批次。
+    """
+    current_batch_index = state.get("current_batch_index", 0)
+    remaining_batches = state.get("remaining_batches", [])
+
+    if current_batch_index >= len(remaining_batches):
+        # 所有批次完成，进入汇总
+        return await _finalize_plan(state)
+
+    # 获取当前批次
+    batch_data = remaining_batches[current_batch_index]
+    batch_steps = batch_data["steps"]
+    messages = state.get("messages", [])
+    session_id = state.get("session_id", "default")
+    summary = state.get("summary", "") or ""
+
+    from ._utils import inject_worker_context
+    messages_with_context = inject_worker_context(messages, summary, "")
+
+    # Send 当前批次
+    sends = []
+    for step in batch_steps:
+        agent = step.get("agent", "general_agent")
+        node_map = {
+            "knowledge_agent": "knowledge_step_node",
+            "operation_agent": "operation_step_node",
+            "general_agent": "general_step_node",
+        }
+        node_name = node_map.get(agent, "general_step_node")
+        sends.append(Send(node_name, {
+            "step": step,
+            "step_id": step["step_id"],
+            "step_agent": agent,
+            "messages": messages_with_context,
+            "session_id": session_id,
+            "summary": summary,
+        }))
+
+    # 更新状态，进入下一批次
+    next_batch_index = current_batch_index + 1
+    remaining = [
+        bd for i, bd in enumerate(remaining_batches)
+        if i >= next_batch_index
+    ]
+
+    return {
+        "send_batch": sends,
+        "current_batch_index": next_batch_index,
+        "remaining_batches": remaining,
+    }
+
+
+async def _finalize_plan(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    汇总所有步骤结果，生成最终答案。
+    """
+    plan_steps = state.get("plan_steps", [])
+    messages = state.get("messages", [])
+
+    # 收集所有步骤结果（从 state 中的 plan_results）
+    plan_results = state.get("plan_results", [])
+    if not plan_results:
+        plan_results = []
+
+    def _step_to_dict(r) -> dict:
+        if hasattr(r, "step_id"):
+            return {
+                "step_id": r.step_id,
+                "description": r.description,
+                "agent": r.agent,
+                "result": r.result,
+                "sources": r.sources,
+                "success": r.success,
+                "error": r.error,
+            }
+        return r
+
+    # 汇总
+    final_answer = await _summarize_results(
+        messages,
+        [_step_to_dict(r) for r in plan_results]
+    )
+
+    completed = [
+        (r.step_id if hasattr(r, 'step_id') else r.get("step_id"))
+        for r in plan_results
+        if (hasattr(r, 'success') and r.success) or r.get("success")
+    ]
+
+    return {
+        "current_step": -1,
+        "completed_steps": completed,
+        "plan_results": plan_results,
+        "final_answer": final_answer,
+        "used_agent": "planner_send",
+    }
+
+
+# ==================== Send Worker 节点（接收 Send 分派的步骤）====================
+
+@traced(
+    "agent.planner.knowledge_step",
+    attrs_func=lambda args, kw: {
+        "step_id": (args[0].get("step") or {}).get("step_id"),
+    }
+    if args and isinstance(args[0], dict) else {},
+)
+async def knowledge_step_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Knowledge Worker 节点（通过 Send 调用）"""
+    step = state.get("step", {})
+    messages = state.get("messages", [])
+    session_id = state.get("session_id", "default")
+
+    if not step or not messages:
+        return _make_step_result(step, "", success=False, error="无步骤数据或消息")
+
+    try:
+        from .knowledge import knowledge_agent_node
+
+        result = await knowledge_agent_node({
+            "messages": messages,
+            "session_id": session_id,
+        })
+
+        from ._schemas import serialize_step_result, _extract_numeric_data
+        return serialize_step_result({
+            "step_id": step.get("step_id", 0),
+            "description": step.get("description", ""),
+            "agent": "knowledge_agent",
+            "result": result.get("final_answer", ""),
+            "sources": result.get("sources", ""),
+            "success": True,
+            "structured_data": _extract_numeric_data(result.get("final_answer", "")),
+        })
+
+    except Exception as e:
+        return _make_step_result(step, "", success=False, error=str(e))
+
+
+@traced(
+    "agent.planner.operation_step",
+    attrs_func=lambda args, kw: {
+        "step_id": (args[0].get("step") or {}).get("step_id"),
+    }
+    if args and isinstance(args[0], dict) else {},
+)
+async def operation_step_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Operation Worker 节点（通过 Send 调用）"""
+    step = state.get("step", {})
+    messages = state.get("messages", [])
+    session_id = state.get("session_id", "default")
+
+    if not step or not messages:
+        return _make_step_result(step, "", success=False, error="无步骤数据或消息")
+
+    try:
+        from .operation import operation_agent_node
+
+        result = await operation_agent_node({
+            "messages": messages,
+            "session_id": session_id,
+        })
+
+        from ._schemas import serialize_step_result, _extract_numeric_data
+        return serialize_step_result({
+            "step_id": step.get("step_id", 0),
+            "description": step.get("description", ""),
+            "agent": "operation_agent",
+            "result": result.get("final_answer", ""),
+            "success": True,
+            "structured_data": _extract_numeric_data(result.get("final_answer", "")),
+        })
+
+    except Exception as e:
+        return _make_step_result(step, "", success=False, error=str(e))
+
+
+@traced(
+    "agent.planner.general_step",
+    attrs_func=lambda args, kw: {
+        "step_id": (args[0].get("step") or {}).get("step_id"),
+    }
+    if args and isinstance(args[0], dict) else {},
+)
+async def general_step_node(state: Dict[str, Any]) -> Dict[str, Any]:
+    """General Worker 节点（通过 Send 调用）"""
+    step = state.get("step", {})
+    messages = state.get("messages", [])
+    session_id = state.get("session_id", "default")
+
+    if not step or not messages:
+        return _make_step_result(step, "", success=False, error="无步骤数据或消息")
+
+    try:
+        from .general import general_agent_node
+
+        result = await general_agent_node({
+            "messages": messages,
+            "session_id": session_id,
+        })
+
+        from ._schemas import serialize_step_result
+        return serialize_step_result({
+            "step_id": step.get("step_id", 0),
+            "description": step.get("description", ""),
+            "agent": "general_agent",
+            "result": result.get("final_answer", ""),
+            "success": True,
+        })
+
+    except Exception as e:
+        return _make_step_result(step, "", success=False, error=str(e))
+
+
+def _make_step_result(step: dict, result: str, success: bool, error: str = None) -> dict:
+    """创建步骤结果 dict（用于 Send 节点返回值）"""
+    return {
+        "step_id": step.get("step_id", 0),
+        "description": step.get("description", ""),
+        "agent": step.get("agent", "unknown"),
+        "result": result,
+        "success": success,
+        "error": error,
+    }
     
 async def _execute_plan_parallel(state: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -390,30 +769,50 @@ async def _execute_plan_parallel(state: Dict[str, Any]) -> Dict[str, Any]:
     messages = state.get("messages", [])
     session_id = state.get("session_id", "default")
     summary = state.get("summary", "") or ""
+    mem0_memories = state.get("mem0_memories", "") or ""
 
     if not plan_steps:
         return {"current_step": -1}
+
+    # ── 预注入 Mem0 + 摘要上下文（只注入一次，供所有 Worker 复用）──────
+    # 这样每个并行步骤不必各自重复序列化 Mem0 + 摘要，节省 token 开销
+    from ._utils import inject_worker_context
+    messages_with_context = inject_worker_context(messages, summary, mem0_memories)
 
     # 分析依赖关系并显示执行计划
     batches = analyze_step_dependencies(plan_steps)
     print(f"[Execute Plan] 并行执行：分 {len(batches)} 批处理 {len(plan_steps)} 个步骤")
 
-    # 使用并行执行器
+    # 使用并行执行器（传入预注入的上下文消息）
     executor = get_parallel_executor()
     plan_results = await executor.execute_parallel(
         plan_steps,
-        messages,
+        messages_with_context,  # ← 传入预注入后的消息
         session_id,
-        summary
+        summary  # summary 仍传入，用于降级备选
     )
 
-    # 转换结果格式
-    completed = [r.get("step_id") for r in plan_results if r.get("success", False)]
+    # 转换结果格式（StepResult → dict，保持向后兼容）
+    # 注意：StepResult 有 .step_id / .success 属性，直接用 .get() 会报错
+    def _step_to_dict(r) -> dict:
+        if hasattr(r, "step_id"):  # StepResult 对象
+            return {
+                "step_id": r.step_id,
+                "description": r.description,
+                "agent": r.agent,
+                "result": r.result,
+                "sources": r.sources,
+                "success": r.success,
+                "error": r.error,
+            }
+        return r  # 已经是 dict
+
+    completed = [r.step_id for r in plan_results if hasattr(r, 'step_id') and r.success]
 
     # 汇总结果
     final_answer = await _summarize_results(
         messages,
-        plan_results
+        [_step_to_dict(r) for r in plan_results]
     )
 
     # 追加最终答案到 messages，供 save_to_mem0_node 写入记忆
@@ -436,13 +835,19 @@ async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
     from .knowledge import knowledge_agent_node
     from .operation import operation_agent_node
     from .general import general_agent_node
+    from ._utils import inject_worker_context
 
     plan_steps = state.get("plan_steps", [])
     current_step = state.get("current_step", 0)
     messages = state.get("messages", [])
+    summary = state.get("summary", "") or ""
+    mem0_memories = state.get("mem0_memories", "") or ""
 
     if not plan_steps or current_step >= len(plan_steps):
         return {"current_step": -1}
+
+    # ── 预注入 Mem0 + 摘要上下文（只注入一次，供所有 Worker 复用）
+    messages_with_context = inject_worker_context(messages, summary, mem0_memories)
 
     # 获取当前步骤
     step = plan_steps[current_step]
@@ -457,7 +862,7 @@ async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
         if agent_name == "knowledge_agent":
             sub_question = step['description']
-            sub_messages = messages + [HumanMessage(content=sub_question)]
+            sub_messages = messages_with_context + [HumanMessage(content=sub_question)]
 
             result = await knowledge_agent_node({
                 "messages": sub_messages,
@@ -468,7 +873,7 @@ async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
 
         elif agent_name == "operation_agent":
             sub_question = step['description']
-            sub_messages = messages + [HumanMessage(content=sub_question)]
+            sub_messages = messages_with_context + [HumanMessage(content=sub_question)]
 
             result = await operation_agent_node({
                 "messages": sub_messages,
@@ -478,7 +883,7 @@ async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
 
         elif agent_name == "general_agent":
             sub_question = step['description']
-            sub_messages = messages + [HumanMessage(content=sub_question)]
+            sub_messages = messages_with_context + [HumanMessage(content=sub_question)]
 
             result = await general_agent_node({
                 "messages": sub_messages,
@@ -492,14 +897,16 @@ async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
         print(f"[Execute Plan] 步骤执行失败: {e}")
         step_result = f"步骤执行出错: {str(e)}"
 
-    # 收集步骤结果
+    # 收集步骤结果（使用 StepResult 结构化格式）
+    from ._schemas import serialize_step_result
     plan_results = state.get("plan_results", [])
-    plan_results.append({
+    plan_results.append(serialize_step_result({
         "step_id": step['step_id'],
         "description": step['description'],
         "agent": agent_name,
-        "result": step_result
-    })
+        "result": step_result,
+        "sources": sources,
+    }))
 
     # 更新已完成步骤
     completed = state.get("completed_steps", [])
@@ -578,11 +985,28 @@ def route_execute_plan(state: Dict[str, Any]) -> str:
     """
     从计划执行节点路由
 
-    - current_step == -1 -> 所有步骤完成，保存到 Mem0
-    - 否则 -> 继续执行下一个步骤
+    支持两种模式：
+    - Send 模式（有 current_batch_index）：
+      有剩余批次 → 继续分发下一批次（返回 "execute_plan" 触发循环）
+      无剩余批次 → 进入汇总
+    - Gather 模式（无 current_batch_index）：
+      current_step == -1 → 所有步骤完成，保存到 Mem0
+      否则 → 继续执行下一个步骤
     """
+    # Send 模式：检查是否还有剩余批次
+    current_batch_index = state.get("current_batch_index", 0)
+    remaining_batches = state.get("remaining_batches", [])
+
+    if current_batch_index > 0 or remaining_batches:
+        # Send 模式：检查是否还有剩余批次需要分发
+        if remaining_batches:
+            return "execute_plan"  # 继续分发下一批次（触发 Send 循环）
+        else:
+            return "save_to_mem0"  # 所有批次完成
+
+    # Gather/顺序模式
     current_step = state.get("current_step", 0)
-    
+
     if current_step == -1:
         return "save_to_mem0"
     else:

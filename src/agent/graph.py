@@ -7,13 +7,21 @@ import time as _time
 from typing import Dict, Any, List
 from langgraph.graph import StateGraph, END
 from langgraph.graph import MessagesState
+from langgraph.types import Send
 from langchain_core.messages import HumanMessage, RemoveMessage
 
+from src.observability import traced
+
 from .agents.supervisor import supervisor_node, route_to_agent
-from .agents.knowledge import knowledge_agent_node
+from .agents.knowledge import knowledge_agent_node, retrieval_agent_node, generation_agent_node
 from .agents.operation import operation_agent_node
 from .agents.general import general_agent_node
-from .agents.planner import planner_node, route_from_planner, execute_plan_node, route_execute_plan
+from .agents.planner import (
+    planner_node, route_from_planner,
+    execute_plan_node, route_execute_plan,
+    execute_plan_continue_node,
+    knowledge_step_node, operation_step_node, general_step_node,
+)
 from .checkpointer import get_sync_checkpointer, get_async_checkpointer
 
 
@@ -56,9 +64,20 @@ class AgentState(MessagesState):
     needs_expansion: bool          # 是否需要 Query Expansion
     agent_inject_prompt: str      # 透传给子 agent 的 prompt 注入内容
 
+    # ==================== Retrieval Pipeline 状态 ====================
+    # retrieval_agent_node 执行后写入，供 generation_agent_node 读取
+    retrieval_context: str          # 格式化后的检索上下文（供生成用）
+    retrieved_docs: list           # 原始检索文档列表（用于冲突检测）
+    retrieval_decision: str         # HIGH / MEDIUM / LOW / NO_RESULTS（用于 Supervisor 感知）
+    retrieval_decision_reason: str # 评估理由
+    retrieval_avg_score: float     # 平均相关分
+    retrieval_rewrite_history: list # 查询改写/分解历史
+    conflict_warnings: list        # 文档冲突警告列表
+
 
 # ==================== 语义总结记忆节点 ====================
 
+@traced("agent.graph.maybe_summarize")
 async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
     """
     语义总结记忆节点（对话压缩）
@@ -143,6 +162,7 @@ async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
 
 # ==================== Mem0 记忆检索节点 ====================
 
+@traced("agent.graph.retrieve_mem0_memories")
 async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
     """
     Mem0 记忆检索节点
@@ -276,7 +296,9 @@ def create_multi_agent_graph() -> StateGraph:
 
     # Worker Agent 节点
     workflow.add_node("supervisor", supervisor_node)
-    workflow.add_node("knowledge_agent", knowledge_agent_node)
+    workflow.add_node("knowledge_agent", knowledge_agent_node)  # 保留（向后兼容）
+    workflow.add_node("retrieval_agent", retrieval_agent_node)   # 新增：检索阶段
+    workflow.add_node("generation_agent", generation_agent_node) # 新增：生成阶段
     workflow.add_node("operation_agent", operation_agent_node)
     workflow.add_node("general_agent", general_agent_node)
 
@@ -285,6 +307,23 @@ def create_multi_agent_graph() -> StateGraph:
 
     # Execute Plan 节点（复杂任务逐步执行）
     workflow.add_node("execute_plan", execute_plan_node)
+
+    # Send Worker 节点（通过 Send 原语调用的专用 Worker）
+    # 这些节点接收 Send 分派的独立步骤，执行后返回 StepResult
+    workflow.add_node("knowledge_step_node", knowledge_step_node)
+    workflow.add_node("operation_step_node", operation_step_node)
+    workflow.add_node("general_step_node", general_step_node)
+
+    # Execute Plan → 继续分发下一批次 或 汇总
+    workflow.add_conditional_edges(
+        "execute_plan",
+        route_execute_plan,
+        {
+            "continue": "execute_plan",  # 继续分发下一批次
+            "execute_plan": "execute_plan",
+            "save_to_mem0": "save_to_mem0",
+        }
+    )
 
     # 入口：maybe_summarize → retrieve_mem0_memories → planner
     workflow.set_entry_point("maybe_summarize")
@@ -301,33 +340,28 @@ def create_multi_agent_graph() -> StateGraph:
             "execute_plan": "execute_plan",
             "general_agent": "general_agent",
             "operation_agent": "operation_agent",
-            "knowledge_agent": "knowledge_agent",
+            "knowledge_agent": "supervisor",  # knowledge → supervisor 再路由到 retrieval_agent
         }
     )
 
     # Supervisor → Worker Agent
+    # route_to_agent: knowledge_agent → retrieval_agent（两阶段）
     workflow.add_conditional_edges(
         "supervisor",
         route_to_agent,
         {
-            "knowledge_agent": "knowledge_agent",
+            "retrieval_agent": "retrieval_agent",  # 检索阶段
             "operation_agent": "operation_agent",
             "general_agent": "general_agent",
         }
     )
 
-    # Execute Plan → 下一步 或 save_mem0
-    workflow.add_conditional_edges(
-        "execute_plan",
-        route_execute_plan,
-        {
-            "execute_plan": "execute_plan",
-            "save_to_mem0": "save_to_mem0",
-        }
-    )
+    # retrieval_agent → generation_agent（检索完成后生成）
+    workflow.add_edge("retrieval_agent", "generation_agent")
 
     # Worker Agent → save_mem0 → END
-    workflow.add_edge("knowledge_agent", "save_to_mem0")
+    workflow.add_edge("generation_agent", "save_to_mem0")   # 新流程
+    workflow.add_edge("knowledge_agent", "save_to_mem0")    # 保留旧版
     workflow.add_edge("operation_agent", "save_to_mem0")
     workflow.add_edge("general_agent", "save_to_mem0")
     workflow.add_edge("save_to_mem0", END)
@@ -337,6 +371,7 @@ def create_multi_agent_graph() -> StateGraph:
 
 # ==================== Mem0 记忆保存节点 ====================
 
+@traced("agent.graph.save_to_mem0")
 async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
     """
     保存对话到 Mem0 记忆节点

@@ -298,6 +298,24 @@ class Settings(BaseSettings):
         description="Mem0 记忆注入上下文的最大字符数"
     )
 
+    # ==================== Redis 配置（评估缓存持久化）====================
+    redis_host: str = Field(
+        default="disabled",
+        description="Redis 主机（设为 disabled 或空则使用内存缓存）"
+    )
+    redis_port: int = Field(
+        default=6379,
+        description="Redis 端口"
+    )
+    redis_password: str = Field(
+        default="",
+        description="Redis 密码（无密码留空）"
+    )
+    redis_db: int = Field(
+        default=0,
+        description="Redis 数据库编号"
+    )
+
     # ==================== Corrective RAG 配置 ====================
     crag_enabled: bool = Field(
         default=True,

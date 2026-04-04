@@ -7,6 +7,7 @@ from typing import Dict, Any
 from typing_extensions import TypedDict
 from langchain_core.messages import HumanMessage
 from src.models.llm import get_llm
+from src.observability import traced
 
 
 class RouteDecision(TypedDict):
@@ -17,6 +18,7 @@ class RouteDecision(TypedDict):
     needs_expansion: bool  # 新增：知识检索时是否需要 Query Expansion
 
 
+@traced("agent.supervisor.node")
 async def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Supervisor 节点 - 负责路由决策
@@ -194,13 +196,21 @@ def route_to_agent(state: Dict[str, Any]) -> str:
     路由执行节点 - 根据 Supervisor 的决策跳转到对应的 Agent
 
     注意：返回值必须是节点名称（与 graph.py 中的 add_node 名称一致）
-    即：knowledge_agent, operation_agent, general_agent
+    即：retrieval_agent, operation_agent, general_agent
+
+    重构说明：
+    - knowledge_agent 节点不再直接执行完整检索+生成
+    - 改为 routing 到 retrieval_agent → generation_agent 两阶段
+    - 旧版 knowledge_agent_node 保留为向后兼容（ReAct 方式）
     """
     next_agent = state.get("next_agent", "general_agent")
 
-    # 直接返回 Agent 名称（与节点名称一致）
-    # 可选值: knowledge_agent, operation_agent, general_agent
-    valid_agents = ["knowledge_agent", "operation_agent", "general_agent"]
+    # knowledge_agent → 路由到 retrieval_agent（两阶段：检索 + 生成）
+    if next_agent == "knowledge_agent":
+        return "retrieval_agent"
+
+    # operation_agent / general_agent 保持不变
+    valid_agents = ["retrieval_agent", "operation_agent", "general_agent"]
 
     if next_agent in valid_agents:
         return next_agent

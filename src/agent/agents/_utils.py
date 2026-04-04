@@ -71,3 +71,35 @@ def inject_context_to_messages(
         injected = [summary_msg] + injected
 
     return injected
+
+
+def inject_worker_context(
+    messages: List,
+    summary: str = "",
+    mem0_memories: str = ""
+) -> List:
+    """
+    为 Worker Agent 预注入上下文。
+
+    与 inject_context_to_messages 的区别：
+    - 本方法将 Mem0 记忆和摘要合并为一条 SystemMessage（减少 token 开销）
+    - 适用于 parallel_executor 中多个 Worker 共享同一份预注入上下文
+
+    格式：「【背景上下文】Mem0记忆（若存在）\n---\n对话摘要（若存在）」
+    """
+    parts = []
+
+    if mem0_memories:
+        parts.append(f"【用户背景与历史记忆】\n{mem0_memories.strip()}")
+
+    if summary:
+        parts.append(f"【本次对话早期摘要】\n{summary.strip()}")
+
+    if not parts:
+        return list(messages)
+
+    context_content = "\n\n---\n\n".join(parts)
+    context_msg = SystemMessage(
+        content=f"【背景上下文】以下是你需要了解的背景信息，请结合它回答用户问题：\n\n{context_content}"
+    )
+    return [context_msg] + list(messages)

@@ -718,6 +718,36 @@ body {
   margin-bottom: 8px;
 }
 
+.login-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.login-tabs button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.login-tabs button.active {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+}
+
+.login-success {
+  color: #86efac;
+  font-size: 13px;
+}
+
 .login-desc {
   color: var(--text-secondary);
   font-size: 13px;
@@ -758,6 +788,11 @@ body {
 
 .login-btn:hover {
   filter: brightness(1.05);
+}
+
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .login-error {

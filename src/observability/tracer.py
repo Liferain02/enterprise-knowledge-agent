@@ -40,6 +40,16 @@ class Span:
         self.status = status
         self.error = error
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            self.end(SpanStatus.ERROR, str(exc_val))
+        else:
+            self.end(SpanStatus.OK)
+        return False
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "span_id": self.span_id,
@@ -57,6 +67,7 @@ class Span:
 _trace_id_var: ContextVar[Optional[str]] = ContextVar("trace_id", default=None)
 _spans_var: ContextVar[List[Span]] = ContextVar("spans", default=[])
 _span_stack_var: ContextVar[List[Span]] = ContextVar("span_stack", default=[])
+_current_span_var: ContextVar[Optional[Span]] = ContextVar("current_span", default=None)
 
 
 # ==================== 公开 API ====================
@@ -164,71 +175,5 @@ def clear_trace_context():
 
 
 # ==================== 便捷装饰器 ====================
-
-import functools
-import asyncio
-
-
-def traced(
-    name: Optional[str] = None,
-    attrs_func: Optional[callable] = None,
-):
-    """
-    异步函数的追踪装饰器。
-
-    用法：
-        @traced("crag.grade_retrieval")
-        async def grade_retrieval(self, query, docs):
-            ...
-
-        @traced(attrs_func=lambda args, kwargs: {"doc_count": len(kwargs["documents"])})
-        async def some_method(self, documents, ...):
-            ...
-    """
-    def decorator(func):
-        _name = name or func.__name__
-
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            attrs = {}
-            if attrs_func:
-                try:
-                    attrs = attrs_func(args, kwargs)
-                except Exception:
-                    pass
-
-            span = start_span(_name, attrs)
-            try:
-                result = await func(*args, **kwargs)
-                end_span(span, SpanStatus.OK)
-                return result
-            except asyncio.TimeoutError:
-                end_span(span, SpanStatus.TIMEOUT, "function timed out")
-                raise
-            except Exception as e:
-                end_span(span, SpanStatus.ERROR, str(e))
-                raise
-
-        @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
-            attrs = {}
-            if attrs_func:
-                try:
-                    attrs = attrs_func(args, kwargs)
-                except Exception:
-                    pass
-
-            span = start_span(_name, attrs)
-            try:
-                result = func(*args, **kwargs)
-                end_span(span, SpanStatus.OK)
-                return result
-            except Exception as e:
-                end_span(span, SpanStatus.ERROR, str(e))
-                raise
-
-        if asyncio.iscoroutinefunction(func):
-            return wrapper
-        return sync_wrapper
-
-    return decorator
+# 统一实现见 otel_tracer：内部自定义 Span + 可选 OpenTelemetry 上报
+from .otel_tracer import traced  # noqa: E402

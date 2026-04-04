@@ -1,81 +1,96 @@
 """
 General Agent 节点
 负责通用回答（问候、寒暄等）
+使用 SkillLoader 创建 ReAct Agent，支持工具调用
 """
-from typing import Dict, Any, List
+import asyncio
+from typing import Dict, Any
 from langchain_core.messages import AIMessage
-from src.models.llm import get_llm
-from ..prompts import GENERAL_AGENT_SYSTEM_PROMPT
-from ._utils import get_last_user_message, build_summary_context
+from src.agent.skills.skill_loader import get_skill_loader
+from ._utils import get_last_user_message, inject_context_to_messages
+from src.observability import traced
 
 
+# Agent 缓存
+_agent_cache: Dict[str, Any] = {}
+
+# 操作超时设置（秒）
+GENERAL_TIMEOUT = 120
+
+
+def _get_general_agent():
+    """获取 General Agent（带缓存）"""
+    cache_key = "general"
+    if cache_key not in _agent_cache:
+        loader = get_skill_loader()
+        _agent_cache[cache_key] = loader.create_agent("general")
+    return _agent_cache[cache_key]
+
+
+@traced("agent.general.node")
 async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    General Agent 节点 - 负责通用回答
+    General Agent 节点 - 负责通用回答（问候、寒暄等）
 
-    处理问候、寒暄、一般性闲聊
+    使用 SkillLoader 创建 ReAct Agent，支持工具调用：
+    - general_search：搜索通用知识
+    - search_conversation_history：搜索对话历史
 
-    注意：不维护自己的历史，由主图统一管理
+    不维护自己的历史，由主图统一管理。
     """
-    llm = get_llm()
+    # 获取 General ReAct Agent
+    agent = _get_general_agent()
 
     # 获取完整的消息历史
     messages = state.get("messages", [])
     last_user_message = get_last_user_message(messages)
     summary = state.get("summary", "") or ""
-
-    # 获取 Mem0 记忆
     mem0_memories = state.get("mem0_memories", "") or ""
-    
-    # 调试输出
-    print(f"[General Agent] mem0_memories 内容: {repr(mem0_memories[:200] if mem0_memories else '')}")
-
-    # 摘要上下文（旧对话压缩后的摘要）
-    summary_context = build_summary_context(summary)
-
-    # 构建近期对话上下文（最近 6 条原始消息）
-    history_context = ""
-    if len(messages) > 1:
-        history_msgs = []
-        for msg in messages[:-1]:  # 排除当前消息
-            if hasattr(msg, 'content'):
-                role = "用户"
-                if hasattr(msg, 'type'):
-                    role = "用户" if msg.type == 'human' else "助手"
-                history_msgs.append(f"{role}: {msg.content}")
-
-        if history_msgs:
-            history_context = f"\n\n## 近期对话记录\n" + "\n".join(history_msgs[-6:])
+    session_id = state.get("session_id", "default")
 
     if not last_user_message:
-        # 没有用户消息，返回默认问候
         return {
             "final_answer": "你好！有什么可以帮助你的吗？",
             "used_agent": "general_agent",
             "messages": [AIMessage(content="你好！有什么可以帮助你的吗？")]
         }
 
-    # 构建提示词（Mem0记忆 -> 摘要 -> 近期历史 -> 当前消息）
-    prompt = f"""{GENERAL_AGENT_SYSTEM_PROMPT}
-{mem0_memories}
-{summary_context}{history_context}
+    try:
+        # 传递消息历史，若存在摘要和 Mem0 记忆则在头部注入 SystemMessage
+        config = {"configurable": {"thread_id": f"general_{session_id}"}}
+        messages_with_context = inject_context_to_messages(messages, summary, mem0_memories)
 
-## 当前用户消息
-用户说：{last_user_message}
+        # 使用 await 直接调用（ReAct Agent 内部处理工具调用循环）
+        result = await asyncio.wait_for(
+            agent.ainvoke({"messages": messages_with_context}, config),
+            timeout=GENERAL_TIMEOUT
+        )
 
-请给出友好、简洁的回答。
-"""
-    
-    # 调用 LLM 生成答案
-    response = await llm.ainvoke(prompt)
-    
-    print(f"[General Agent] 生成答案长度: {len(response.content)} 字符")
-    
-    # 创建 AIMessage 返回给主图
-    ai_message = AIMessage(content=response.content)
-    
-    return {
-        "final_answer": response.content,
-        "used_agent": "general_agent",
-        "messages": [ai_message]  # 添加到主图历史
-    }
+        # 获取 Agent 返回的所有消息（包含工具调用和最终回复）
+        agent_messages = result.get("messages", [])
+        final_answer = agent_messages[-1].content
+
+        print(f"[General Agent] 生成答案长度: {len(final_answer)} 字符")
+
+        return {
+            "final_answer": final_answer,
+            "used_agent": "general_agent",
+            "messages": agent_messages
+        }
+
+    except asyncio.TimeoutError:
+        return {
+            "final_answer": f"⏱️ General Agent 执行超时（{GENERAL_TIMEOUT}秒）\n\n请重新尝试。",
+            "used_agent": "general_agent",
+            "messages": [AIMessage(content=f"抱歉，回答超时了，请重新尝试。")]
+        }
+    except Exception as e:
+        print(f"[General Agent] 执行出错: {e}")
+        import traceback
+        traceback.print_exc()
+
+        return {
+            "final_answer": f"处理请求时出错: {str(e)}",
+            "used_agent": "general_agent",
+            "messages": [AIMessage(content=f"抱歉，处理您的请求时遇到了问题。")]
+        }

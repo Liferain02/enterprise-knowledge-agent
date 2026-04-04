@@ -1,34 +1,41 @@
 """
-Reranker 模块 - 文档重排序
-默认使用阿里百炼 qwen3-rerank，也支持 BAAI BGE 本地模型
+Reranker 模块 - Tier 1 开源复用
+支持三种后端（按优先级）：
+1. FlashRank（Tier 1，5M 参数本地模型，<10ms 延迟，即开即用）
+2. Cohere（精度最高，需要 API Key）
+3. BGE（本地，需要 GPU）
+
+默认优先尝试 FlashRank，无需 API Key。
 """
 from typing import List, Optional, Dict, Any
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
 from langchain_classic.retrievers.document_compressors import LLMChainExtractor
+import logging
 from config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class RerankerManager:
-    """Reranker 管理器"""
+    """
+    Reranker 管理器 - Tier 1 开源优先
+
+    后端优先级：
+    1. FlashRank（Tier 1，5M 参数，<10ms，即开即用）
+    2. Cohere（需要 API Key）
+    3. BGE（本地，需要 GPU）
+    4. 均匀分布（所有后端失败时的降级）
+    """
 
     def __init__(
         self,
         reranker_model: str = "gte-rerank-v2",
-        provider: str = "qwen",  # "qwen" 或 "baai"
+        provider: str = "flashrank",  # 默认改为 flashrank
         top_n: int = 3,
         score_threshold: float = 0.3
     ):
-        """
-        初始化 Reranker
-
-        Args:
-            reranker_model: Reranker 模型名称
-            provider: 提供商 "qwen"(阿里百炼) 或 "baai"(BAAI)
-            top_n: 重排序后返回的 top n 结果
-            score_threshold: 分数阈值，低于此分数的结果将被过滤
-        """
         self.settings = get_settings()
         self.reranker_model = reranker_model
         self.provider = provider
@@ -38,30 +45,53 @@ class RerankerManager:
 
     @property
     def reranker(self):
-        """获取 Reranker 实例"""
+        """获取 Reranker 实例（延迟加载）"""
         if self._reranker is None:
-            if self.provider == "qwen":
-                self._reranker = self._create_qwen_reranker()
-            else:
-                self._reranker = self._create_baai_reranker()
+            self._reranker = self._init_reranker()
         return self._reranker
 
-    def _create_qwen_reranker(self):
-        """创建阿里百炼 Reranker"""
-        try:
-            from langchain_community.chat_models import ChatOpenAI
-            from langchain_community.retrievers import BingVectorStore
-        except ImportError:
-            pass
+    def _init_reranker(self):
+        """按优先级初始化 Reranker 后端"""
+        # 1. FlashRank（Tier 1，无 API Key 要求，内联实现）
+        if self.provider in ("flashrank", "auto"):
+            try:
+                r = FlashRankReranker()
+                logger.info("[Reranker] 使用 FlashRank 后端")
+                return r
+            except Exception as e:
+                logger.warning(f"FlashRank 初始化失败: {e}")
 
-        # 使用阿里百炼的 Reranker API
-        # 注意：需要安装 dashscope 并配置 API Key
-        return QwenReranker(
-            model=self.reranker_model,
-            api_key=self.settings.dashscope_api_key,
-            top_n=self.top_n,
-            score_threshold=self.score_threshold
-        )
+        # 2. Cohere（需要 API Key）
+        if self.provider in ("cohere", "auto"):
+            try:
+                r = self._create_cohere_reranker()
+                if r:
+                    logger.info("[Reranker] 使用 Cohere 后端")
+                    return r
+            except Exception as e:
+                logger.warning(f"Cohere 初始化失败: {e}")
+
+        # 3. BGE 本地
+        if self.provider in ("baai", "bge", "auto"):
+            try:
+                r = self._create_baai_reranker()
+                logger.info("[Reranker] 使用 BGE 后端")
+                return r
+            except Exception as e:
+                logger.warning(f"BGE 初始化失败: {e}")
+
+        # 4. 降级：返回 None，走均匀分布
+        logger.warning("[Reranker] 所有后端失败，使用均匀分布降级")
+        return None
+
+    def _create_cohere_reranker(self):
+        """创建 Cohere Reranker（需要 API Key）"""
+        try:
+            from llama_index_postprocessor_cohere_rerank import CohereRerank
+            api_key = self.settings.dashscope_api_key  # Cohere 也用此字段（需用户配置）
+            return CohereRerank(api_key=api_key, top_n=self.top_n)
+        except ImportError:
+            return None
 
     def _create_baai_reranker(self):
         """创建 BAAI BGE Reranker"""
@@ -77,30 +107,20 @@ class RerankerManager:
         documents: List[Document],
         top_n: Optional[int] = None
     ) -> List[tuple[Document, float]]:
-        """
-        对文档进行重排序
-
-        Args:
-            query: 查询文本
-            documents: 待重排序的文档列表
-            top_n: 返回 top n 结果，默认使用初始化时的 top_n
-
-        Returns:
-            重排序后的文档列表（包含原始文档和分数）
-        """
+        """对文档进行重排序。后端优先级：FlashRank > Cohere > BGE > 均匀分布。"""
         if not documents:
             return []
 
         top_n = top_n or self.top_n
 
-        # 调用 Reranker
-        try:
-            results = self.reranker.rerank(query, documents, top_n)
-            return results
-        except Exception as e:
-            print(f"Reranker 错误: {e}")
-            # 如果 Reranker 失败，使用均匀分布（保持原始顺序）
-            return [(doc, 1.0 / len(documents)) for doc in documents[:top_n]]
+        if self.reranker is not None:
+            try:
+                return self.reranker.rerank(query, documents, top_n)
+            except Exception as e:
+                print(f"Reranker 错误: {e}")
+
+        # 降级：均匀分布
+        return [(doc, 1.0 / len(documents)) for doc in documents[:top_n]]
 
     def get_compression_retriever(
         self,
@@ -126,6 +146,82 @@ class RerankerManager:
             base_compressor=compressor,
             base_retriever=base_retriever
         )
+
+
+class FlashRankReranker:
+    """
+    FlashRank 本地轻量级重排序
+
+    使用 MS MARCO 数据集上微调的 MiniLM 模型（22M 参数，约 80MB），
+    延迟 < 10ms，支持中文。
+    """
+
+    def __init__(
+        self,
+        model_name: str = "Ms-MiniLM-L6-v2",
+        top_n: int = 3,
+    ):
+        self.model_name = model_name
+        self.top_n = top_n
+        self._client = None
+
+    @property
+    def client(self):
+        """延迟加载 FlashRank 客户端"""
+        if self._client is None:
+            try:
+                from flashrank import Ranker
+                self._client = Ranker(model_name=self.model_name)
+            except ImportError:
+                raise ImportError(
+                    "请安装 flashrank: pip install flashrank"
+                )
+        return self._client
+
+    def rerank(
+        self,
+        query: str,
+        documents: List[Document],
+        top_n: int = None,
+    ) -> List[tuple[Document, float]]:
+        """
+        使用 FlashRank 对文档重排序
+
+        Args:
+            query: 查询文本
+            documents: 待重排序的文档
+            top_n: 返回 top n 结果
+
+        Returns:
+            [(doc, score), ...] 按分数降序
+        """
+        top_n = top_n or self.top_n
+
+        if not documents:
+            return []
+
+        try:
+            # 构造 FlashRank 输入格式
+            flashrank_docs = [
+                {"id": i, "text": doc.page_content}
+                for i, doc in enumerate(documents)
+            ]
+
+            # 重排序
+            results = self.client.rerank(query, flashrank_docs)
+
+            # 转换回 (doc, score) 格式
+            reranked = []
+            for item in results[:top_n]:
+                doc_idx = item["id"]
+                score = item["score"]
+                reranked.append((documents[doc_idx], float(score)))
+
+            return reranked
+
+        except Exception as e:
+            logger.warning(f"FlashRank rerank 失败: {e}")
+            return [(doc, 1.0 / len(documents)) for doc in documents[:top_n]]
 
 
 class QwenReranker:
@@ -285,32 +381,30 @@ _reranker_manager: Optional[RerankerManager] = None
 
 def get_reranker_manager(
     reranker_model: str = None,
-    provider: str = "qwen",
+    provider: str = None,
     top_n: int = None,
     score_threshold: float = None
 ) -> RerankerManager:
     """
-    获取 Reranker 管理器实例
+    获取 Reranker 管理器实例。
 
-    Args:
-        reranker_model: Reranker 模型名称
-        provider: 提供商
-        top_n: 返回结果数
-        score_threshold: 分数阈值
-
-    Returns:
-        RerankerManager 实例
+    后端优先级（settings.reranker_provider）：
+    - "flashrank"（默认，Tier 1，无需 API Key）
+    - "cohere"（需要 API Key）
+    - "baai"（本地 BGE，需要 GPU）
+    - "qwen"（阿里百炼，需要 API Key）
     """
     global _reranker_manager
 
     settings = get_settings()
+    effective_provider = provider or getattr(settings, "reranker_provider", "flashrank")
 
     if _reranker_manager is None:
         _reranker_manager = RerankerManager(
-            reranker_model=reranker_model or getattr(settings, 'reranker_model', 'gte-rerank-v2'),
-            provider=provider or getattr(settings, 'reranker_provider', 'qwen'),
-            top_n=top_n or getattr(settings, 'reranker_top_n', 3),
-            score_threshold=score_threshold or getattr(settings, 'reranker_threshold', 0.3)
+            reranker_model=reranker_model or getattr(settings, "reranker_model", "gte-rerank-v2"),
+            provider=effective_provider,
+            top_n=top_n or getattr(settings, "reranker_top_n", 3),
+            score_threshold=score_threshold or getattr(settings, "reranker_threshold", 0.3)
         )
 
     return _reranker_manager

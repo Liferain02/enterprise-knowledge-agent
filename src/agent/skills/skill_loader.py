@@ -129,14 +129,18 @@ class SkillLoader:
                     for tool_name in tool_names:
                         if hasattr(module, tool_name):
                             tool_func = getattr(module, tool_name)
-                            # 检查是否是创建工具的函数
-                            if hasattr(tool_func, '__call__') and tool_name.startswith('create_'):
-                                tool = tool_func()
-                            else:
-                                # 创建 StructuredTool
+                            # 尝试调用：若是工厂函数（返回 BaseTool），直接使用结果
+                            if callable(tool_func):
+                                try:
+                                    result = tool_func()
+                                    if isinstance(result, BaseTool):
+                                        tools.append(result)
+                                        continue
+                                except TypeError:
+                                    pass
+                                # 普通 LangChain 工具函数 → 创建 StructuredTool
                                 from langchain_core.tools import StructuredTool
-                                tool = StructuredTool.from_function(tool_func)
-                            tools.append(tool)
+                                tools.append(StructuredTool.from_function(tool_func))
             except Exception as e:
                 print(f"加载工具失败 {skill_name}.{module_path}.{tool_names}: {e}")
                 import traceback
@@ -206,7 +210,9 @@ class SkillLoader:
     def run(self, skill_name: str, query: str, session_id: str = "default") -> str:
         """运行技能"""
         agent = self.create_agent(skill_name)
-        config = {"configurable": {"thread_id": f"{skill_name}_{session_id}"}}
+        # 使用独立的 thread_id：{session_id}_{skill_name}
+        # 避免与主图的 session_id 冲突
+        config = {"configurable": {"thread_id": f"{session_id}_{skill_name}"}}
         
         result = agent.invoke(
             {"messages": [query]},

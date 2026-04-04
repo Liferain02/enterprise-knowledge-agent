@@ -1,12 +1,13 @@
 """
-认证与鉴权（单用户）
+认证与鉴权
 
+ - /api/v1/auth/register 注册新用户
  - /api/v1/auth/login 登录获取 JWT
  - 其他接口通过 Authorization: Bearer <token> 访问
 
-说明：
- - 用户名/密码从 config/.env 读取（Settings.admin_username/admin_password）
- - 不把任何真实密码写入代码或仓库
+支持两种用户：
+ 1. 数据库用户（data/users.db，SQLite，通过 register 注册）
+ 2. 单管理员（config/.env 中的 admin_username/password，仅作为回退）
 """
 
 from __future__ import annotations
@@ -68,9 +69,15 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
         sub = payload.get("sub")
         if not sub:
             raise JWTError("Missing subject")
-        if sub != settings.admin_username:
-            raise JWTError("Invalid subject")
-        return {"username": sub}
+        # 验证用户存在于数据库或 admin 配置中
+        from .security_user import get_user_by_username
+        db_user = get_user_by_username(sub)
+        if db_user is not None:
+            return {"username": sub}
+        # 回退：只允许 admin 用户
+        if sub == settings.admin_username:
+            return {"username": sub}
+        raise JWTError("Invalid subject")
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

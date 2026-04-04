@@ -30,6 +30,7 @@ from langchain_core.messages import HumanMessage
 
 from src.models.llm import get_llm
 from config.settings import get_settings
+from src.rag.evaluation import grade_cache
 
 
 logger = logging.getLogger(__name__)
@@ -247,9 +248,8 @@ class RetrievalGrader:
         Returns:
             DocumentGrade: 包含评分、理由和评级
         """
-        # ── 缓存检查 ──────────────────────────────────────────────
-        cache_key = _get_cache_key(query, doc.page_content)
-        cached = _get_cached_grade(cache_key)
+        # ── 缓存检查（使用 Redis 持久化 + 内存降级）──────────────
+        cached = await grade_cache.grade_cache_get(query, doc.page_content)  # type: ignore[attr-defined]
         if cached:
             # 从缓存恢复 DocumentGrade
             score, reasoning = cached
@@ -299,8 +299,8 @@ class RetrievalGrader:
 
                 latency = (time.time() - start) * 1000
 
-                # ── 写入缓存 ──────────────────────────────────────
-                _cache_grade(cache_key, (score, reasoning))
+                # ── 写入缓存（Redis + 内存降级）───────────────
+                await grade_cache.grade_cache_set(query, doc.page_content, score, reasoning)  # type: ignore[attr-defined]
 
                 return DocumentGrade(
                     doc=doc,
@@ -1009,40 +1009,21 @@ def reset_crags():
 
 # ============================================================
 # LLM 评估响应缓存（减少重复调用）
+# 使用 Redis 持久化（跨进程共享，支持 TTL）+ 内存降级
 # ============================================================
-import hashlib
-import time as time_module
-
-_grade_cache: dict = {}
-_CACHE_TTL = 300  # 缓存 5 分钟
-
-
-def _get_cache_key(query: str, doc_content: str) -> str:
-    """生成缓存 key"""
-    key_str = f"{query}|{doc_content[:500]}"
-    return hashlib.md5(key_str.encode()).hexdigest()
-
-
-def _get_cached_grade(cache_key: str) -> Optional[tuple]:
-    """获取缓存的评估结果"""
-    if cache_key in _grade_cache:
-        result, timestamp = _grade_cache[cache_key]
-        if time_module.time() - timestamp < _CACHE_TTL:
-            return result
-        else:
-            del _grade_cache[cache_key]
-    return None
-
-
-def _cache_grade(cache_key: str, result: tuple):
-    """缓存评估结果"""
-    _grade_cache[cache_key] = (result, time_module.time())
-
-
-def _clear_grade_cache():
-    """清空缓存"""
-    global _grade_cache
-    _grade_cache = {}
+# 旧内存缓存已移除，改为使用 grade_cache 模块
+# - grade_cache_get(): 异步读取，支持 Redis + 内存降级
+# - grade_cache_set(): 异步写入，支持 Redis + 内存降级
+# - grade_cache_clear(): 异步清空
+# - grade_cache_stats(): 缓存统计（用于监控）
+#
+# 配置方式（config/settings.py 或 config/.env）：
+#   REDIS_HOST=redis        # Redis 主机（docker-compose 服务名）
+#   REDIS_PORT=6379         # Redis 端口
+#   REDIS_PASSWORD=         # Redis 密码（可选）
+#   REDIS_DB=0              # Redis 数据库编号
+#
+# 若 Redis 不可用，自动降级到内存缓存（TTL 5分钟，进程重启后丢失）
 
 
 # ============================================================

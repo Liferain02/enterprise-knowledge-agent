@@ -1,6 +1,11 @@
 """
-混合检索模块 - 结合 BM25（关键词检索）+ 向量检索
-支持多种混合检索策略
+混合检索模块 - Tier 1 开源复用
+结合 bm25s（BM25）+ 向量检索，支持多种融合策略。
+
+bm25s: Rust+Python 实现，比 rank_bm25 快 10 倍，内置中文分词（jieba）。
+
+参考：
+- https://github.com/xhluca/bm25s
 """
 from typing import List, Optional, Dict, Any, Tuple
 from langchain_core.documents import Document
@@ -13,7 +18,7 @@ from ..storage.vectorstore import get_vectorstore
 from config.settings import get_settings
 
 
-# RRF 融合常数（通常 k=60，k 越大各方法贡献越均衡）
+# RRF 融合常数（k 越大，各方法贡献越均衡）
 RRF_K = 60
 
 # jieba 用户词典全局加载（只加载一次）
@@ -106,24 +111,34 @@ class HybridRetrieverManager:
 
     def set_documents(self, documents: List[Document]):
         """
-        设置 BM25 使用的文档集合，并预构建索引
+        设置 BM25 使用的文档集合，并预构建索引。
 
-        Args:
-            documents: 文档列表
+        优先级：bm25s（Tier 1，Rust 实现，10x faster）> rank_bm25（备用）
         """
         self._documents = documents
-        if self.enable_bm25 and documents:
-            self._bm25_retriever = BM25Retriever.from_documents(
-                documents,
-                k=self.top_k * 2  # 检索更多候选
-            )
-            # 预构建 BM25 索引（避免每次 search_with_score 重建）
+        if not documents:
+            return
+
+        if self.enable_bm25:
             texts = [doc.page_content for doc in documents]
-            self._tokenized_corpus = [
-                [w.lower() for w in jieba.cut(text) if w.strip()]
-                for text in texts
-            ]
-            self._bm25_index = BM25Okapi(self._tokenized_corpus)
+            tokens = [self._tokenize(text) for text in texts]
+
+            # Tier 1: bm25s（Rust+Python，极速）
+            try:
+                import bm25s
+                self._bm25_index = bm25s.BM25()
+                self._bm25_index.index(tokens)
+                self._bm25_backend = "bm25s"
+                logger.info(f"混合检索 BM25 引擎: bm25s ({len(documents)} 篇文档)")
+            except ImportError:
+                # 备用：rank_bm25
+                self._bm25_index = BM25Okapi(tokens)
+                self._bm25_backend = "rank_bm25"
+                logger.info(f"混合检索 BM25 引擎: rank_bm25 ({len(documents)} 篇文档)")
+
+    def _tokenize(self, text: str) -> List[str]:
+        """分词（统一使用 jieba）"""
+        return [w.lower() for w in jieba.cut(text) if w.strip()]
 
     @property
     def bm25_retriever(self) -> Optional[BM25Retriever]:
@@ -256,10 +271,33 @@ class HybridRetrieverManager:
 
         # ── 第二路：BM25 检索（返回 rank）─────────────────────────────
         bm25_ranked: Dict[str, Tuple[Document, int]] = {}  # key → (doc, rank)
-        if self.enable_bm25 and self._bm25_index and self._documents:
+        if self.enable_bm25 and self._bm25_index is not None and self._documents:
             try:
-                tokens = [w.lower() for w in jieba.cut(query) if w.strip()]
-                all_scores = self._bm25_index.get_scores(tokens)
+                tokens = self._tokenize(query)
+                all_scores: List[float] = []
+
+                if getattr(self, "_bm25_backend", None) == "bm25s":
+                    # Tier 1: bm25s（Rust 实现，极速）
+                    import bm25s
+                    import numpy as np
+                    results = self._bm25_index.retrieve(
+                        [tokens],
+                        corpus=None,
+                        k=min(candidate_k * 2, len(self._documents)),
+                        sorted=True,
+                        return_as="tuple",
+                        show_progress=False,
+                    )
+                    if results is not None and hasattr(results, "documents"):
+                        doc_indices = np.asarray(results.documents[0])
+                        doc_scores = np.asarray(results.scores[0])
+                        all_scores = [0.0] * len(self._documents)
+                        for doc_idx, score in zip(doc_indices, doc_scores):
+                            if 0 <= doc_idx < len(self._documents):
+                                all_scores[int(doc_idx)] = float(score)
+                else:
+                    # 备用：rank_bm25
+                    all_scores = self._bm25_index.get_scores(tokens)
 
                 if all(s == 0 for s in all_scores):
                     for i, text in enumerate(self._documents):

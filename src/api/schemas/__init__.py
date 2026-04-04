@@ -27,13 +27,6 @@ class ChatStreamRequest(BaseModel):
     images: Optional[List[ImageContent]] = Field(default=None, description="附带的图片（支持多张）")
 
 
-class ChatStreamRequest(BaseModel):
-    """流式聊天请求"""
-    message: str = Field(description="用户消息")
-    session_id: str = Field(default="default", description="会话ID")
-    images: Optional[List[ImageContent]] = Field(default=None, description="附带的图片（支持多张）")
-
-
 class CreateSessionRequest(BaseModel):
     """创建会话请求"""
     title: Optional[str] = Field(default=None, description="会话标题（可选）")
@@ -60,6 +53,18 @@ class LoginRequest(BaseModel):
     """登录请求"""
     username: str = Field(description="用户名")
     password: str = Field(description="密码")
+
+
+class RegisterRequest(BaseModel):
+    """注册请求"""
+    username: str = Field(description="用户名（3-32个字符，字母数字下划线）")
+    password: str = Field(description="密码（6-128个字符）")
+
+
+class RegisterResponse(BaseModel):
+    """注册响应"""
+    success: bool = Field(description="是否成功")
+    message: str = Field(description="结果信息")
 
 
 # ==================== Response Models ====================
@@ -94,13 +99,16 @@ class HealthResponse(BaseModel):
 __all__ = [
     "ImageContent",
     "ChatRequest",
+    "ChatStreamRequest",
     "CreateSessionRequest",
     "UpdateTitleRequest",
     "AddDocumentRequest",
     "SearchRequest",
     "LoginRequest",
+    "RegisterRequest",
     "ChatResponse",
     "SearchResponse",
     "LoginResponse",
+    "RegisterResponse",
     "HealthResponse",
 ]

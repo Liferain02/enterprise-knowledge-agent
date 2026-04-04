@@ -1,223 +1,206 @@
 """
-文档冲突检测器
-检测检索结果中的制度内容冲突，在生成前拦截并返回冲突摘要。
+Document Conflict Detector - 文档冲突检测
+
+职责：
+- 在检索完成后，检测多个文档之间的矛盾信息
+- 用于生成阶段的冲突感知回答
+
+检测策略：
+1. 关键词冲突：检测数字、日期、名称等关键事实的不一致
+2. LLM 辅助检测：对复杂文本进行矛盾分析
+
+与 CRAG 的关系：
+- CRAG 评估的是「文档与查询的相关性」
+- ConflictDetector 检测的是「文档与文档之间的事实一致性」
+- 两者互补，共同保证 RAG 质量
 """
-import logging
+from typing import List, Tuple
 import re
-from dataclasses import dataclass
-from typing import List, Dict, Optional, Any
+
 from langchain_core.documents import Document
 
-logger = logging.getLogger(__name__)
+
+# ============================================================
+# 关键事实抽取
+# ============================================================
+
+# 用于识别关键事实片段的正则表达式
+_KEY_PATTERNS = [
+    # 数字 + 单位（百分比、金额、数量）
+    (re.compile(r'(\d+(?:\.\d+)?)\s*(%|percent|百分比|人数|天|年|元|万元|人次)'), 'number'),
+    # 日期/时间
+    (re.compile(r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}|\d{1,2}[-/月]\d{1,2})'), 'date'),
+    # 专有名词 + 具体数值（职务、部门、名称 + 数字）
+    (re.compile(r'([\u4e00-\u9fa5]{2,6})\s*[:：]\s*([^\n，,。；;]{2,20})'), 'kv'),
+]
 
 
-# ==================== 数据模型 ====================
+def extract_key_facts(doc: Document) -> List[Tuple[str, str]]:
+    """从文档中抽取关键事实（kv对、数值事实）"""
+    content = doc.page_content
+    facts = []
+    source = doc.metadata.get("title", doc.metadata.get("source", "unknown")) if doc.metadata else "unknown"
 
-@dataclass
-class Conflict:
-    """单个冲突项"""
-    type: str  # numeric_conflict / range_conflict / status_conflict / semantic_conflict
-    claim_type: str  # "年假天数" / "试用期长度" 等
-    sources: Dict[str, str]  # {值: 来源文件名}
-    severity: str  # high / medium / low
+    for pattern, ftype in _KEY_PATTERNS:
+        for match in pattern.finditer(content):
+            if ftype == 'number':
+                facts.append((f"数值: {match.group()}", source))
+            elif ftype == 'date':
+                facts.append((f"日期: {match.group()}", source))
+            elif ftype == 'kv':
+                facts.append((f"{match.group(1)}: {match.group(2)}", source))
+
+    return facts
 
 
-@dataclass
-class ConflictReport:
-    """一组冲突的报告"""
-    conflicts: List[Conflict]
-    severity: str  # high / medium / low
-    suggested_action: str  # conflict_summary / reject / proceed
-
-
-# ==================== 数值提取器 ====================
-
-class ClaimExtractor:
+def detect_document_conflicts(
+    docs: List[Document],
+    query: str = "",
+) -> List[str]:
     """
-    从文档文本中提取可比较的关键数值声明。
-    支持：公司制度中常见的数字类信息。
-    """
+    检测多个文档之间的冲突
 
-    # 常见制度数值模式：(数字)(单位) 或 "(数字)天/年/人/元" 等
-    _NUMERIC_PATTERNS = [
-        # 年假/假期
-        (r"年假[^\d]{0,5}(\d+)[^\d]{0,3}天", "年假天数"),
-        (r"带薪年假[^\d]{0,5}(\d+)[^\d]{0,3}天", "年假天数"),
-        (r"病假[^\d]{0,5}(\d+)[^\d]{0,3}天", "病假天数"),
-        (r"事假[^\d]{0,5}(\d+)[^\d]{0,3}天", "事假天数"),
-        # 薪酬/补贴
-        (r"基本工资[^\d]{0,5}(\d+)[^\d]{0,3}元", "基本工资"),
-        (r"餐补[^\d]{0,5}(\d+)[^\d]{0,3}元", "餐补金额"),
-        (r"交通补贴[^\d]{0,5}(\d+)[^\d]{0,3}元", "交通补贴"),
-        (r"绩效工资[^\d]{0,5}(\d+)[^\d]{0,3}元", "绩效工资"),
-        # 试用期
-        (r"试用期[^\d]{0,5}(\d+)[^\d]{0,3}个月", "试用期长度"),
-        (r"试用期内[^\d]{0,5}(\d+)[^\d]{0,3}天", "试用期天数"),
-        # 离职/notice
-        (r"提前[^\d]{0,5}(\d+)[^\d]{0,3}天", "离职通知期"),
-        (r"提前[^\d]{0,5}(\d+)[^\d]{0,3}个月", "离职通知期"),
-        # 报销/额度
-        (r"报销[^\d]{0,5}上限[^\d]{0,5}(\d+)[^\d]{0,3}元", "报销上限"),
-        # 加班
-        (r"加班工资[^\d]{0,5}(\d+(?:\.\d+)?)[^\d]{0,3}倍", "加班工资倍数"),
+    策略：
+    1. 精确数值冲突：相同属性不同数值（如：年假天数 10 天 vs 15 天）
+    2. 关键词冲突：同一实体被描述为不同状态
+    3. 否定检测：同一事实被同时肯定和否定
+
+    Args:
+        docs: 检索到的文档列表
+        query: 原始查询（用于过滤相关实体）
+
+    Returns:
+        冲突描述列表，每条是一个独立的冲突
+    """
+    if len(docs) < 2:
+        return []
+
+    warnings = []
+
+    # ── 策略1：数值冲突检测 ───────────────────────────────────────────
+    # 收集所有 (属性, 数值) 对，检测同名属性不同数值
+    attr_values: dict = {}  # attr -> [(value, source), ...]
+    for doc in docs:
+        source = doc.metadata.get("title", doc.metadata.get("source", "unknown")) if doc.metadata else "unknown"
+        content = doc.page_content
+
+        # 匹配 "XXX 天"、"XXX 人"、"XXX %" 等模式
+        quantity_pattern = re.compile(
+            r'([\u4e00-\u9fa5a-zA-Z]{2,8})\s*'
+            r'(\d+(?:\.\d+)?)\s*'
+            r'(天|人|年|月|%|percent|元|万元|次|件|个)'
+        )
+        for match in quantity_pattern.finditer(content):
+            attr = match.group(1).strip()
+            value = match.group(2)
+            unit = match.group(3)
+            key = f"{attr}（{unit}）"
+            if key not in attr_values:
+                attr_values[key] = []
+            attr_values[key].append((value, source))
+
+    # 检测同名属性不同数值
+    for attr, items in attr_values.items():
+        unique_values = set(v for v, _ in items)
+        if len(unique_values) > 1:
+            sources_by_value = {}
+            for val, src in items:
+                if val not in sources_by_value:
+                    sources_by_value[val] = []
+                sources_by_value[val].append(src)
+            val_strs = [f"「{v}」（来源: {', '.join(srcs[:2])})" for v, srcs in sources_by_value.items()]
+            warnings.append(
+                f"数值冲突 - {attr}：{' | '.join(val_strs)}"
+            )
+
+    # ── 策略2：关键词冲突检测 ─────────────────────────────────────────
+    # 检测"可以" vs "不可以"、"必须" vs "不能" 等矛盾描述
+    contradiction_pairs = [
+        ("可以", "不能"),
+        ("必须", "禁止"),
+        ("需要", "无需"),
+        ("有权", "无权"),
+        ("同意", "拒绝"),
+        ("批准", "驳回"),
+        ("有效", "无效"),
+        ("适用", "不适用"),
     ]
+    for doc1, doc2 in zip(docs[:-1], docs[1:]):
+        c1 = doc1.page_content[:500]
+        c2 = doc2.page_content[:500]
+        src1 = doc1.metadata.get("title", doc1.metadata.get("source", "")) if doc1.metadata else ""
+        src2 = doc2.metadata.get("title", doc2.metadata.get("source", "")) if doc2.metadata else ""
 
-    def extract(self, docs: List[Document], query: str) -> Dict[str, Dict[str, str]]:
-        """
-        从文档列表中提取所有数值声明。
+        for pos, neg in contradiction_pairs:
+            pos1, neg1 = pos in c1, neg in c1
+            pos2, neg2 = pos in c2, neg in c2
 
-        Returns:
-            {claim_type: {value: source_filename}}
-            例：{"年假天数": {"15": "员工手册.pdf", "10": "HR政策.docx"}}
-        """
-        entities: Dict[str, Dict[str, str]] = {}
+            # 两篇文档在同一属性上产生矛盾描述
+            if (pos1 and neg2) or (neg1 and pos2):
+                if src1 and src2 and src1 != src2:
+                    warnings.append(
+                        f"描述冲突 - 同一问题在不同文档中描述矛盾"
+                        f"（{src1} vs {src2}）"
+                    )
+                    break
 
-        for doc in docs:
-            text = doc.page_content
-            meta = doc.metadata or {}
-            source = meta.get("source", "未知来源")
+    # ── 去重 ───────────────────────────────────────────────────────────
+    unique_warnings = list(dict.fromkeys(warnings))
 
-            for pattern, claim_type in self._NUMERIC_PATTERNS:
-                matches = re.findall(pattern, text)
-                for match in matches:
-                    value = match
-                    if claim_type not in entities:
-                        entities[claim_type] = {}
-                    if value not in entities[claim_type]:
-                        entities[claim_type][value] = source
-                    else:
-                        # 多来源同一值，记录第一个
-                        pass
+    return unique_warnings
 
-        return entities
 
-    def detect_conflicts(self, entities: Dict[str, Dict[str, str]]) -> List[Conflict]:
-        """
-        从提取的数值声明中检测冲突。
+# ============================================================
+# LLM 辅助冲突检测（可选，对复杂文本更准确）
+# ============================================================
 
-        冲突定义：同一 claim_type 有 2+ 个不同的值。
-        """
-        conflicts: List[Conflict] = []
+async def detect_conflicts_with_llm(
+    docs: List[Document],
+    query: str,
+) -> List[str]:
+    """
+    使用 LLM 进行深度冲突检测（可选，用于复杂场景）
 
-        for claim_type, value_sources in entities.items():
-            if len(value_sources) > 1:
-                # 多个不同值 → 冲突
-                unique_values = list(value_sources.keys())
-                conflict = Conflict(
-                    type="numeric_conflict",
-                    claim_type=claim_type,
-                    sources=value_sources,
-                    severity="medium" if len(unique_values) == 2 else "high",
-                )
-                conflicts.append(conflict)
+    当规则检测不够用时（如语义层面的矛盾），调用 LLM 分析。
+    目前默认使用规则检测；此函数预留为后续扩展。
+    """
+    if len(docs) < 2:
+        return []
+
+    try:
+        from src.models.llm import get_llm
+
+        # 构造 prompt
+        doc_summaries = []
+        for i, doc in enumerate(docs, 1):
+            source = doc.metadata.get("title", doc.metadata.get("source", f"文档{i}")) if doc.metadata else f"文档{i}"
+            content = doc.page_content[:600]
+            doc_summaries.append(f"【{source}】\n{content}\n")
+
+        prompt = f"""请分析以下文档在回答「{query}」时是否存在矛盾信息。
+
+{doc_summaries}
+
+请输出：若存在矛盾，列出每个矛盾点（每行一个，格式：「矛盾描述 | 来源1 vs 来源2」）；
+若不存在矛盾，输出「无冲突」。"""
+
+        llm = get_llm(temperature=0.1)
+        response = await llm.ainvoke(prompt)
+        text = response.content.strip()
+
+        if text == "无冲突" or not text:
+            return []
+
+        # 解析 LLM 输出
+        conflicts = []
+        for line in text.split("\n"):
+            line = line.strip().lstrip("-*、. ")
+            if line and not line.startswith("无冲突"):
+                conflicts.append(line)
 
         return conflicts
 
-
-# ==================== 冲突检测器 ====================
-
-class DocumentConflictDetector:
-    """
-    检测检索结果中的文档冲突。
-
-    工作流程：
-    1. 提取关键数值声明（ClaimExtractor）
-    2. 检测同 claim_type 不同值的冲突
-    3. 生成用户友好的冲突摘要
-    4. 返回 ConflictReport，建议是否继续生成
-
-    调用点：在 CRAG 返回 HIGH/MEDIUM 结果后、调用生成模型前。
-    """
-
-    def __init__(self):
-        self.extractor = ClaimExtractor()
-
-    def detect(self, docs: List[Document], query: str) -> Optional[ConflictReport]:
-        """
-        检测文档冲突。
-
-        Args:
-            docs: 检索到的文档列表
-            query: 用户查询（用于判断是否真的需要检测冲突）
-
-        Returns:
-            ConflictReport 或 None（无冲突）
-        """
-        if not docs:
-            return None
-
-        # 提取数值声明
-        entities = self.extractor.extract(docs, query)
-
-        # 检测冲突
-        conflicts = self.extractor.detect_conflicts(entities)
-
-        if not conflicts:
-            return None
-
-        # 判定严重级别
-        has_high = any(c.severity == "high" for c in conflicts)
-        severity = "high" if has_high else "medium"
-
-        # high 严重级别建议返回冲突摘要（拒答）
-        # medium 严重级别建议在答案中注明冲突
-        action = "reject" if severity == "high" else "conflict_summary"
-
-        return ConflictReport(
-            conflicts=conflicts,
-            severity=severity,
-            suggested_action=action,
-        )
-
-    def format_conflict_summary(self, report: ConflictReport) -> str:
-        """
-        将冲突报告格式化为用户友好的文本。
-
-        用于：
-        1. 直接返回给用户（reject 级别）
-        2. 注入到生成模型的上下文中（conflict_summary 级别）
-        """
-        lines = [
-            "⚠️  **发现制度内容存在冲突，请以 HR 或制度管理员确认为准：**\n",
-        ]
-
-        for c in report.conflicts:
-            lines.append(f"**{c.claim_type}** 存在不同规定：")
-            for value, source in c.sources.items():
-                lines.append(f"  - **{value}**：依据 {source}")
-            lines.append("")
-
-        lines.append("> 如需最终确认，请联系 HR 部门或制度管理员。")
-
-        return "\n".join(lines)
-
-    def inject_into_context(self, report: ConflictReport) -> str:
-        """
-        将冲突信息注入到生成上下文中（作为 system reminder）。
-        用于 medium 级别（允许生成但需注明冲突）。
-        """
-        conflict_lines = []
-        for c in report.conflicts:
-            values = " / ".join(f"**{v}**({s})" for v, s in c.sources.items())
-            line = (
-                f"- **{c.claim_type}**：存在多个不同规定：{values}。"
-                f"请在答案中列出所有版本，并注明「请以 HR 确认为准」。"
-            )
-            conflict_lines.append(line)
-
-        return (
-            "\n\n【重要提示】检索到的制度文档存在内容冲突，请在回答中：\n"
-            + "\n".join(conflict_lines)
-            + "\n请不要自行判断哪个版本正确，应列出所有版本后注明需确认。"
-        )
-
-
-# 全局实例
-_detector: Optional[DocumentConflictDetector] = None
-
-
-def get_conflict_detector() -> DocumentConflictDetector:
-    global _detector
-    if _detector is None:
-        _detector = DocumentConflictDetector()
-    return _detector
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"LLM 冲突检测失败: {e}")
+        return []

@@ -1,3 +1,35 @@
+# ============================================================
+# LlamaIndex（Tier 1 开源复用：文档处理 + 分块 + 检索）
+# 与 LangChain 完全兼容，用于更成熟的文档解析和分块算法
+# ============================================================
+llama-index>=0.14.0                    # 主包（自动安装 llama-index-core）
+llama-index-llms-dashscope>=0.6.0       # 阿里通义千问 LLM 集成
+llama-index-embeddings-dashscope>=0.5.0 # 通义千问 Embedding 集成
+llama-index-vector-stores-chroma>=0.5.0 # ChromaDB 向量存储（LangChain 兼容）
+llama-index-postprocessor-cohere-rerank>=0.8.0  # Cohere Rerank（比 BGE 更轻量）
+llama-index-retrievers-bm25>=0.7.0      # BM25 检索器（替代手写 BM25）
+
+# ============================================================
+# Unstructured（Tier 1 开源复用：多格式文档解析）
+# 支持 PDF/DOCX/HTML/CSV/Excel/PPT/图片 等全格式
+# ============================================================
+unstructured>=0.22.0                    # 多格式文档解析（自动包含 pdf/docx/xlsx）
+# unstructured-inference  # 深度学习模型加速（可选）
+# pillow-heif              # HEIF/HEIC 图片格式支持（可选）
+
+# ============================================================
+# Arize Phoenix（Tier 1 开源复用：RAG 可观测性）
+# 生产级 RAG 追踪面板：幻觉检测、检索质量、延迟分析
+# ============================================================
+arize-phoenix>=12.0.0                  # 生产级 RAG 可观测性
+arize-phoenix-otel>=0.15.0             # OTEL 集成
+
+# ============================================================
+# FlashRank（Tier 1 开源复用：轻量级本地 Rerank）
+# 比 BGE 更轻量，5M 参数，延迟 <10ms，支持中文
+# ============================================================
+flashrank>=0.2.0                       # 轻量级 Rerank（可选，配合 Cohere 使用）
+
 # LangChain 核心生态（保持不变）
 langchain==1.2.10
 langchain-community==0.4.1
@@ -14,7 +46,8 @@ mem0ai>=0.1.0              # Mem0 智能记忆管理层
 
 # 新增：Reranker 和混合检索
 sentence-transformers>=2.2.0   # BGE Reranker 本地模型
-rank-bm25>=0.2.2               # BM25 检索
+rank-bm25>=0.2.2               # BM25 检索（备用，bm25s 优先）
+bm25s>=1.0.0                    # Tier 1 BM25：Rust+Python，10x faster，内置中文分词
 jieba>=0.42                     # 中文分词
 
 # LangGraph（Agent 工作流，保持）
@@ -54,6 +87,18 @@ python-frontmatter==1.1.0
 
 # Auth（JWT）
 python-jose[cryptography]==3.4.0
+
+# ============================================================
+# Redis（评估缓存持久化 + 会话缓存）
+# ============================================================
+redis[hiredis]==5.2.0
+# OTEL（OpenTelemetry 全链路追踪）
+opentelemetry-api>=1.40.0
+opentelemetry-sdk>=1.40.0
+opentelemetry-exporter-otlp>=1.40.0
+opentelemetry-instrumentation-fastapi>=0.50b0
+opentelemetry-instrumentation-httpx>=0.50b0
+opentelemetry-instrumentation-asyncio>=0.50b0
 
 # ============================================================
 # 评估依赖（可选）

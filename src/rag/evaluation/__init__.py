@@ -22,6 +22,8 @@ from .retrieval_grader import (
     corrective_retrieve,
     reset_crags,
 )
+from . import grade_cache
+from . import conflict_detector
 
 __all__ = [
     # RAG 事后评估（RAGEvaluator）
@@ -42,4 +44,6 @@ __all__ = [
     "grade_retrieval",
     "corrective_retrieve",
     "reset_crags",
+    # 评估缓存（Redis 持久化）
+    "grade_cache",
 ]

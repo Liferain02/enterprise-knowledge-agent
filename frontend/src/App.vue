@@ -96,13 +96,33 @@
       
       <div v-if="!isAuthed" class="login-view">
         <div class="login-card">
-          <h2>登录</h2>
-          <p class="login-desc">请输入账号密码后开始对话</p>
-          <div class="login-form">
-            <input v-model="loginUsername" class="login-input" placeholder="用户名" autocomplete="username" />
-            <input v-model="loginPassword" class="login-input" placeholder="密码" type="password" autocomplete="current-password" />
-            <button class="login-btn" @click="login">登录</button>
-            <div v-if="loginError" class="login-error">{{ loginError }}</div>
+          <div class="login-tabs">
+            <button :class="{ active: loginMode === 'login' }" @click="loginMode = 'login'">登录</button>
+            <button :class="{ active: loginMode === 'register' }" @click="loginMode = 'register'">注册</button>
+          </div>
+
+          <!-- 登录表单 -->
+          <div v-if="loginMode === 'login'">
+            <p class="login-desc">请输入账号密码后开始对话</p>
+            <div class="login-form">
+              <input v-model="loginUsername" class="login-input" placeholder="用户名" autocomplete="username" @keydown.enter="login" />
+              <input v-model="loginPassword" class="login-input" placeholder="密码" type="password" autocomplete="current-password" @keydown.enter="login" />
+              <button class="login-btn" @click="login" :disabled="loginLoading">登录</button>
+              <div v-if="loginError" class="login-error">{{ loginError }}</div>
+            </div>
+          </div>
+
+          <!-- 注册表单 -->
+          <div v-else>
+            <p class="login-desc">注册新账号，开始使用企业知识助手</p>
+            <div class="login-form">
+              <input v-model="regUsername" class="login-input" placeholder="用户名（3-32字符）" autocomplete="username" />
+              <input v-model="regPassword" class="login-input" placeholder="密码（6-128字符）" type="password" autocomplete="new-password" />
+              <input v-model="regPassword2" class="login-input" placeholder="确认密码" type="password" autocomplete="new-password" @keydown.enter="register" />
+              <button class="login-btn" @click="register" :disabled="registerLoading">注册</button>
+              <div v-if="registerError" class="login-error">{{ registerError }}</div>
+              <div v-if="registerSuccess" class="login-success">{{ registerSuccess }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -227,6 +247,14 @@ const token = ref<string>(localStorage.getItem('eka_token') || '')
 const loginUsername = ref('')
 const loginPassword = ref('')
 const loginError = ref('')
+const loginLoading = ref(false)
+const loginMode = ref<'login' | 'register'>('login')
+const regUsername = ref('')
+const regPassword = ref('')
+const regPassword2 = ref('')
+const registerError = ref('')
+const registerSuccess = ref('')
+const registerLoading = ref(false)
 
 const isAuthed = computed(() => token.value.length > 0)
 
@@ -241,6 +269,7 @@ applyAuthHeader()
 
 const login = async () => {
   loginError.value = ''
+  loginLoading.value = true
   try {
     const resp = await axios.post<{ access_token: string; token_type: string }>('/api/v1/auth/login', {
       username: loginUsername.value,
@@ -257,6 +286,36 @@ const login = async () => {
     }
   } catch (e: any) {
     loginError.value = e?.response?.data?.detail || '登录失败'
+  } finally {
+    loginLoading.value = false
+  }
+}
+
+const register = async () => {
+  registerError.value = ''
+  registerSuccess.value = ''
+  if (regPassword.value !== regPassword2.value) {
+    registerError.value = '两次密码不一致'
+    return
+  }
+  registerLoading.value = true
+  try {
+    await axios.post('/api/v1/auth/register', {
+      username: regUsername.value,
+      password: regPassword.value
+    })
+    registerSuccess.value = '注册成功！请登录'
+    // 清空表单并切换到登录
+    regUsername.value = ''
+    regPassword.value = ''
+    regPassword2.value = ''
+    loginMode.value = 'login'
+    loginUsername.value = ''
+    loginPassword.value = ''
+  } catch (e: any) {
+    registerError.value = e?.response?.data?.detail || '注册失败'
+  } finally {
+    registerLoading.value = false
   }
 }
 
@@ -267,6 +326,12 @@ const logout = () => {
   apiConnected.value = false
   messages.value = []
   sessions.value = []
+  loginMode.value = 'login'
+  regUsername.value = ''
+  regPassword.value = ''
+  regPassword2.value = ''
+  registerError.value = ''
+  registerSuccess.value = ''
 }
 
 const sessionId = ref('default')
@@ -277,6 +342,8 @@ const currentAgent = ref('supervisor')
 const apiConnected = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 const sessions = ref<Session[]>([])
+const partialAnswer = ref('')      // 流式累积中的部分回答
+const partialAnswerKey = ref<number | null>(null)  // 流式消息在 messages 中的索引
 
 // 用于取消请求
 let abortController: AbortController | null = null
@@ -427,11 +494,15 @@ const sendMessage = async () => {
       abortController = null
     }
     loading.value = false
-    messages.value.push({
-      role: 'assistant',
-      content: '⏹️ 已手动取消回答',
-      agent: currentAgent.value
-    })
+    if (partialAnswerKey.value !== null) {
+      messages.value.push({
+        role: 'assistant',
+        content: '⏹️ 已手动取消回答',
+        agent: currentAgent.value
+      })
+    }
+    partialAnswerKey.value = null
+    partialAnswer.value = ''
     return
   }
 
@@ -448,42 +519,102 @@ const sendMessage = async () => {
   currentAgent.value = 'supervisor'
   scrollToBottom()
 
+  // 创建占位消息用于流式更新
+  const placeholderKey = messages.value.length
+  const placeholderMsg = {
+    role: 'assistant' as const,
+    content: '',
+    agent: currentAgent.value
+  }
+  messages.value.push(placeholderMsg)
+  partialAnswerKey.value = placeholderKey
+  partialAnswer.value = ''
+
   try {
-    // 使用非流式输出模式
-    const response = await axios.post(`${API_BASE}/chat`, {
-      session_id: sessionId.value,
-      message: text
-    }, {
-      signal: abortController.signal
+    // 使用 SSE 流式输出
+    const response = await fetch(`${API_BASE}/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.value}`,
+      },
+      body: JSON.stringify({
+        session_id: sessionId.value,
+        message: text,
+      }),
+      signal: abortController.signal,
     })
 
-    const data = response.data
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
 
-    // 添加 AI 回复
-    messages.value.push({
-      role: 'assistant',
-      content: data.answer || data.final_answer || '无回复',
-      agent: data.used_agent || 'unknown'
-    })
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
 
-    currentAgent.value = data.used_agent || 'supervisor'
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const chunk = decoder.decode(value, { stream: true })
+      // 解析 SSE 行：data: {"type": "...", "data": "..."}
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue
+        try {
+          const event = JSON.parse(line.slice(6))
+          if (event.type === 'llm_token' && event.data) {
+            partialAnswer.value += event.data
+            // 实时更新占位消息
+            if (partialAnswerKey.value !== null) {
+              messages.value[partialAnswerKey.value] = {
+                role: 'assistant',
+                content: partialAnswer.value,
+                agent: currentAgent.value
+              }
+              scrollToBottom()
+            }
+          } else if (event.type === 'thinking' && event.data) {
+            // 可选：显示思考状态（暂时静默处理）
+          } else if (event.type === 'used_agent' && event.data) {
+            currentAgent.value = event.data
+          } else if (event.type === 'done') {
+            // 流式完成，最终答案已通过 llm_token 累积
+          }
+        } catch {
+          // 忽略解析错误（SSE 行可能不完整）
+        }
+      }
+    }
+
+    // 完成：正式提交消息
+    partialAnswerKey.value = null
+    partialAnswer.value = ''
+
+    if (messages.value.length > 0 && messages.value[messages.value.length - 1].role === 'assistant') {
+      messages.value[messages.value.length - 1].agent = currentAgent.value
+    }
 
     // 刷新会话列表（更新标题和消息数）
     await loadSessions()
   } catch (error: any) {
     // 判断是否是主动取消
-    if (axios.isCancel(error) || error.name === 'AbortError') {
+    if (error.name === 'AbortError' || abortController?.signal?.aborted) {
       console.log('请求已取消')
-      return
+      if (partialAnswerKey.value !== null) {
+        messages.value[partialAnswerKey.value].content = '⏹️ 已手动取消回答'
+      }
+    } else {
+      console.error('请求失败:', error)
+      messages.value.push({
+        role: 'assistant',
+        content: `❌ 请求失败: ${error.message || '未知错误'}`,
+        agent: 'error'
+      })
     }
-    console.error('请求失败:', error)
-    messages.value.push({
-      role: 'assistant',
-      content: `❌ 请求失败: ${error.response?.data?.detail || error.message}`,
-      agent: 'error'
-    })
   } finally {
     loading.value = false
+    partialAnswerKey.value = null
+    partialAnswer.value = ''
     abortController = null
     scrollToBottom()
   }

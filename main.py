@@ -41,7 +41,9 @@ from src.models import reset_llm
 reset_llm()
 
 # 导入路由
-from src.api.controllers import chat_router, knowledge_router, auth_router, vision_router
+from src.api.controllers import (
+    chat_router, knowledge_router, auth_router, vision_router, _a2a_router
+)
 
 # 导入核心组件
 from src.models.mcp_client import mcp_manager as global_mcp_manager
@@ -108,6 +110,11 @@ async def lifespan(app: FastAPI):
     _workers.append((worker, t))
     print("✅ 入库 Worker 已启动（后台运行）")
 
+    # ── OpenTelemetry（可选，环境变量 OTEL_ENABLED=true）────────────────
+    from src.observability.otel_tracer import init_otel, instrument_fastapi_app
+    if await init_otel():
+        instrument_fastapi_app(app)
+
     print("=" * 60)
     print("服务就绪！")
     print(f"API: http://{settings.api_host}:{settings.api_port}")
@@ -117,6 +124,9 @@ async def lifespan(app: FastAPI):
     yield
 
     # ── 关闭 ─────────────────────────────────────────────────
+    from src.observability.otel_tracer import shutdown_otel
+    shutdown_otel()
+
     print("正在关闭...")
     for w, _ in _workers:
         w.stop()
@@ -148,6 +158,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# 注册统一异常处理器（中间件 + 全局 handlers）
+from src.api.middleware import register_exception_handlers
+register_exception_handlers(app, debug=settings.debug)
+
 # 添加CORS中间件
 app.add_middleware(
     CORSMiddleware,
@@ -173,6 +187,7 @@ app.include_router(chat_router)
 app.include_router(knowledge_router)
 app.include_router(auth_router)
 app.include_router(vision_router)
+app.include_router(_a2a_router)  # A2A Agent Card 暴露
 
 
 @app.get("/health")
