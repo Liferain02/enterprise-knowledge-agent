@@ -25,6 +25,14 @@ try:
 except ImportError:
     _MULTIMODAL_AVAILABLE = False
 
+# 缓存模块
+from .cache import (
+    llm_cache_get, llm_cache_set,
+    retrieval_cache_get, retrieval_cache_set, retrieval_cache_invalidate,
+    cache_get, cache_set, cache_get_or_set,
+    cache_stats, health_check as cache_health_check,
+)
+
 __all__ = [
     "get_vectorstore_manager",
     "VectorStoreManager",
@@ -35,6 +43,11 @@ __all__ = [
     "split_sentences",
     "SemanticChunker",
     "HybridChunker",
+    # 缓存
+    "llm_cache_get", "llm_cache_set",
+    "retrieval_cache_get", "retrieval_cache_set", "retrieval_cache_invalidate",
+    "cache_get", "cache_set", "cache_get_or_set",
+    "cache_stats", "cache_health_check",
 ]
 
 # 条件性导出评估模块

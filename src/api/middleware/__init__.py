@@ -56,6 +56,24 @@ class ResourceNotFoundException(AppException):
         super().__init__(message, "NOT_FOUND", 404)
 
 
+class RateLimitException(AppException):
+    """限流异常"""
+    def __init__(
+        self,
+        message: str = "请求过于频繁，请稍后重试",
+        retry_after: float = 60.0,
+    ):
+        super().__init__(message, "RATE_LIMITED", 429)
+        self.retry_after = retry_after
+
+
+class PermissionDeniedException(AppException):
+    """权限不足异常"""
+    def __init__(self, resource: str = "", action: str = ""):
+        detail = f"权限不足：需要 {resource}:{action}" if resource and action else "权限不足"
+        super().__init__(detail, "PERMISSION_DENIED", 403)
+
+
 # ==================== HTTP 异常映射 ====================
 
 # 常见第三方库异常到 HTTP 状态的映射
@@ -156,7 +174,19 @@ class UnifiedExceptionHandlerMiddleware(BaseHTTPMiddleware):
             # HTTPException 由 FastAPI 的 Exception handlers 处理，重新抛出
             raise
 
-        except AppException as exc:
+        except RateLimitException as exc:
+            # 限流异常
+            logger.info(f"[{request_id}] RateLimitException: {exc.message}")
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=make_error_response(
+                    message=exc.message,
+                    code=exc.code,
+                    status_code=exc.status_code,
+                    request_id=request_id,
+                ),
+                headers={"Retry-After": str(int(exc.retry_after))} if exc.retry_after else {},
+            )
             # 应用层已知异常
             logger.warning(
                 f"[{request_id}] AppException: {exc.code} - {exc.message}"
@@ -263,3 +293,150 @@ def register_exception_handlers(app: FastAPI, debug: bool = False) -> None:
                 request_id=request_id,
             )
         )
+
+
+# ==================== Rate Limiting 中间件 ====================
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """
+    API 限流中间件
+
+    策略：
+    1. 已登录用户按 username 限流
+    2. 匿名用户按 IP 限流
+    3. 聊天接口和入库接口单独限流
+    """
+
+    # 不需要限流的路径
+    EXEMPT_PATHS = {
+        "/health", "/health/live", "/health/ready",
+        "/metrics", "/docs", "/openapi.json",
+        "/redoc", "/favicon.ico",
+    }
+
+    def __init__(self, app: ASGIApp, enabled: bool = True):
+        super().__init__(app)
+        self.enabled = enabled
+        self._limiter = None
+
+    async def dispatch(self, request: Request, call_next):
+        if not self.enabled:
+            return await call_next(request)
+
+        # 豁免路径
+        if request.url.path in self.EXEMPT_PATHS:
+            return await call_next(request)
+
+        from src.api.rate_limiter import get_rate_limiter
+        from src.api.audit import get_audit_logger
+        from config.settings import get_settings
+
+        limiter = get_rate_limiter()
+        settings = get_settings()
+
+        # 提取用户标识
+        username = "anonymous"
+        try:
+            from src.api.security import get_current_user
+            from fastapi.security import OAuth2PasswordBearer
+            from jose import jwt, JWTError
+
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                token = auth_header[7:]
+                try:
+                    payload = jwt.decode(
+                        token,
+                        settings.jwt_secret_key,
+                        algorithms=["HS256"]
+                    )
+                    username = payload.get("sub", "anonymous")
+                except JWTError:
+                    pass
+        except Exception:
+            pass
+
+        # 提取客户端 IP
+        ip = self._get_client_ip(request)
+
+        # 确定限流端点和限制值
+        if request.url.path.startswith("/api/v1/chat"):
+            limit = getattr(settings, "rate_limit_chat_per_minute", 20)
+        elif request.url.path.startswith("/api/v1/knowledge/ingest"):
+            limit = getattr(settings, "rate_limit_ingest_per_minute", 10)
+        elif username != "anonymous":
+            limit = getattr(settings, "rate_limit_per_minute", 60)
+        else:
+            limit = getattr(settings, "rate_limit_anonymous_per_minute", 30)
+
+        # 执行限流检查
+        identifier = username if username != "anonymous" else ip
+        endpoint = self._get_endpoint_key(request.url.path)
+        result = await limiter.check(
+            identifier=identifier,
+            endpoint=endpoint,
+            limit=limit,
+        )
+
+        if not result.allowed:
+            audit = get_audit_logger()
+            audit.log_rate_limited(username, request.url.path, request)
+            headers = {
+                "X-RateLimit-Limit": str(result.limit),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": str(int(result.reset_at)),
+                "Retry-After": str(int(result.retry_after)),
+            }
+            return JSONResponse(
+                status_code=429,
+                content=make_error_response(
+                    message=f"请求过于频繁，请 {int(result.retry_after)} 秒后重试",
+                    code="RATE_LIMITED",
+                    status_code=429,
+                    detail={
+                        "limit": result.limit,
+                        "retry_after": int(result.retry_after),
+                        "reset_at": int(result.reset_at),
+                    },
+                    request_id=getattr(request.state, "request_id", ""),
+                ),
+                headers=headers,
+            )
+
+        # 添加限流头到响应
+        response = await call_next(request)
+        response.headers["X-RateLimit-Limit"] = str(result.limit)
+        response.headers["X-RateLimit-Remaining"] = str(result.remaining)
+        response.headers["X-RateLimit-Reset"] = str(int(result.reset_at))
+        return response
+
+    def _get_client_ip(self, request: Request) -> str:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip
+        if hasattr(request, "client") and request.client:
+            return request.client.host
+        return "unknown"
+
+    def _get_endpoint_key(self, path: str) -> str:
+        """将路径映射为限流端点 key"""
+        if path.startswith("/api/v1/auth"):
+            return "auth"
+        if path.startswith("/api/v1/chat"):
+            return "chat"
+        if path.startswith("/api/v1/knowledge"):
+            return "knowledge"
+        if path.startswith("/api/v1/session"):
+            return "session"
+        return "default"
+
+
+def register_rate_limit_middleware(app: FastAPI, enabled: bool = True) -> None:
+    """注册限流中间件"""
+    app.add_middleware(RateLimitMiddleware, enabled=enabled)
+imitMiddleware, enabled=enabled)
+ed)
+imitMiddleware, enabled=enabled)

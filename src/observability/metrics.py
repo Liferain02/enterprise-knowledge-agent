@@ -58,6 +58,38 @@ retrieval_retries_total = Counter(
 )
 
 # ──────────────────────────────────────────────────────────────────
+# 安全指标（Rate Limiting / RBAC / Audit）
+# ──────────────────────────────────────────────────────────────────
+
+rate_limit_hits_total = Counter(
+    "ekb_rate_limit_hits_total",
+    "Rate limit hits by endpoint and identifier type",
+    ["endpoint", "id_type"],
+    registry=_metrics_registry,
+)
+
+auth_attempts_total = Counter(
+    "ekb_auth_attempts_total",
+    "Authentication attempts",
+    ["result"],
+    registry=_metrics_registry,
+)
+
+rbac_checks_total = Counter(
+    "ekb_rbac_checks_total",
+    "RBAC permission checks",
+    ["resource", "action", "result"],
+    registry=_metrics_registry,
+)
+
+audit_events_total = Counter(
+    "ekb_audit_events_total",
+    "Audit log events",
+    ["event_type", "result"],
+    registry=_metrics_registry,
+)
+
+# ──────────────────────────────────────────────────────────────────
 # 直方图（延迟分布）
 # ──────────────────────────────────────────────────────────────────
 
@@ -106,7 +138,7 @@ vector_search_latency_seconds = Histogram(
 llm_token_usage = Histogram(
     "ekb_llm_tokens",
     "LLM token usage (estimated)",
-    ["model", "direction"],  # input / output
+    ["model", "direction"],
     buckets=[10, 50, 100, 500, 1000, 5000, 20000],
     registry=_metrics_registry,
 )
@@ -148,68 +180,61 @@ class MetricsCollector:
     """
     中央 metrics 收集器。
     业务代码通过此类记录指标，避免直接引用 prometheus 对象。
-
-    用法示例：
-        mc = MetricsCollector()
-        mc.record_chat(latency_s=3.2, agent="knowledge", status="success")
-        mc.record_crag_decision("high")
-        mc.record_llm_error("rate_limited", "qwen3.5-flash")
     """
 
     def record_chat(self, latency_s: float, agent: str, status: str):
-        """记录一次 chat 请求"""
         chat_requests_total.labels(status=status, agent=agent).inc()
         chat_latency_seconds.observe(latency_s)
 
     def record_crag_decision(self, decision: str):
-        """记录 CRAG 评估决策"""
         crag_decisions_total.labels(decision=decision).inc()
 
     def record_crag_grading(self, latency_s: float, batch_size: int):
-        """记录一次 CRAG grading batch 的延迟"""
         crag_grade_latency_seconds.observe(latency_s)
         grading_batch_size.set(batch_size)
 
     def record_llm_error(self, error_type: str, model: str):
-        """记录 LLM 调用错误"""
         llm_errors_total.labels(error_type=error_type, model=model).inc()
 
     def record_llm_tokens(self, model: str, direction: str, tokens: int):
-        """记录 LLM token 消耗（估算）"""
         llm_token_usage.labels(model=model, direction=direction).observe(tokens)
 
     def record_query_rewrite(self, latency_s: float, success: bool):
-        """记录查询改写"""
         query_rewrite_latency_seconds.observe(latency_s)
 
     def record_query_expansion(self, latency_s: float, strategy: str, success: bool):
-        """记录查询扩展"""
         status = "success" if success else "failed"
         query_expansion_total.labels(strategy=strategy, status=status).inc()
         query_expansion_latency_seconds.observe(latency_s)
 
     def record_reranker(self, latency_s: float):
-        """记录 Reranker 调用"""
         reranker_latency_seconds.observe(latency_s)
 
     def record_vector_search(self, latency_s: float):
-        """记录向量检索延迟"""
         vector_search_latency_seconds.observe(latency_s)
 
     def record_conflict(self, severity: str, action: str):
-        """记录冲突检测结果"""
         conflict_detection_total.labels(severity=severity, action=action).inc()
 
     def record_retrieval_avg_score(self, score: float):
-        """记录最近一次检索的平均相关分"""
         retrieval_avg_score.set(score)
 
     def update_chunk_count(self, count: int):
-        """更新向量库 chunk 总数"""
         vectorstore_chunk_count.set(count)
 
+    def record_rate_limit_hit(self, endpoint: str, id_type: str):
+        rate_limit_hits_total.labels(endpoint=endpoint, id_type=id_type).inc()
 
-# 全局实例
+    def record_auth_attempt(self, result: str):
+        auth_attempts_total.labels(result=result).inc()
+
+    def record_rbac_check(self, resource: str, action: str, result: str):
+        rbac_checks_total.labels(resource=resource, action=action, result=result).inc()
+
+    def record_audit_event(self, event_type: str, result: str):
+        audit_events_total.labels(event_type=event_type, result=result).inc()
+
+
 _metrics_collector: Optional[MetricsCollector] = None
 
 
@@ -220,14 +245,9 @@ def get_metrics_collector() -> MetricsCollector:
     return _metrics_collector
 
 
-# ==================== 便捷导出 ====================
-
 def get_metrics() -> bytes:
-    """生成 Prometheus metrics 文本格式（供 /metrics 端点返回）"""
     return generate_latest(_metrics_registry)
 
 
 def get_content_type() -> str:
-    """返回 Prometheus metrics 的 Content-Type"""
     return CONTENT_TYPE_LATEST
-

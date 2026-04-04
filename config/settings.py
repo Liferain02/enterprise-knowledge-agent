@@ -316,6 +316,28 @@ class Settings(BaseSettings):
         description="Redis 数据库编号"
     )
 
+    # ==================== Rate Limiting 配置 ====================
+    rate_limit_per_minute: int = Field(
+        default=60,
+        description="登录用户每分钟最大请求数"
+    )
+    rate_limit_anonymous_per_minute: int = Field(
+        default=30,
+        description="匿名用户每分钟最大请求数"
+    )
+    rate_limit_enabled: bool = Field(
+        default=True,
+        description="是否启用 API 限流"
+    )
+    rate_limit_chat_per_minute: int = Field(
+        default=20,
+        description="聊天接口每分钟最大请求数（防止滥用）"
+    )
+    rate_limit_ingest_per_minute: int = Field(
+        default=10,
+        description="文档入库接口每分钟最大请求数"
+    )
+
     # ==================== Corrective RAG 配置 ====================
     crag_enabled: bool = Field(
         default=True,

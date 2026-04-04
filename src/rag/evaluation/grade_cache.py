@@ -254,6 +254,24 @@ async def grade_cache_clear():
     logger.info("[Memory Cache] 评估缓存已清空")
 
 
+async def health_check() -> bool:
+    """
+    健康检查：测试 Redis 连接是否正常
+
+    Returns:
+        True - Redis 可用
+        False - Redis 不可用（降级到内存）
+    """
+    client = await get_redis_client()
+    if client is None:
+        return False
+    try:
+        await client.ping()
+        return True
+    except Exception:
+        return False
+
+
 async def grade_cache_stats() -> dict:
     """
     获取缓存统计信息（用于监控）

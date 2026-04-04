@@ -178,11 +178,38 @@ services:
       - '--web.enable-lifecycle'
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/prometheus_alerts.yml:/etc/prometheus/rules/alerts.yml:ro
       - prometheus-data:/prometheus
+    rule_files:
+      - /etc/prometheus/rules/*.yml
     networks:
       - agent-network
     depends_on:
       - agent-service
+
+  # ============================================================
+  # Grafana - SLO Dashboard（可选）
+  # ============================================================
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: agent-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      <<: *common_env
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_FEATURE_TOGGLES_ENABLE: "publicDashboards"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/provisioning/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - agent-network
+    depends_on:
+      - prometheus
 
   # ============================================================
   # Jaeger - 分布式追踪可视化（可选）
@@ -231,4 +258,8 @@ volumes:
   prometheus-data:
     driver: local
   jaeger-data:
+    driver: local
+  grafana-data:
+    driver: local
+  backup-data:
     driver: local

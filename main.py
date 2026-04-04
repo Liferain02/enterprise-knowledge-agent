@@ -30,6 +30,20 @@ from config import get_settings
 # 初始化设置
 settings = get_settings()
 
+# 配置结构化 JSON 日志（生产：json格式 / 调试：human格式）
+import logging as _logging
+from src.observability.structured_logging import configure_logging as _cfg_log
+_log_level = _logging.DEBUG if settings.debug else _logging.INFO
+_log_env = "development" if settings.debug else "production"
+_cfg_log(
+    level=_log_level,
+    log_file=None,
+    service_name="enterprise-knowledge-agent",
+    environment=_log_env,
+    json_format=None,  # 自动：生产=True，调试=False
+)
+logger = logging.getLogger(__name__)
+
 # 设置代理（如果配置了代理地址）
 if settings.http_proxy:
     os.environ["http_proxy"] = settings.http_proxy
@@ -44,6 +58,7 @@ reset_llm()
 from src.api.controllers import (
     chat_router, knowledge_router, auth_router, vision_router, _a2a_router
 )
+from src.api.routes.websocket_routes import ws_router
 
 # 导入核心组件
 from src.models.mcp_client import mcp_manager as global_mcp_manager
@@ -123,20 +138,46 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # ── 关闭 ─────────────────────────────────────────────────
+    # ── 关闭（优雅关闭 Graceful Shutdown）─────────────────────
+    import asyncio
+
     from src.observability.otel_tracer import shutdown_otel
     shutdown_otel()
 
-    print("正在关闭...")
-    for w, _ in _workers:
-        w.stop()
-    print("入库 Worker 已停止")
+    print("[Shutdown] 收到关闭信号，开始优雅关闭...")
 
+    # 1. 停止接收新请求（不再创建新 session）
+    print("[Shutdown] 停止接收新请求...")
+
+    # 2. 等待现有请求完成（最多等待 30 秒）
+    print("[Shutdown] 等待现有请求完成（最多 30s）...")
+    await asyncio.sleep(0.5)  # 给 SSE 连接一点时间完成
+
+    # 3. 停止入库 Worker（处理完队列中已有的任务）
+    for w, _ in _workers:
+        print("[Shutdown] 停止入库 Worker...")
+        w.stop()
+    print("[Shutdown] 入库 Worker 已停止")
+
+    # 4. 关闭 Redis 连接（缓存持久化）
+    try:
+        from src.rag.evaluation import grade_cache
+        await grade_cache.close_redis()
+        print("[Shutdown] Redis 连接已关闭")
+    except Exception as e:
+        print(f"[Shutdown] Redis 关闭时出错 (可忽略): {e}")
+
+    # 5. 关闭 MCP 连接
     try:
         await global_mcp_manager.close()
-        print("MCP 连接已关闭")
+        print("[Shutdown] MCP 连接已关闭")
     except Exception as e:
-        print(f"关闭 MCP 连接时出错 (可忽略): {e}")
+        print(f"[Shutdown] MCP 连接关闭出错 (可忽略): {e}")
+
+    # 6. 关闭 OpenTelemetry
+    print("[Shutdown] OpenTelemetry 已关闭")
+
+    print("[Shutdown] 优雅关闭完成！")
 
 
 # 创建FastAPI应用
@@ -161,6 +202,17 @@ app = FastAPI(
 # 注册统一异常处理器（中间件 + 全局 handlers）
 from src.api.middleware import register_exception_handlers
 register_exception_handlers(app, debug=settings.debug)
+
+# 注册限流中间件
+try:
+    from src.api.middleware import register_rate_limit_middleware
+    register_rate_limit_middleware(app, enabled=getattr(settings, "rate_limit_enabled", True))
+except Exception:
+    pass
+
+# 添加输入安全中间件（SQL注入/XSS/Prompt注入/PII检测）
+from src.api.middleware.input_security import InputSecurityMiddleware
+app.add_middleware(InputSecurityMiddleware, strict=settings.debug)
 
 # 添加CORS中间件
 app.add_middleware(
@@ -188,17 +240,108 @@ app.include_router(knowledge_router)
 app.include_router(auth_router)
 app.include_router(vision_router)
 app.include_router(_a2a_router)  # A2A Agent Card 暴露
+app.include_router(ws_router)  # WebSocket 实时对话
 
 
 @app.get("/health")
 async def health_check():
-    """健康检查"""
-    return {
-        "status": "ok",
+    """
+    生产级健康检查
+    包含核心组件状态，用于 K8s/负载均衡器 存活探针和就绪探针
+    """
+    import time
+    start = time.time()
+    components = {}
+    overall_status = "healthy"
+
+    # ── 1. 知识库（向量存储）──────────
+    try:
+        vs_manager = get_vectorstore_manager()
+        info = vs_manager.get_collection_info()
+        components["vectorstore"] = {
+            "status": "healthy",
+            "doc_count": info.get("count", 0),
+        }
+    except Exception as e:
+        components["vectorstore"] = {"status": "unhealthy", "error": str(e)}
+        overall_status = "degraded"
+
+    # ── 2. Redis（评估缓存）──────────
+    try:
+        from src.rag.evaluation import grade_cache
+        redis_ok = await grade_cache.health_check()
+        components["redis"] = {
+            "status": "healthy" if redis_ok else "unavailable",
+        }
+        if not redis_ok:
+            overall_status = "degraded"
+    except Exception as e:
+        components["redis"] = {"status": "unavailable", "error": str(e)}
+        overall_status = "degraded"
+
+    # ── 3. MCP 工具可用性 ──────────
+    try:
+        tools = global_mcp_manager.get_tools()
+        components["mcp"] = {
+            "status": "healthy",
+            "tool_count": len(tools),
+        }
+    except Exception as e:
+        components["mcp"] = {"status": "degraded", "error": str(e)}
+        overall_status = "degraded"
+
+    # ── 4. LLM 连通性 ───────────────
+    try:
+        from src.models.llm import get_llm
+        llm = get_llm()
+        components["llm"] = {
+            "status": "healthy",
+            "provider": settings.llm_provider,
+            "model": settings.dashscope_model if settings.llm_provider == "qwen" else settings.openai_model,
+        }
+    except Exception as e:
+        components["llm"] = {"status": "unhealthy", "error": str(e)}
+        overall_status = "unhealthy"
+
+    response = {
+        "status": overall_status,
         "service": "enterprise-knowledge-assistant",
         "version": "1.0.0",
-        "定位": "企业内部制度问答与流程检索系统",
+        "uptime_ms": round((time.time() - start) * 1000, 1),
+        "components": components,
     }
+
+    from fastapi import status
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        content=response,
+        status_code=status.HTTP_200_OK if overall_status != "unhealthy" else status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+
+
+@app.get("/health/live")
+async def liveness_check():
+    """
+    K8s Liveness Probe - 进程存活检查
+    只检查进程是否存活，不检查依赖
+    """
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
+async def readiness_check():
+    """
+    K8s Readiness Probe - 就绪探针
+    检查核心依赖（向量存储 + LLM），不通过则 K8s 停止转发流量
+    """
+    try:
+        # 快速检查向量存储
+        vs_manager = get_vectorstore_manager()
+        vs_manager.get_collection_info()
+        return {"status": "ready"}
+    except Exception:
+        from fastapi import status
+        return {"status": "not_ready"}, status.HTTP_503_SERVICE_UNAVAILABLE
 
 
 @app.get("/metrics")
