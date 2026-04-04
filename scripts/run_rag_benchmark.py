@@ -33,7 +33,7 @@ os.environ.setdefault("HTTPS_PROXY", "http://127.0.0.1:7897")
 os.environ.setdefault("HTTP_PROXY", "http://127.0.0.1:7897")
 
 from langchain_core.documents import Document
-from tests.eval_dataset import EVAL_DATASET, EvalQuery
+from scripts.eval_dataset import EVAL_DATASET, EvalQuery
 
 
 # =============================================================================
@@ -326,7 +326,7 @@ def stage3_chunking() -> Dict[str, Any]:
     from src.rag.processing.chunker import SemanticChunker, HybridChunker
 
     loader_manager = get_document_loader_manager()
-    test_md = "/share/home/lifr/workspace/code/enterprise-knowledge-agent/data/knowledge/员工手册.md"
+    test_md = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "knowledge", "员工手册.md")
     docs = loader_manager.load_file(test_md)
 
     result = {"stage": "C", "description": "分块策略测试", "strategies": {}}

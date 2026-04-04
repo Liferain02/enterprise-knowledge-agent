@@ -3,7 +3,7 @@
 RAG 检索系统评估模块
 
 使用方法:
-    python tests/test_retrieval_eval.py
+    python scripts/test_retrieval_eval.py
 
 该模块提供:
     1. 检索召回率/精度计算
@@ -16,8 +16,8 @@ import os
 sys.path.insert(0, '/share/home/lifr/workspace/code/enterprise-knowledge-agent')
 
 import os
-os.environ['HTTPS_PROXY'] = 'http://127.0.0.1:7897'
-os.environ['HTTP_PROXY'] = 'http://127.0.0.1:7897'
+os.environ.setdefault("HTTPS_PROXY", "http://127.0.0.1:7897")
+os.environ.setdefault("HTTP_PROXY", "http://127.0.0.1:7897")
 
 from typing import List, Dict, Any, Tuple
 from dataclasses import dataclass, field
@@ -31,7 +31,7 @@ from src.rag.retrieval.reranker import get_reranker_manager
 from langchain_core.documents import Document
 
 # 导入评估数据集
-from tests.eval_dataset import EVAL_DATASET, EvalQuery
+from scripts.eval_dataset import EVAL_DATASET, EvalQuery
 
 
 @dataclass
@@ -425,10 +425,7 @@ def run_ragas_eval():
             context_recall
         )
         from datasets import Dataset
-        from dotenv import load_dotenv
-        
-        load_dotenv('/share/home/lifr/workspace/code/enterprise-knowledge-agent/config/.env')
-        
+
         # 准备评估数据
         eval_data = {
             "question": [],

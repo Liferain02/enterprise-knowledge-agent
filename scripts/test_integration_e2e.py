@@ -2,9 +2,7 @@
 端到端集成测试：验证 Corrective RAG + Query Decomposition 的集成
 
 运行方式：
-    cd /home/xypp/code/enterprise-knowledge-agent
-    source ~/miniconda3/etc/profile.d/conda.sh && conda activate agent-demo
-    python tests/test_integration_e2e.py
+    python scripts/test_integration_e2e.py
 
 测试内容：
     1. Corrective RAG 端到端检索

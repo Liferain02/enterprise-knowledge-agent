@@ -2,8 +2,7 @@
 Corrective RAG - 检索评估模块测试
 
 使用方法:
-    python -m pytest tests/test_crags.py -v
-    python tests/test_crags.py  # 直接运行
+    python scripts/test_crags.py
 
 测试内容：
     1. RetrievalGrader 单篇评估

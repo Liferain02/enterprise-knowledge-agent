@@ -33,7 +33,7 @@ for k in list(os.environ.keys()):
         os.environ.pop(k, None)
 
 from langchain_core.documents import Document
-from tests.eval_dataset import EVAL_DATASET, EvalQuery
+from scripts.eval_dataset import EVAL_DATASET, EvalQuery
 
 
 # =============================================================================
@@ -474,7 +474,7 @@ def test_chunking_strategies() -> Dict[str, Any]:
     from src.rag.processing.chunker import SemanticChunker, HybridChunker
 
     loader_manager = get_document_loader_manager()
-    test_md = "/share/home/lifr/workspace/code/enterprise-knowledge-agent/data/knowledge/员工手册.md"
+    test_md = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "knowledge", "员工手册.md")
     docs = loader_manager.load_file(test_md)
 
     result = {"strategies": {}}

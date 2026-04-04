@@ -187,6 +187,8 @@ class UnifiedExceptionHandlerMiddleware(BaseHTTPMiddleware):
                 ),
                 headers={"Retry-After": str(int(exc.retry_after))} if exc.retry_after else {},
             )
+
+        except AppException as exc:
             # 应用层已知异常
             logger.warning(
                 f"[{request_id}] AppException: {exc.code} - {exc.message}"
@@ -437,6 +439,3 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 def register_rate_limit_middleware(app: FastAPI, enabled: bool = True) -> None:
     """注册限流中间件"""
     app.add_middleware(RateLimitMiddleware, enabled=enabled)
-imitMiddleware, enabled=enabled)
-ed)
-imitMiddleware, enabled=enabled)

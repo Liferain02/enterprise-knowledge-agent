@@ -9,7 +9,7 @@ for k in list(os.environ.keys()):
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agent.graph import run_agent
-from tests.eval_dataset import EVAL_DATASET
+from scripts.eval_dataset import EVAL_DATASET
 
 eq = EVAL_DATASET[0]
 print(f"查询: {eq.query}")

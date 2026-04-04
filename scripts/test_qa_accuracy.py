@@ -9,7 +9,7 @@ for k in list(os.environ.keys()):
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.agent.graph import run_agent
-from tests.eval_dataset import EVAL_DATASET
+from scripts.eval_dataset import EVAL_DATASET
 
 def test_qa_accuracy(test_cases):
     print("=" * 60)

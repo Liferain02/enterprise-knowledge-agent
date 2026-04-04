@@ -85,7 +85,7 @@ print("测试 4: 不同分块策略")
 print("=" * 60)
 
 loader_manager = get_document_loader_manager()
-test_md = "/share/home/lifr/workspace/code/enterprise-knowledge-agent/data/knowledge/公司简介.md"
+test_md = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "knowledge", "公司简介.md")
 
 print(f"\n加载文件: {test_md}")
 docs = loader_manager.load_file(test_md)

@@ -25,8 +25,9 @@ conda_env/
 .env
 .env.local
 .env.*.local
-# 但跟踪 env.example 作为模板
-!/.env.example
+
+# 但跟踪 env.template 作为模板
+!config/env.template
 
 # IDE 配置
 .idea/
@@ -56,6 +57,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/package-lock.json
+
+# 评估报告输出
+scripts/reports/
 
 # 临时文件
 tmp/

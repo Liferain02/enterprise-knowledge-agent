@@ -30,7 +30,7 @@ os.environ.setdefault("HTTPS_PROXY", "http://127.0.0.1:7897")
 os.environ.setdefault("HTTP_PROXY", "http://127.0.0.1:7897")
 
 from langchain_core.documents import Document
-from tests.eval_dataset import EVAL_DATASET, EvalQuery
+from scripts.eval_dataset import EVAL_DATASET, EvalQuery
 
 
 # =============================================================================

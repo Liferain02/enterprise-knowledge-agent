@@ -2,8 +2,7 @@
 Query Expansion / Decomposition 模块测试
 
 使用方法:
-    python tests/test_query_expander.py
-    python -m pytest tests/test_query_expander.py -v
+    python scripts/test_query_expander.py
 
 测试内容：
     1. 规则分解器测试（needs_expansion / decompose）

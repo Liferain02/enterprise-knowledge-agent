@@ -9,7 +9,7 @@ sys.path.insert(0, '/share/home/lifr/workspace/code/enterprise-knowledge-agent')
 os.environ['HTTPS_PROXY'] = 'http://127.0.0.1:7897'
 os.environ['HTTP_PROXY'] = 'http://127.0.0.1:7897'
 
-from agents.graph import get_agent_graph
+from src.agent.graph import get_agent_graph
 from langchain_core.messages import HumanMessage
 
 async def test_stream():

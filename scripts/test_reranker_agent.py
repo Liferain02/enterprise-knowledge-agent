@@ -66,7 +66,7 @@ print("=" * 60)
 print("测试 2: Agent 知识搜索工具")
 print("=" * 60)
 
-from agents.skills.knowledge.scripts.tools import knowledge_search
+from src.agent.skills.knowledge.scripts.tools import knowledge_search
 
 query = "什么是 Python"
 

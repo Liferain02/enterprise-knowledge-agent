@@ -10,7 +10,7 @@ import os
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from tests.eval_dataset import EVAL_DATASET
+from scripts.eval_dataset import EVAL_DATASET
 from src.rag.evaluation import get_evaluator, evaluate_rag_batch
 from src.agent.graph import arun_agent
 

@@ -17,7 +17,7 @@ for k in list(os.environ.keys()):
         os.environ.pop(k, None)
 
 from langchain_core.documents import Document
-from tests.eval_dataset import EVAL_DATASET, EvalQuery
+from scripts.eval_dataset import EVAL_DATASET, EvalQuery
 
 def extract_doc_id(doc, index):
     source = doc.metadata.get("source") or doc.metadata.get("source_file") or ""
@@ -206,7 +206,7 @@ def run_chunking():
         get_document_loader_manager, estimate_tokens, split_sentences)
     from src.rag.processing.chunker import SemanticChunker, HybridChunker
     lm = get_document_loader_manager()
-    test_md = "/share/home/lifr/workspace/code/enterprise-knowledge-agent/data/knowledge/员工手册.md"
+    test_md = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "knowledge", "员工手册.md")
     docs = lm.load_file(test_md)
     result = {"strategies": {}}
     for strategy in ["recursive", "semantic", "hybrid", "markdown"]:
