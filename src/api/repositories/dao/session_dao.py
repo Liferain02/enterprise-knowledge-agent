@@ -181,6 +181,48 @@ class SessionDAO:
             for row in rows
         ]
 
+    def update_message_count(self, session_id: str, count: int):
+        """直接设置消息数量（用于修复旧数据不一致问题）"""
+        db_path = self._get_db_path()
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute(
+            "UPDATE sessions SET message_count = ?, updated_at = ? WHERE session_id = ?",
+            (count, now, session_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def migrate_messages_only(self, old_id: str, new_id: str):
+        """仅迁移 messages 表中的 session_id（不碰 sessions 表）"""
+        db_path = self._get_db_path()
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE messages SET session_id = ? WHERE session_id = ?",
+            (new_id, old_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def rename_session_id(self, old_id: str, new_id: str):
+        """重命名 session_id（用于修复前缀不一致问题）"""
+        db_path = self._get_db_path()
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute(
+            "UPDATE messages SET session_id = ? WHERE session_id = ?",
+            (new_id, old_id),
+        )
+        cursor.execute(
+            "UPDATE sessions SET session_id = ?, updated_at = ? WHERE session_id = ?",
+            (new_id, now, old_id),
+        )
+        conn.commit()
+        conn.close()
+
     def delete(self, session_id: str) -> bool:
         """删除会话"""
         db_path = self._get_db_path()

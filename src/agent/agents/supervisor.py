@@ -9,6 +9,9 @@ from langchain_core.messages import HumanMessage
 from src.models.llm import get_llm
 from src.observability import traced
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class RouteDecision(TypedDict):
     """Supervisor 路由决策结构化输出"""
@@ -60,7 +63,7 @@ async def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
     # Planner 已判断了简单任务，直接复用其路由结果
     quick_agent = state.get("_quick_agent")
     if quick_agent:
-        print(f"[Supervisor] 复用 Planner 快速路由: {quick_agent}（跳过 LLM）")
+        logger.debug("复用 Planner 快速路由: %s（跳过 LLM）", quick_agent)
         needs_expansion = (quick_agent == "knowledge_agent") and _needs_expansion_for_agent(
             last_user_message
         )
@@ -121,14 +124,13 @@ async def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
         needs_expansion = decision.get("needs_expansion", False) or is_complex_from_planner
 
     except Exception as e:
-        # 降级处理：根据关键词判断
-        print(f"结构化输出失败，使用关键词匹配: {e}")
+        logger.warning("结构化输出失败，使用关键词匹配: %s", e)
         next_agent, reasoning, reason, needs_expansion = fallback_routing(last_user_message)
         # Planner 已判复杂时强制 expansion
         needs_expansion = needs_expansion or is_complex_from_planner
 
-    print(f"[Supervisor] 路由决策: {next_agent} - {reasoning}")
-    print(f"[Supervisor] Query Expansion: {needs_expansion} (Planner 判复杂={is_complex_from_planner})")
+    logger.info("路由决策: next=%s reasoning=%s expansion=%s planner_complex=%s",
+                next_agent, reasoning[:50] if reasoning else "", needs_expansion, is_complex_from_planner)
 
     return {
         "next_agent": next_agent,
@@ -216,6 +218,6 @@ def route_to_agent(state: Dict[str, Any]) -> str:
         return next_agent
 
     # 降级到 general_agent
-    print(f"[route_to_agent] 无效的 agent: {next_agent}，降级到 general_agent")
+    logger.warning("无效的 agent: %s，降级到 general_agent", next_agent)
     return "general_agent"
 

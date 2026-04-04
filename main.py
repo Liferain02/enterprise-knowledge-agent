@@ -30,17 +30,24 @@ from config import get_settings
 # 初始化设置
 settings = get_settings()
 
-# 配置结构化 JSON 日志（生产：json格式 / 调试：human格式）
+# 配置结构化日志：
+#   - 控制台：INFO 级别，human 格式（非生产）或 JSON 格式（生产）
+#   - 文件（logs/agent.log）：DEBUG 级别，JSON 格式（详细调试信息）
 import logging as _logging
+from pathlib import Path
 from src.observability.structured_logging import configure_logging as _cfg_log
+
 _log_level = _logging.DEBUG if settings.debug else _logging.INFO
 _log_env = "development" if settings.debug else "production"
+_log_file = str(Path(__file__).parent / "logs" / "agent.log")
+
 _cfg_log(
-    level=_log_level,
-    log_file=None,
+    level=_logging.INFO,       # 控制台始终 INFO（干净的关键信息）
+    log_file=_log_file,        # 详细调试信息写入文件
+    file_level=_log_level,     # DEBUG 模式写入文件 DEBUG 信息
     service_name="enterprise-knowledge-agent",
     environment=_log_env,
-    json_format=None,  # 自动：生产=True，调试=False
+    json_format=None,           # 自动：生产=True，调试=False
 )
 logger = logging.getLogger(__name__)
 

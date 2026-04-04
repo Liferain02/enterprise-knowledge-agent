@@ -9,6 +9,7 @@ from typing import Dict, Any, AsyncGenerator, Optional, List
 from src.agent.graph import run_agent, arun_agent, get_agent_graph, get_agent_graph_async
 from config.settings import get_settings
 from .session_service import session_service
+from ..repositories import message_dao
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,7 @@ class ChatService:
                 )
             return message
         except Exception as e:
-            logger.warning(f"[Vision] 图片理解出错: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.warning("图片理解出错: %s", e)
             return message
 
     def _generate_title(
@@ -62,7 +61,7 @@ class ChatService:
         message: str,
         session_id: str,
     ) -> Optional[str]:
-        """生成会话标题（若为首条消息）"""
+        """生成会话标题（若为首条消息）。通过 message_count 判断，无需调用方额外查询。"""
         if _GREETING_PATTERNS.match(message.strip()):
             return "问候"
 
@@ -134,13 +133,15 @@ class ChatService:
         sources = result.get("sources", "")
         used_agent = result.get("used_agent", "unknown")
 
-        # 生成标题（首条消息）
-        title = self._generate_title(user_id, processed_message, session_id)
-        if title:
-            session_service.update_session_title(user_id, session_id, title)
+        # 生成标题（需在保存消息前判断，此时 message_count 仍为 0）
+        title = self._generate_title(user_id, message, session_id)
 
         # 保存消息
         self._save_chat_message(user_id, session_id, message, answer, used_agent)
+
+        # 更新标题
+        if title:
+            session_service.update_session_title(user_id, session_id, title)
 
         elapsed = time.time() - total_start
         if elapsed > 10:
@@ -241,21 +242,25 @@ class ChatService:
                 sources_raw = checkpoint.get("sources", "")
                 used_agent = checkpoint.get("used_agent", "unknown")
 
-            # 保存消息（带 user_id 隔离）
-            self._save_chat_message(user_id, session_id, message, final_answer, used_agent)
+            # 获取 message_count（判断是否首条消息，用于标题生成）
+            session_info = session_service.get_session(user_id, session_id)
+            is_first_message = session_info and session_info.get("message_count", 0) == 0
 
-            # 生成标题
-            title = self._generate_title(user_id, processed_message, session_id)
-            if title:
-                session_service.update_session_title(user_id, session_id, title)
+            # 流式处理完成后，保存消息
+            session_service.save_message(user_id, session_id, "user", message)
+            session_service.save_message(user_id, session_id, "assistant", final_answer, {"agent": used_agent})
+
+            if is_first_message:
+                title = session_service.generate_title(message)
+                if title:
+                    session_service.update_session_title(user_id, session_id, title)
 
             yield self._sse_event("sources", sources_raw[:500] if sources_raw else "")
             yield self._sse_event("used_agent", used_agent)
             yield self._sse_event("done", final_answer[:100])
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            logger.exception("流式聊天出错: %s", e)
             yield self._sse_event("error", str(e))
 
     # ==================== 会话管理（全部带 user_id） ====================
@@ -264,7 +269,14 @@ class ChatService:
         """获取会话历史"""
         logger.info(f"获取历史记录 - user: {user_id}, session: {session_id}")
         try:
+            # 修复历史遗留的前缀不一致问题
+            session_service.migrate_orphaned_messages(user_id, session_id)
             messages = session_service.get_messages(user_id, session_id)
+
+            # 如果 migrate 后仍然无消息，尝试从 raw_id 直接读取（最底层兜底）
+            if not messages:
+                messages = message_dao.get_by_session(session_id)
+
             if messages:
                 return {"session_id": session_id, "messages": messages}
 

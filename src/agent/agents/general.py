@@ -9,6 +9,9 @@ from langchain_core.messages import AIMessage
 from src.agent.skills.skill_loader import get_skill_loader
 from ._utils import get_last_user_message, inject_context_to_messages
 from src.observability import traced
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Agent 缓存
@@ -70,7 +73,7 @@ async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         agent_messages = result.get("messages", [])
         final_answer = agent_messages[-1].content
 
-        print(f"[General Agent] 生成答案长度: {len(final_answer)} 字符")
+        logger.debug("通用回答完成: len=%d", len(final_answer))
 
         return {
             "final_answer": final_answer,
@@ -85,9 +88,7 @@ async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "messages": [AIMessage(content=f"抱歉，回答超时了，请重新尝试。")]
         }
     except Exception as e:
-        print(f"[General Agent] 执行出错: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("General Agent 执行出错: %s", e)
 
         return {
             "final_answer": f"处理请求时出错: {str(e)}",

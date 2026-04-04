@@ -14,6 +14,9 @@ from ._utils import get_last_user_message, inject_summary_to_messages, inject_co
 from config.settings import get_settings
 from ..checkpointer import get_sync_checkpointer as get_checkpointer
 from src.observability import traced
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Agent 缓存
@@ -97,7 +100,7 @@ async def operation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # 获取最终回复
         final_answer = agent_messages[-1].content
 
-        print(f"[Operation Agent] 生成答案长度: {len(final_answer)} 字符")
+        logger.debug("操作完成: len=%d", len(final_answer))
 
         # 返回时包含 messages，LangGraph 会自动将 AIMessage 添加到状态
         return {
@@ -112,9 +115,7 @@ async def operation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "used_agent": "operation_agent"
         }
     except Exception as e:
-        print(f"[Operation Agent] 执行出错: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("操作执行出错: %s", e)
         
         return {
             "final_answer": f"执行操作时出错: {str(e)}",

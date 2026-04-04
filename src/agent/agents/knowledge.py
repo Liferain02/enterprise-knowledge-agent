@@ -21,9 +21,12 @@ import re
 from typing import Dict, Any, List, Tuple
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.documents import Document
+import logging
 
 from ._utils import get_last_user_message, inject_summary_to_messages, inject_context_to_messages
 from src.observability import traced
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -71,7 +74,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # 获取 top_k：从配置或 state 读取，默认 5
         top_k = state.get("retrieval_top_k", 5)
 
-        print(f"[Retrieval] 开始检索: '{last_user_message[:50]}...' top_k={top_k}")
+        logger.debug("开始检索: query=%s top_k=%s", last_user_message[:50], top_k)
 
         results, grade_result, rewrite_history = await pipeline.retrieve(
             query=last_user_message,
@@ -86,12 +89,14 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         avg_score = grade_result.avg_score if grade_result else 0.0
         decision_reason = grade_result.decision_reason if grade_result else "无评估结果"
 
-        print(
-            f"[Retrieval] 完成: decision={decision}, "
-            f"high={grade_result.high_count if grade_result else 0}/"
-            f"{grade_result.total_docs if grade_result else 0}, "
-            f"avg={avg_score:.3f}, rewrite_history={rewrite_history}, "
-            f"耗时={retrieval_time:.2f}s"
+        logger.debug(
+            "检索完成: decision=%s high=%d/%d avg=%.3f rewrite=%s duration=%.2fs",
+            decision,
+            grade_result.high_count if grade_result else 0,
+            grade_result.total_docs if grade_result else 0,
+            avg_score,
+            rewrite_history,
+            retrieval_time,
         )
 
         # ── 构建检索上下文（供生成阶段用）─────────────────────────────
@@ -100,7 +105,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
         # ── 检测 NO_RESULTS：直接返回"知识库无相关信息"───────────────
         if decision == "no_results" or not docs:
-            print(f"[Retrieval] 知识库无相关信息，返回空结果")
+            logger.debug("知识库无相关信息")
             return {
                 "retrieval_context": "【知识库检索结果】\n未在知识库中找到与您问题相关的信息。",
                 "retrieved_docs": [],
@@ -115,7 +120,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         from src.rag.evaluation.conflict_detector import detect_document_conflicts
         conflicts = detect_document_conflicts(docs, last_user_message)
         if conflicts:
-            print(f"[Retrieval] 检测到 {len(conflicts)} 个文档冲突")
+            logger.debug("检测到 %d 个文档冲突", len(conflicts))
 
         return {
             "retrieval_context": retrieval_context,
@@ -128,9 +133,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        print(f"[Retrieval] 检索出错: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("检索出错: %s", e)
         return {
             "retrieval_context": f"【知识库检索出错】{str(e)}",
             "retrieved_docs": [],
@@ -154,10 +157,11 @@ def _build_retrieval_context(
     lines = ["【知识库检索结果】"]
     lines.append(f"（共检索到 {len(results)} 篇相关文档）\n")
 
-    # 添加评估摘要（若有）
+    # 添加评估摘要（若有）—— 仅显示决策，不暴露内部推理过程
     if grade_result:
         decision = grade_result.decision.value
-        lines.append(f"【相关性评估】{decision.upper()} - {grade_result.decision_reason}")
+        decision_label = {"high": "高相关", "medium": "中等相关", "low": "低相关", "no_results": "无相关文档"}.get(decision, decision)
+        lines.append(f"【相关性评估】{decision_label.upper()}")
         lines.append("")
 
     for i, (doc, score) in enumerate(results, 1):
@@ -242,27 +246,22 @@ async def generation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         llm = get_llm(temperature=0.3)
         response = await llm.ainvoke([SystemMessage(content=system_prompt)] + messages_with_context)
 
-        final_answer = response.content.strip()
         gen_time = time.time() - t0
-        print(f"[Generation] 生成答案长度: {len(final_answer)} 字符, 耗时: {gen_time:.2f}s")
+        final_answer = response.content
+        logger.debug("生成答案完成: len=%d duration=%.2fs", len(final_answer), gen_time)
 
         # ── 追踪引用质量 ──────────────────────────────────────────────
         if retrieval_decision in ("high", "medium"):
-            print(
-                f"[Generation] 检索质量: {retrieval_decision.upper()}, "
-                f"avg_score={state.get('retrieval_avg_score', 0):.3f}"
-            )
+            logger.debug("检索质量: %s avg_score=%.3f", retrieval_decision.upper(), state.get('retrieval_avg_score', 0))
 
         return {
-            "final_answer": final_answer,
+            "final_answer": response.content,
             "sources": "knowledge_base",
             "used_agent": "knowledge_agent",
         }
 
     except Exception as e:
-        print(f"[Generation] 生成出错: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("生成出错: %s", e)
         return {
             "final_answer": f"生成答案时出错: {str(e)}",
             "sources": "",
@@ -355,7 +354,7 @@ async def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         agent_messages = result.get("messages", [])
         final_answer = agent_messages[-1].content
 
-        print(f"[Knowledge Agent (ReAct)] 生成答案长度: {len(final_answer)} 字符")
+        logger.debug("生成答案长度: %d 字符", len(final_answer))
 
         return {
             "final_answer": final_answer,
@@ -365,9 +364,7 @@ async def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     except Exception as e:
-        print(f"[Knowledge Agent] 执行出错: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("知识库搜索出错: %s", e)
         return {
             "final_answer": f"搜索知识库时出错: {str(e)}",
             "sources": "",

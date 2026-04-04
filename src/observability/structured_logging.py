@@ -255,7 +255,7 @@ class StructuredLogger:
         record = self._logger.makeRecord(
             self._logger.name,
             level,
-            "(unknown)',
+            "(unknown)",
             0,
             msg,
             (),
@@ -297,16 +297,18 @@ def configure_logging(
     service_name: str = "enterprise-knowledge-agent",
     environment: str = "production",
     json_format: Optional[bool] = None,
+    file_level: Optional[int] = None,
 ):
     """
     配置全局日志系统
 
     Args:
-        level: 日志级别（默认 INFO）
+        level: 控制台日志级别（默认 INFO）
         log_file: 日志文件路径（可选，默认输出到 stderr）
         service_name: 服务名称（用于日志字段）
         environment: 环境标识（用于日志字段）
         json_format: 是否使用 JSON 格式（None=自动：生产=True，调试=False）
+        file_level: 文件日志级别（默认同 level），可设为 DEBUG 以记录详细调试信息
     """
     global _USE_JSON_FORMAT, _SERVICE_NAME
 
@@ -329,24 +331,35 @@ def configure_logging(
         environment=environment,
     )
 
-    # 控制台 handler
+    # 控制台 handler（始终只输出 INFO 及以上，human 格式）
     console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setFormatter(formatter)
+    if _USE_JSON_FORMAT:
+        console_handler.setFormatter(formatter)
+    else:
+        # 非生产环境使用彩色人类可读格式
+        human_fmt = logging.Formatter(
+            "%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
+            datefmt="%H:%M:%S"
+        )
+        console_handler.setFormatter(human_fmt)
     console_handler.addFilter(LogContextFilter())
+    console_handler.setLevel(level)
     root_logger.addHandler(console_handler)
 
-    # 文件 handler（可选）
+    # 文件 handler（可选，记录完整 DEBUG 信息）
     if log_file:
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        _file_level = file_level if file_level is not None else level
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
-        # 文件强制使用 JSON 格式
+        # 文件强制使用 JSON 格式，记录 DEBUG 及以上
         file_formatter = JSONFormatter(
             service_name=service_name,
             environment=environment,
         )
         file_handler.setFormatter(file_formatter)
         file_handler.addFilter(LogContextFilter())
+        file_handler.setLevel(_file_level)
         root_logger.addHandler(file_handler)
 
     # 降低第三方库日志级别（减少噪音）

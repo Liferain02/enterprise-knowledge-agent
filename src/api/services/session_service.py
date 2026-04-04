@@ -12,6 +12,7 @@ session_id 统一加上 username_ 前缀，实现用户间完全隔离。
 
 
 import uuid
+import sqlite3
 from typing import Dict, Any, List, Optional
 from ..repositories import session_dao, message_dao
 from src.models.llm import get_llm
@@ -64,6 +65,52 @@ class SessionService:
             s["session_id"] = s["session_id"][len(prefix):]
         return sorted(user_sessions, key=lambda x: x["updated_at"], reverse=True)[:limit]
 
+    def update_message_count(self, user_id: str, session_id: str, count: int):
+        """直接设置消息数量（用于修复旧数据不一致）"""
+        full_id = _make_session_id(user_id, session_id)
+        session_dao.update_message_count(full_id, count)
+
+    def migrate_orphaned_messages(self, user_id: str, session_id: str):
+        """
+        修复历史遗留的前缀不一致问题。
+
+        问题场景：
+        1. sessions 表用 full_id (如 Liferain_default)，messages 表用 raw_id (default)
+        2. sessions 表无记录，但 messages 表有 raw_id 记录
+
+        本方法将 messages 里的 raw_id 迁移到 full_id。
+        """
+        safe_user = user_id.replace("/", "_").replace("_", "__")
+        full_id = f"{safe_user}_{session_id}"
+        raw_id = session_id
+
+        db_path = session_dao._get_db_path()
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+            (raw_id,),
+        )
+        raw_count = cursor.fetchone()[0]
+        conn.close()
+
+        if raw_count == 0:
+            return
+
+        logger.info(
+            f"迁移 messages: {raw_id} -> {full_id} ({raw_count} 条消息)"
+        )
+
+        # 如果 sessions 表没有 full_id，先创建
+        existing = session_dao.get_by_id(full_id)
+        if not existing:
+            session_dao.create_session(full_id)
+
+        # 迁移 messages 到 full_id（sessions 表已有正确记录，无需更新）
+        session_dao.migrate_messages_only(raw_id, full_id)
+        # 修正 message_count
+        session_dao.update_message_count(full_id, raw_count)
+
     def delete_session(self, user_id: str, session_id: str) -> Dict[str, Any]:
         """删除会话（直接用 user_id 拼接 key，无法跨用户删除）"""
         full_id = _make_session_id(user_id, session_id)
@@ -89,9 +136,20 @@ class SessionService:
         message_dao.save(full_id, role, content, metadata)
 
     def get_messages(self, user_id: str, session_id: str, limit: int = 100) -> List[Dict[str, Any]]:
-        """获取会话消息（直接用 user_id 拼接 key）"""
+        """
+        获取会话消息（直接用 user_id 拼接 key）。
+        如果 full_id 下无消息，fallback 到 raw_id（兼容旧数据）。
+        """
         full_id = _make_session_id(user_id, session_id)
-        return message_dao.get_by_session(full_id, limit)
+        raw_id = session_id
+
+        messages = message_dao.get_by_session(full_id, limit)
+
+        # Fallback: 如果 full_id 下没有，试试 raw_id（兼容旧数据）
+        if not messages:
+            messages = message_dao.get_by_session(raw_id, limit)
+
+        return messages
 
     def generate_title(self, first_message: str) -> str:
         """根据第一条消息生成会话标题"""

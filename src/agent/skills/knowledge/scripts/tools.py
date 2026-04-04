@@ -282,9 +282,9 @@ async def _knowledge_search_cragn(
             if grade_info.grade.value == "high":
                 grade_tag = " [高相关]"
             elif grade_info.grade.value == "medium":
-                grade_tag = " [中等相关]"
+                grade_tag = " [中等]"
             else:
-                grade_tag = " [低相关]"
+                grade_tag = " [低]"
 
         formatted_results.append(
             f"【结果 {i}】相关性: {score_percent}%{grade_tag}\n"
@@ -300,7 +300,7 @@ async def _knowledge_search_cragn(
         f"决策: {grade_result.decision.value.upper()} | "
         f"HIGH: {grade_result.high_count} | MEDIUM: {grade_result.medium_count} | LOW: {grade_result.low_count} | "
         f"avg={grade_result.avg_score:.2f}\n"
-        f"决策理由: {grade_result.decision_reason}"
+        f"平均相关度: {grade_result.avg_score:.0%}"
     )
 
     if len(rewrite_history) > 1:

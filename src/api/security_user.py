@@ -19,7 +19,7 @@ import secrets
 import time
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)

@@ -5,12 +5,16 @@ Planner 节点
 """
 import re
 import json
+import traceback
 from typing import Dict, Any, List
 from typing_extensions import TypedDict
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Send
 from src.models.llm import get_llm
 from src.observability import traced
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # 使用 TypedDict 而非 Pydantic BaseModel：
@@ -163,7 +167,7 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
     quick_result = _quick_complexity_check(last_user_message)
 
     if quick_result == "simple":
-        print(f"[Planner] 快速判断: 简单任务（跳过 LLM）")
+        logger.debug("快速判断: 简单任务（跳过 LLM）")
         # 简单任务也可快速确定 Agent → 设置 _quick_agent，跳过 Supervisor
         agent = _quick_route(last_user_message)
         return {
@@ -175,11 +179,11 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     if quick_result == "complex":
-        print(f"[Planner] 快速判断: 复杂任务（进入 LLM 拆步骤）")
+        logger.debug("快速判断: 复杂任务（进入 LLM 拆步骤）")
     else:
         # ── 中等复杂度（< 40字 + 无复杂信号）：快速路由不调 LLM ──────────
         if len(last_user_message) <= 40:
-            print(f"[Planner] 快速判断: 中等任务（快速路由，不调 LLM）")
+            logger.debug("快速判断: 中等任务（快速路由，不调 LLM）")
             agent = _quick_route(last_user_message)
             return {
                 "is_complex": False,
@@ -188,7 +192,7 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
                 "current_step": 0,
                 "_quick_agent": agent,
             }
-        print(f"[Planner] 快速判断: 不确定（进入 LLM 精确判断）")
+        logger.debug("快速判断: 不确定（进入 LLM 精确判断）")
 
     # ── LLM 路径：精确判断（仅 complex / uncertain 到达此处）─────────
     llm = get_llm()
@@ -258,12 +262,12 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
         reasoning = plan["reasoning"]
         steps = plan.get("steps", [])  # 每个 step 已是 dict
 
-        print(f"[Planner] 任务复杂度: {is_complex}, 步骤数: {len(steps)}")
-        print(f"[Planner] 判断理由: {reasoning}")
+        logger.info("任务复杂度: is_complex=%s steps=%d", is_complex, len(steps))
+        logger.debug("判断理由: %s", reasoning[:100])
 
         if is_complex:
             for s in steps:
-                print(f"[Planner] 步骤 {s['step_id']}: {s['description']} -> {s['agent']}")
+                logger.debug("步骤 %s: %s -> %s", s["step_id"], s["description"], s["agent"])
 
         return {
             "is_complex": is_complex,
@@ -273,9 +277,7 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
         }
         
     except Exception as e:
-        print(f"[Planner] 规划失败: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("规划失败: %s", e)
         
         # 降级：认为是非复杂任务
         return {
@@ -348,7 +350,7 @@ def route_from_planner(state: Dict[str, Any]) -> str:
     # Planner 已经通过快速路由确定了 Agent → 直接跳转，跳过 Supervisor（省去一次 LLM 调用）
     quick_agent = state.get("_quick_agent")
     if quick_agent:
-        print(f"[Planner → Agent] 快速路由，跳过 Supervisor，直接 → {quick_agent}")
+        logger.debug("快速路由: %s，跳过 Supervisor", quick_agent)
         return quick_agent
 
     # Planner 无法快速确定 → 交给 Supervisor 决策
@@ -432,7 +434,7 @@ async def _execute_plan_with_send(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # ── 拓扑排序分批 ────────────────────────────────────────────────
     batches = analyze_step_dependencies(plan_steps)
-    print(f"[Execute Plan (Send)] 并行执行：分 {len(batches)} 批处理 {len(plan_steps)} 个步骤")
+    logger.info("Execute Plan (Send): 分 %d 批处理 %d 个步骤", len(batches), len(plan_steps))
 
     if len(batches) == 1:
         # 单批次：直接用 Send 分发所有步骤
@@ -781,7 +783,7 @@ async def _execute_plan_parallel(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # 分析依赖关系并显示执行计划
     batches = analyze_step_dependencies(plan_steps)
-    print(f"[Execute Plan] 并行执行：分 {len(batches)} 批处理 {len(plan_steps)} 个步骤")
+    logger.info("Execute Plan: 分 %d 批处理 %d 个步骤", len(batches), len(plan_steps))
 
     # 使用并行执行器（传入预注入的上下文消息）
     executor = get_parallel_executor()
@@ -851,8 +853,8 @@ async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # 获取当前步骤
     step = plan_steps[current_step]
-    print(f"[Execute Plan] 执行步骤 {step['step_id']}: {step['description']}")
-    print(f"[Execute Plan] 分配给 Agent: {step['agent']}")
+    logger.debug("执行步骤 %s: %s", step["step_id"], step["description"])
+    logger.debug("分配给 Agent: %s", step["agent"])
 
     # 根据步骤指定的 agent 执行
     agent_name = step.get("agent", "general_agent")
@@ -891,10 +893,10 @@ async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
             })
             step_result = result.get("final_answer", "")
 
-        print(f"[Execute Plan] 步骤 {step['step_id']} 结果: {step_result[:100]}...")
+        logger.debug("步骤 %s 结果: %s...", step["step_id"], step_result[:50])
 
     except Exception as e:
-        print(f"[Execute Plan] 步骤执行失败: {e}")
+        logger.warning("Execute Plan 步骤执行失败: %s", e)
         step_result = f"步骤执行出错: {str(e)}"
 
     # 收集步骤结果（使用 StepResult 结构化格式）
@@ -916,7 +918,7 @@ async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
     next_step = current_step + 1
     if next_step >= len(plan_steps):
         # 所有步骤完成，汇总结果
-        print(f"[Execute Plan] 所有步骤完成，开始汇总")
+        logger.info("Execute Plan: 所有步骤完成，开始汇总")
 
         final_answer = await _summarize_results(
             state.get("messages", []),
@@ -935,7 +937,7 @@ async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
             "used_agent": "planner"
         }
     else:
-        print(f"[Execute Plan] 步骤 {step['step_id']} 完成，继续执行下一步")
+        logger.debug("Execute Plan: 步骤 %s 完成", step["step_id"])
         return {
             "current_step": next_step,
             "completed_steps": completed,
@@ -977,7 +979,7 @@ async def _summarize_results(messages: list, plan_results: list) -> str:
         return summary["final_answer"]
     except Exception as e:
         # 如果汇总失败，简单拼接结果
-        print(f"[Execute Plan] 汇总失败: {e}")
+        logger.warning("Execute Plan 汇总失败: %s", e)
         return "\n\n".join([r['result'] for r in plan_results])
 
 

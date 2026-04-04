@@ -4,6 +4,8 @@ LangGraph Multi-Agent 工作流图
 """
 import asyncio
 import time as _time
+import logging
+import traceback
 from typing import Dict, Any, List
 from langgraph.graph import StateGraph, END
 from langgraph.graph import MessagesState
@@ -11,6 +13,8 @@ from langgraph.types import Send
 from langchain_core.messages import HumanMessage, RemoveMessage
 
 from src.observability import traced
+
+logger = logging.getLogger(__name__)
 
 from .agents.supervisor import supervisor_node, route_to_agent
 from .agents.knowledge import knowledge_agent_node, retrieval_agent_node, generation_agent_node
@@ -148,11 +152,8 @@ async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
     # 用 RemoveMessage 删除旧消息（LangGraph add_messages reducer 支持）
     remove_ops = [RemoveMessage(id=m.id) for m in old_messages if getattr(m, "id", None)]
 
-    print(
-        f"[Summarize] 触发摘要：原 {len(messages)} 条消息 → "
-        f"删除 {len(remove_ops)} 条，保留最近 {keep_recent} 条"
-        f" | 耗时: {_time.time() - t0:.2f}s"
-    )
+    logger.debug("触发摘要：原 %d 条 → 删除 %d 条，保留 %d 条，耗时 %.2fs",
+                 len(messages), len(remove_ops), keep_recent, _time.time() - t0)
 
     return {
         "summary": new_summary,
@@ -177,7 +178,7 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
 
     # 检查是否启用 Mem0
     if not getattr(settings, "mem0_enabled", False):
-        print("[Mem0] 未启用，跳过检索")
+        logger.debug("Mem0 未启用，跳过检索")
         return {}
 
     # 问候语跳过（无上下文可关联，且节省一次 LLM 检索开销）
@@ -193,17 +194,17 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
             last_msg = getattr(msg, "content", "")
             break
     if last_msg and re.match(_GREETING_PATTERNS, last_msg.strip(), re.IGNORECASE):
-        print("[Mem0] 问候语，跳过检索")
+        logger.debug("Mem0 问候语，跳过检索")
         return {}
 
     try:
         from .memory import get_mem0_manager
 
         if not messages:
-            print("[Mem0] 无消息，跳过检索")
+            logger.debug("Mem0 无消息，跳过检索")
             return {}
 
-        print(f"[Mem0] 开始检索，消息数量: {len(messages)}")
+        logger.debug("Mem0 开始检索，消息数量: %d", len(messages))
         t0 = _time.time()
 
         # 提取当前用户问题
@@ -232,7 +233,7 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
             session_id=session_id,
             limit=2
         )
-        print(f"[Mem0] 检索当前会话: {len(current_session_memories)} 条 | 耗时: {_time.time()-t1:.2f}s")
+        logger.debug("Mem0 检索当前会话: %d 条，耗时 %.2fs", len(current_session_memories), _time.time()-t1)
 
         # 2. 检索跨会话记忆（不限制会话）
         t2 = _time.time()
@@ -242,7 +243,7 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
             session_id=None,  # 跨会话检索
             limit=3
         )
-        print(f"[Mem0] 检索跨会话: {len(cross_session_memories)} 条 | 耗时: {_time.time()-t2:.2f}s")
+        logger.debug("Mem0 检索跨会话: %d 条，耗时 %.2fs", len(cross_session_memories), _time.time()-t2)
 
         # 合并记忆，去重
         all_memories = {m["id"]: m for m in current_session_memories}
@@ -252,7 +253,7 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
         memories = list(all_memories.values())[:5]
 
         if not memories:
-            print(f"[Mem0] 无相关记忆 | 总耗时: {_time.time()-t0:.2f}s")
+            logger.debug("Mem0 无相关记忆，耗时 %.2fs", _time.time()-t0)
             return {}
 
         # 格式化记忆
@@ -261,7 +262,7 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
             max_chars=getattr(settings, "mem0_max_context_chars", 500)
         )
 
-        print(f"[Mem0] 检索到 {len(memories)} 条相关记忆 | 总耗时: {_time.time()-t0:.2f}s")
+        logger.debug("Mem0 检索到 %d 条相关记忆，耗时 %.2fs", len(memories), _time.time()-t0)
 
         return {"mem0_memories": formatted_memories}
 
@@ -385,7 +386,7 @@ async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
 
     # 检查是否启用 Mem0
     if not getattr(settings, "mem0_enabled", False):
-        print("[Mem0] 未启用，跳过保存")
+        logger.debug("Mem0 未启用，跳过保存")
         return {}
 
     # 问候语跳过（无上下文可关联，且节省一次 LLM 保存开销）
@@ -401,17 +402,17 @@ async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
             last_msg = getattr(msg, "content", "")
             break
     if last_msg and re.match(_GREETING_PATTERNS, last_msg.strip(), re.IGNORECASE):
-        print("[Mem0] 问候语，跳过保存")
+        logger.debug("Mem0 问候语，跳过保存")
         return {}
 
     try:
         from .memory import get_mem0_manager
 
         if not messages or len(messages) < 2:
-            print("[Mem0] 消息不足，跳过保存")
+            logger.debug("Mem0 消息不足，跳过保存")
             return {}
 
-        print(f"[Mem0] 开始保存，消息数量: {len(messages)}")
+        logger.debug("Mem0 开始保存，消息数量: %d", len(messages))
         t0 = _time.time()
 
         # 获取用户ID和会话ID
@@ -440,7 +441,7 @@ async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
             user_id=user_id,
             session_id=session_id
         )
-        print(f"[Mem0] 保存当前会话 | 耗时: {_time.time()-t1:.2f}s")
+        logger.debug("Mem0 保存当前会话，耗时 %.2fs", _time.time()-t1)
 
         # 2. 保存跨会话记忆（不带 session_id 限制，用于跨会话检索）
         cross_session_msg_list = [
@@ -453,9 +454,9 @@ async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
             user_id=user_id,
             session_id=None  # 跨会话记忆
         )
-        print(f"[Mem0] 保存跨会话 | 耗时: {_time.time()-t2:.2f}s")
+        logger.debug("Mem0 保存跨会话，耗时 %.2fs", _time.time()-t2)
 
-        print(f"[Mem0] 保存完成 | 总耗时: {_time.time()-t0:.2f}s")
+        logger.debug("Mem0 保存完成，耗时 %.2fs", _time.time()-t0)
 
         return {}
 
@@ -559,9 +560,7 @@ def run_agent(
         result = asyncio.run(_run())
         return _extract_result(result)
     except Exception as e:
-        print(f"Agent 执行出错: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Agent 执行出错: %s", e)
         return {
             "final_answer": f"处理请求时出错: {str(e)}",
             "sources": "",
@@ -598,12 +597,10 @@ async def arun_agent(
     t0 = _time.time()
     try:
         result = await graph.ainvoke(initial_state, run_config)
-        print(f"[PERF] arun_agent 总耗时: {_time.time()-t0:.2f}s")
+        logger.info("arun_agent 总耗时: %.2fs", _time.time()-t0)
         return _extract_result(result)
     except Exception as e:
-        print(f"Agent 执行出错: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Agent 执行出错: %s", e)
         return {
             "final_answer": f"处理请求时出错: {str(e)}",
             "sources": "",
