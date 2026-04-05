@@ -18,12 +18,75 @@ def event_loop() -> Generator:
 
 @pytest.fixture
 def mock_llm():
+    """Mock LLM for synchronous and async calls"""
     mock = AsyncMock()
     mock.ainvoke = AsyncMock(return_value=MagicMock(content="Mock LLM response"))
     mock.with_structured_output = MagicMock(return_value=AsyncMock(
         ainvoke=AsyncMock(return_value={"is_complex": False, "reasoning": "mock"})
     ))
+    mock.invoke = MagicMock(return_value=MagicMock(content="Mock LLM response"))
     return mock
+
+
+@pytest.fixture
+def mock_llm_factory():
+    """
+    Mock LLM factory fixture（供异步测试使用）。
+    返回一个 mock LLM，支持 ainvoke/invoke，with_structured_output。
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    mock = MagicMock()
+
+    # 基础文本响应
+    mock.ainvoke = AsyncMock(
+        return_value=MagicMock(content="Mock LLM response")
+    )
+    mock.invoke = MagicMock(
+        return_value=MagicMock(content="Mock LLM response")
+    )
+
+    # structured output support
+    mock.with_structured_output = MagicMock()
+    mock.with_structured_output.return_value = MagicMock()
+    mock.with_structured_output.return_value.ainvoke = AsyncMock(
+        return_value={"is_complex": False, "reasoning": "mock"}
+    )
+    mock.with_structured_output.return_value.invoke = MagicMock(
+        return_value={"is_complex": False, "reasoning": "mock"}
+    )
+
+    return mock
+
+
+@pytest.fixture
+def hr_user():
+    """HR 用户上下文 fixture"""
+    from src.rag.retrieval.acl_filter import UserContext
+    return UserContext(
+        user_id="hr-001",
+        username="HR管理员",
+        role="hr",
+        department="dept-hr",
+        department_name="人力资源部",
+        department_path="/人力资源部",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def employee_user():
+    """普通员工用户上下文 fixture"""
+    from src.rag.retrieval.acl_filter import UserContext
+    return UserContext(
+        user_id="emp-001",
+        username="张三",
+        role="employee",
+        department="dev",
+        department_name="研发部",
+        department_path="/研发部",
+        is_active=True,
+    )
 
 
 @pytest.fixture

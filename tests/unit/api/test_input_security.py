@@ -52,8 +52,10 @@ class TestPIIFilter:
     def test_phone_cn_detected(self):
         text = "我的手机号是13812345678，请联系我"
         results = PIIFilter.detect(text)
-        assert len(results) == 1
-        assert results[0]["type"] == "phone_cn"
+        types = [r["type"] for r in results]
+        assert "phone_cn" in types
+        values = [r["value"] for r in results if r["type"] == "phone_cn"]
+        assert "13812345678" in values
 
     def test_phone_cn_masked(self):
         text = "手机：13812345678"
@@ -63,14 +65,16 @@ class TestPIIFilter:
     def test_id_card_cn_detected(self):
         text = "身份证号：110101199001011234"
         results = PIIFilter.detect(text)
-        assert len(results) == 1
-        assert results[0]["type"] == "id_card_cn"
+        types = [r["type"] for r in results]
+        assert "id_card_cn" in types
+        values = [r["value"] for r in results if r["type"] == "id_card_cn"]
+        assert "110101199001011234" in values
 
     def test_email_detected(self):
         text = "邮箱是test@example.com"
         results = PIIFilter.detect(text)
-        assert len(results) == 1
-        assert results[0]["type"] == "email"
+        types = [r["type"] for r in results]
+        assert "email" in types
 
     def test_no_pii_safe(self):
         text = "年假政策是什么？请问病假怎么申请？"

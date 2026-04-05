@@ -235,7 +235,7 @@ class ChatService:
 
             # 从 checkpointer 提取 sources
             config2 = {"configurable": {"thread_id": session_id}}
-            checkpoint = graph.checkpointer.get(config2)
+            checkpoint = await graph.checkpointer.aget(config2)
             sources_raw = ""
             used_agent = "unknown"
             if checkpoint:

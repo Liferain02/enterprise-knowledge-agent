@@ -13,9 +13,12 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_classic.retrievers import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
 import jieba
+import logging
 from rank_bm25 import BM25Okapi
 from ..storage.vectorstore import get_vectorstore
 from config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 # RRF 融合常数（k 越大，各方法贡献越均衡）

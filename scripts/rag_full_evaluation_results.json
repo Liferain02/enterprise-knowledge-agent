@@ -61,7 +61,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 1369.2
+        "latency_ms": 1727.9
       },
       {
         "query": "试用期多长时间？",
@@ -100,7 +100,7 @@
           "hit_at_5": 0.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 269.7
+        "latency_ms": 288.9
       },
       {
         "query": "公司工作时间是怎么规定的？",
@@ -139,7 +139,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 277.4
+        "latency_ms": 270.5
       },
       {
         "query": "年假有多少天？",
@@ -178,7 +178,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 304.2
+        "latency_ms": 273.6
       },
       {
         "query": "工资什么时候发放？",
@@ -217,7 +217,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 301.2
+        "latency_ms": 285.0
       },
       {
         "query": "公司有哪些福利？",
@@ -256,7 +256,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 325.4
+        "latency_ms": 313.0
       },
       {
         "query": "离职流程是怎样的？",
@@ -295,7 +295,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 274.1
+        "latency_ms": 247.4
       },
       {
         "query": "公司是哪一年成立的？",
@@ -334,7 +334,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 286.4
+        "latency_ms": 265.9
       },
       {
         "query": "公司发展历程",
@@ -373,7 +373,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 285.0
+        "latency_ms": 278.0
       },
       {
         "query": "公司的核心价值观是什么？",
@@ -412,7 +412,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 274.6
+        "latency_ms": 272.1
       },
       {
         "query": "公司有哪些部门？",
@@ -451,7 +451,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 281.6
+        "latency_ms": 274.4
       },
       {
         "query": "公司的联系方式是什么？",
@@ -490,7 +490,7 @@
           "hit_at_5": 0.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 283.3
+        "latency_ms": 286.9
       },
       {
         "query": "社会招聘的流程是什么？",
@@ -529,7 +529,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 279.4
+        "latency_ms": 278.6
       },
       {
         "query": "内部推荐有奖励吗？",
@@ -568,7 +568,7 @@
           "hit_at_5": 0.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 277.8
+        "latency_ms": 327.8
       },
       {
         "query": "面试有几轮？",
@@ -607,7 +607,7 @@
           "hit_at_5": 0.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 279.8
+        "latency_ms": 277.4
       },
       {
         "query": "绩效考核有哪些维度？",
@@ -646,7 +646,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 301.7
+        "latency_ms": 262.2
       },
       {
         "query": "绩效考核等级有哪些？",
@@ -685,7 +685,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 465.3
+        "latency_ms": 321.1
       },
       {
         "query": "年终奖怎么发放？",
@@ -724,7 +724,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 649.2
+        "latency_ms": 268.9
       },
       {
         "query": "新员工培训多长时间？",
@@ -763,7 +763,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 301.3
+        "latency_ms": 269.3
       },
       {
         "query": "技术发展通道是什么？",
@@ -802,7 +802,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 271.3
+        "latency_ms": 272.6
       },
       {
         "query": "外部培训费用可以报销吗？",
@@ -841,7 +841,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 269.2
+        "latency_ms": 298.1
       },
       {
         "query": "差旅费报销标准是多少？",
@@ -880,7 +880,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 287.6
+        "latency_ms": 253.7
       },
       {
         "query": "报销需要多长时间？",
@@ -919,7 +919,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 289.5
+        "latency_ms": 239.3
       },
       {
         "query": "招待客户费用标准是多少？",
@@ -958,7 +958,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 269.6
+        "latency_ms": 295.4
       },
       {
         "query": "上班时间是几点？",
@@ -997,7 +997,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 282.6
+        "latency_ms": 253.8
       },
       {
         "query": "访客如何进入公司？",
@@ -1036,7 +1036,7 @@
           "hit_at_5": 0.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 288.0
+        "latency_ms": 354.4
       },
       {
         "query": "IT服务热线是多少？",
@@ -1075,7 +1075,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 283.6
+        "latency_ms": 296.7
       },
       {
         "query": "电脑无法开机怎么办？",
@@ -1114,7 +1114,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 288.9
+        "latency_ms": 264.3
       },
       {
         "query": "客户服务目标是什么？",
@@ -1153,7 +1153,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 284.6
+        "latency_ms": 298.0
       },
       {
         "query": "客户投诉怎么处理？",
@@ -1192,7 +1192,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 291.8
+        "latency_ms": 260.9
       },
       {
         "query": "合同签订流程是什么？",
@@ -1231,7 +1231,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 289.1
+        "latency_ms": 257.8
       },
       {
         "query": "合同要保存多久？",
@@ -1270,7 +1270,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 283.3
+        "latency_ms": 236.6
       },
       {
         "query": "信息密级如何划分？",
@@ -1309,7 +1309,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 282.6
+        "latency_ms": 259.1
       },
       {
         "query": "密码要求是什么？",
@@ -1348,7 +1348,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 285.0
+        "latency_ms": 250.8
       },
       {
         "query": "数据如何备份？",
@@ -1387,7 +1387,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 297.5
+        "latency_ms": 249.9
       },
       {
         "query": "产品有哪些核心功能？",
@@ -1426,7 +1426,7 @@
           "hit_at_5": 0.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 264.1
+        "latency_ms": 258.3
       },
       {
         "query": "技术架构是什么？",
@@ -1465,7 +1465,7 @@
           "hit_at_5": 0.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 317.0
+        "latency_ms": 257.0
       },
       {
         "query": "部署要求是什么？",
@@ -1504,11 +1504,11 @@
           "hit_at_5": 0.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 291.9
+        "latency_ms": 287.3
       }
     ],
     "total_queries": 38,
-    "avg_latency_ms": 329.0494492179469
+    "avg_latency_ms": 314.0217003069426
   },
   "B2_hybrid": {
     "stage": "B-2 BM25+向量混合检索",
@@ -1519,15 +1519,15 @@
       "recall_at_5": 0.9473684210526315,
       "recall_at_10": 0.9736842105263158,
       "precision_at_1": 0.7631578947368421,
-      "precision_at_3": 0.4561403508771928,
+      "precision_at_3": 0.45614035087719285,
       "precision_at_5": 0.3157894736842107,
       "f1_at_1": 0.7631578947368421,
-      "f1_at_3": 0.592105263157895,
+      "f1_at_3": 0.5921052631578949,
       "f1_at_5": 0.45572263993316614,
       "mrr": 0.8429824561403508,
       "ndcg_at_3": 1.0863717686963,
-      "ndcg_at_5": 1.1400929308350118,
-      "map": 1.5067460317460315,
+      "ndcg_at_5": 1.1400929308350116,
+      "map": 1.5042815371762739,
       "hit_at_1": 0.7631578947368421,
       "hit_at_3": 0.9210526315789473,
       "hit_at_5": 0.9473684210526315,
@@ -1544,10 +1544,10 @@
           "员工手册",
           "培训发展体系",
           "IT支持服务手册",
-          "培训发展体系",
           "招聘管理制度",
+          "培训发展体系",
           "绩效考核制度",
-          "IT支持服务手册",
+          "合同管理规定",
           "信息安全管理制度",
           "财务报销制度",
           "财务报销制度"
@@ -1572,7 +1572,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 300.1
+        "latency_ms": 250.3
       },
       {
         "query": "试用期多长时间？",
@@ -1611,7 +1611,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 305.1
+        "latency_ms": 249.6
       },
       {
         "query": "公司工作时间是怎么规定的？",
@@ -1621,14 +1621,14 @@
         "retrieved_doc_ids": [
           "招聘管理制度",
           "员工手册",
+          "合同管理规定",
           "绩效考核制度",
-          "合同管理规定",
-          "培训发展体系",
           "客户服务标准",
+          "培训发展体系",
           "合同管理规定",
           "财务报销制度",
-          "财务报销制度",
-          "培训发展体系"
+          "培训发展体系",
+          "财务报销制度"
         ],
         "metrics": {
           "recall_at_1": 0.0,
@@ -1650,7 +1650,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 296.4
+        "latency_ms": 256.1
       },
       {
         "query": "年假有多少天？",
@@ -1662,12 +1662,12 @@
           "财务报销制度",
           "财务报销制度",
           "预算管理制度",
+          "培训发展体系",
+          "招聘管理制度",
           "IT支持服务手册",
           "信息安全管理制度",
-          "IT支持服务手册",
-          "信息安全管理制度",
-          "客户服务标准",
-          "培训发展体系"
+          "合同管理规定",
+          "信息安全管理制度"
         ],
         "metrics": {
           "recall_at_1": 1.0,
@@ -1689,7 +1689,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 279.1
+        "latency_ms": 273.7
       },
       {
         "query": "工资什么时候发放？",
@@ -1728,7 +1728,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 268.2
+        "latency_ms": 250.1
       },
       {
         "query": "公司有哪些福利？",
@@ -1767,7 +1767,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 1322.5
+        "latency_ms": 301.3
       },
       {
         "query": "离职流程是怎样的？",
@@ -1778,13 +1778,13 @@
           "员工手册",
           "招聘管理制度",
           "IT支持服务手册",
+          "客户服务标准",
+          "信息安全管理制度",
+          "财务报销制度",
           "行政办公管理制度",
+          "合同管理规定",
           "财务报销制度",
-          "信息安全管理制度",
-          "财务报销制度",
-          "信息安全管理制度",
-          "培训发展体系",
-          "公司简介"
+          "IT支持服务手册"
         ],
         "metrics": {
           "recall_at_1": 1.0,
@@ -1806,7 +1806,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 267.7
+        "latency_ms": 272.4
       },
       {
         "query": "公司是哪一年成立的？",
@@ -1816,8 +1816,8 @@
         "retrieved_doc_ids": [
           "公司简介",
           "公司简介",
-          "公司简介",
           "商务合作流程",
+          "公司简介",
           "公司简介",
           "合同管理规定",
           "公司简介",
@@ -1831,21 +1831,21 @@
           "recall_at_5": 1.0,
           "recall_at_10": 1.0,
           "precision_at_1": 1.0,
-          "precision_at_3": 1.0,
+          "precision_at_3": 0.6666666666666666,
           "precision_at_5": 0.8,
           "f1_at_1": 1.0,
-          "f1_at_3": 1.0,
+          "f1_at_3": 0.8,
           "f1_at_5": 0.888888888888889,
           "mrr": 1.0,
-          "ndcg_at_3": 1.955314742198853,
-          "ndcg_at_5": 2.1735326324348456,
-          "map": 4.514285714285714,
+          "ndcg_at_3": 1.5773502691896257,
+          "ndcg_at_5": 2.072918257538233,
+          "map": 4.264285714285714,
           "hit_at_1": 1.0,
           "hit_at_3": 1.0,
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 271.0
+        "latency_ms": 277.4
       },
       {
         "query": "公司发展历程",
@@ -1884,7 +1884,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 308.0
+        "latency_ms": 267.3
       },
       {
         "query": "公司的核心价值观是什么？",
@@ -1897,11 +1897,11 @@
           "信息安全管理制度",
           "信息安全管理制度",
           "招聘管理制度",
-          "公司简介",
           "绩效考核制度",
-          "合同管理规定",
           "公司简介",
-          "培训发展体系"
+          "培训发展体系",
+          "商务合作流程",
+          "公司简介"
         ],
         "metrics": {
           "recall_at_1": 1.0,
@@ -1917,13 +1917,13 @@
           "mrr": 1.0,
           "ndcg_at_3": 1.5773502691896257,
           "ndcg_at_5": 1.5773502691896257,
-          "map": 2.9444444444444446,
+          "map": 2.8285714285714283,
           "hit_at_1": 1.0,
           "hit_at_3": 1.0,
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 518.6
+        "latency_ms": 294.1
       },
       {
         "query": "公司有哪些部门？",
@@ -1935,11 +1935,11 @@
           "招聘管理制度",
           "商务合作流程",
           "合同管理规定",
-          "合同管理规定",
           "培训发展体系",
           "行政办公管理制度",
-          "员工手册",
+          "合同管理规定",
           "信息安全管理制度",
+          "员工手册",
           "培训发展体系"
         ],
         "metrics": {
@@ -1962,7 +1962,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 273.8
+        "latency_ms": 247.5
       },
       {
         "query": "公司的联系方式是什么？",
@@ -1978,8 +1978,8 @@
           "员工手册",
           "合同管理规定",
           "财务报销制度",
-          "商务合作流程",
-          "公司简介"
+          "公司简介",
+          "商务合作流程"
         ],
         "metrics": {
           "recall_at_1": 1.0,
@@ -1995,13 +1995,13 @@
           "mrr": 1.0,
           "ndcg_at_3": 1.0,
           "ndcg_at_5": 1.0,
-          "map": 1.2,
+          "map": 1.2222222222222223,
           "hit_at_1": 1.0,
           "hit_at_3": 1.0,
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 276.6
+        "latency_ms": 264.2
       },
       {
         "query": "社会招聘的流程是什么？",
@@ -2010,15 +2010,15 @@
         ],
         "retrieved_doc_ids": [
           "招聘管理制度",
-          "公司简介",
           "员工手册",
+          "公司简介",
+          "客户服务标准",
           "IT支持服务手册",
           "合同管理规定",
           "绩效考核制度",
+          "合同管理规定",
           "财务报销制度",
-          "公司简介",
-          "培训发展体系",
-          "培训发展体系"
+          "公司简介"
         ],
         "metrics": {
           "recall_at_1": 1.0,
@@ -2040,7 +2040,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 319.2
+        "latency_ms": 263.4
       },
       {
         "query": "内部推荐有奖励吗？",
@@ -2079,7 +2079,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 275.3
+        "latency_ms": 280.4
       },
       {
         "query": "面试有几轮？",
@@ -2118,7 +2118,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 277.4
+        "latency_ms": 242.2
       },
       {
         "query": "绩效考核有哪些维度？",
@@ -2128,12 +2128,12 @@
         "retrieved_doc_ids": [
           "绩效考核制度",
           "招聘管理制度",
-          "商务合作流程",
-          "公司简介",
           "公司简介",
           "商务合作流程",
-          "客户服务标准",
+          "商务合作流程",
+          "公司简介",
           "IT支持服务手册",
+          "客户服务标准",
           "IT支持服务手册",
           "培训发展体系"
         ],
@@ -2157,7 +2157,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 269.5
+        "latency_ms": 267.0
       },
       {
         "query": "绩效考核等级有哪些？",
@@ -2196,7 +2196,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 280.2
+        "latency_ms": 252.8
       },
       {
         "query": "年终奖怎么发放？",
@@ -2235,7 +2235,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 289.8
+        "latency_ms": 277.2
       },
       {
         "query": "新员工培训多长时间？",
@@ -2246,11 +2246,11 @@
           "培训发展体系",
           "培训发展体系",
           "员工手册",
-          "IT支持服务手册",
           "绩效考核制度",
+          "IT支持服务手册",
           "招聘管理制度",
-          "财务报销制度",
           "信息安全管理制度",
+          "财务报销制度",
           "IT支持服务手册",
           "信息安全管理制度"
         ],
@@ -2274,7 +2274,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 272.0
+        "latency_ms": 280.9
       },
       {
         "query": "技术发展通道是什么？",
@@ -2288,9 +2288,9 @@
           "公司简介",
           "公司简介",
           "商务合作流程",
-          "思路",
-          "思路",
           "jieba_user_dict",
+          "思路",
+          "思路",
           "思路"
         ],
         "metrics": {
@@ -2313,7 +2313,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 275.6
+        "latency_ms": 277.2
       },
       {
         "query": "外部培训费用可以报销吗？",
@@ -2330,7 +2330,7 @@
           "信息安全管理制度",
           "预算管理制度",
           "绩效考核制度",
-          "商务合作流程"
+          "公司简介"
         ],
         "metrics": {
           "recall_at_1": 1.0,
@@ -2352,7 +2352,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 294.3
+        "latency_ms": 261.9
       },
       {
         "query": "差旅费报销标准是多少？",
@@ -2364,12 +2364,12 @@
           "财务报销制度",
           "培训发展体系",
           "培训发展体系",
+          "客户服务标准",
+          "客户服务标准",
           "预算管理制度",
-          "客户服务标准",
-          "客户服务标准",
           "商务合作流程",
           "合同管理规定",
-          "公司简介"
+          "商务合作流程"
         ],
         "metrics": {
           "recall_at_1": 1.0,
@@ -2391,7 +2391,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 288.8
+        "latency_ms": 253.5
       },
       {
         "query": "报销需要多长时间？",
@@ -2430,7 +2430,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 269.4
+        "latency_ms": 268.0
       },
       {
         "query": "招待客户费用标准是多少？",
@@ -2442,8 +2442,8 @@
           "财务报销制度",
           "客户服务标准",
           "客户服务标准",
-          "培训发展体系",
           "预算管理制度",
+          "培训发展体系",
           "培训发展体系",
           "商务合作流程",
           "合同管理规定",
@@ -2469,7 +2469,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 316.1
+        "latency_ms": 266.8
       },
       {
         "query": "上班时间是几点？",
@@ -2508,7 +2508,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 270.3
+        "latency_ms": 258.5
       },
       {
         "query": "访客如何进入公司？",
@@ -2547,7 +2547,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 276.6
+        "latency_ms": 270.5
       },
       {
         "query": "IT服务热线是多少？",
@@ -2562,9 +2562,9 @@
           "公司简介",
           "客户服务标准",
           "公司简介",
-          "信息安全管理制度",
           "公司简介",
-          "公司简介"
+          "公司简介",
+          "信息安全管理制度"
         ],
         "metrics": {
           "recall_at_1": 1.0,
@@ -2586,7 +2586,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 316.1
+        "latency_ms": 276.7
       },
       {
         "query": "电脑无法开机怎么办？",
@@ -2625,7 +2625,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 265.1
+        "latency_ms": 301.2
       },
       {
         "query": "客户服务目标是什么？",
@@ -2637,11 +2637,11 @@
           "客户服务标准",
           "公司简介",
           "公司简介",
-          "商务合作流程",
           "预算管理制度",
           "商务合作流程",
           "商务合作流程",
           "公司简介",
+          "商务合作流程",
           "合同管理规定"
         ],
         "metrics": {
@@ -2664,7 +2664,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 272.3
+        "latency_ms": 265.2
       },
       {
         "query": "客户投诉怎么处理？",
@@ -2703,7 +2703,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 304.1
+        "latency_ms": 275.1
       },
       {
         "query": "合同签订流程是什么？",
@@ -2715,12 +2715,12 @@
           "合同管理规定",
           "商务合作流程",
           "信息安全管理制度",
+          "客户服务标准",
           "商务合作流程",
           "信息安全管理制度",
-          "客户服务标准",
           "员工手册",
           "招聘管理制度",
-          "财务报销制度"
+          "IT支持服务手册"
         ],
         "metrics": {
           "recall_at_1": 1.0,
@@ -2742,7 +2742,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 272.8
+        "latency_ms": 274.7
       },
       {
         "query": "合同要保存多久？",
@@ -2781,7 +2781,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 307.1
+        "latency_ms": 257.4
       },
       {
         "query": "信息密级如何划分？",
@@ -2795,10 +2795,10 @@
           "商务合作流程",
           "客户服务标准",
           "信息安全管理制度",
-          "IT支持服务手册",
           "招聘管理制度",
-          "思路",
-          "公司简介"
+          "IT支持服务手册",
+          "公司简介",
+          "思路"
         ],
         "metrics": {
           "recall_at_1": 1.0,
@@ -2820,7 +2820,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 299.6
+        "latency_ms": 256.1
       },
       {
         "query": "密码要求是什么？",
@@ -2830,9 +2830,9 @@
         "retrieved_doc_ids": [
           "信息安全管理制度",
           "信息安全管理制度",
-          "行政办公管理制度",
           "信息安全管理制度",
           "招聘管理制度",
+          "行政办公管理制度",
           "财务报销制度",
           "合同管理规定",
           "财务报销制度",
@@ -2845,21 +2845,21 @@
           "recall_at_5": 1.0,
           "recall_at_10": 1.0,
           "precision_at_1": 1.0,
-          "precision_at_3": 0.6666666666666666,
+          "precision_at_3": 1.0,
           "precision_at_5": 0.6,
           "f1_at_1": 1.0,
-          "f1_at_3": 0.8,
+          "f1_at_3": 1.0,
           "f1_at_5": 0.7499999999999999,
           "mrr": 1.0,
-          "ndcg_at_3": 1.5773502691896257,
-          "ndcg_at_5": 1.8547003673022404,
-          "map": 2.75,
+          "ndcg_at_3": 1.955314742198853,
+          "ndcg_at_5": 1.955314742198853,
+          "map": 3.0,
           "hit_at_1": 1.0,
           "hit_at_3": 1.0,
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 269.9
+        "latency_ms": 274.3
       },
       {
         "query": "数据如何备份？",
@@ -2898,7 +2898,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 276.3
+        "latency_ms": 269.8
       },
       {
         "query": "产品有哪些核心功能？",
@@ -2906,14 +2906,14 @@
           "产品技术文档"
         ],
         "retrieved_doc_ids": [
-          "公司简介",
           "信息安全管理制度",
+          "公司简介",
           "产品技术文档",
           "客户服务标准",
           "信息安全管理制度",
-          "IT支持服务手册",
           "信息安全管理制度",
           "商务合作流程",
+          "IT支持服务手册",
           "公司简介",
           "思路"
         ],
@@ -2937,7 +2937,7 @@
           "hit_at_5": 1.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 272.8
+        "latency_ms": 264.8
       },
       {
         "query": "技术架构是什么？",
@@ -2976,7 +2976,7 @@
           "hit_at_5": 0.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 268.3
+        "latency_ms": 278.5
       },
       {
         "query": "部署要求是什么？",
@@ -3015,22 +3015,22 @@
           "hit_at_5": 0.0,
           "coverage_at_5": 0.0
         },
-        "latency_ms": 286.2
+        "latency_ms": 247.2
       }
     ],
     "total_queries": 38,
-    "avg_latency_ms": 317.69411814840214
+    "avg_latency_ms": 267.50733977869936
   },
   "ChunkLevel": {
     "stage": "Chunk-Level",
     "description": "Chunk 级细粒度评估",
     "metrics": {
-      "chunk_recall_at_5": 0.05263157894736842,
-      "chunk_recall_at_10": 0.06140350877192983,
-      "chunk_recall_at_20": 0.06140350877192983,
+      "chunk_recall_at_5": 0.04824561403508772,
+      "chunk_recall_at_10": 0.05701754385964912,
+      "chunk_recall_at_20": 0.05701754385964912,
       "chunk_mrr": 0.11403508771929824,
       "context_completeness": 0.6692617667849866,
-      "redundancy_rate": 0.6736842105263161,
+      "redundancy_rate": 0.678947368421053,
       "key_info_coverage": 0.7377731186941713
     },
     "details": [
@@ -3048,7 +3048,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 1.0
         },
-        "latency_ms": 291.7
+        "latency_ms": 279.3
       },
       {
         "query": "试用期多长时间？",
@@ -3064,7 +3064,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.8
         },
-        "latency_ms": 268.2
+        "latency_ms": 292.8
       },
       {
         "query": "公司工作时间是怎么规定的？",
@@ -3080,7 +3080,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 1.0
         },
-        "latency_ms": 289.7
+        "latency_ms": 275.3
       },
       {
         "query": "年假有多少天？",
@@ -3096,7 +3096,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.0
         },
-        "latency_ms": 326.3
+        "latency_ms": 265.5
       },
       {
         "query": "工资什么时候发放？",
@@ -3112,7 +3112,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.0
         },
-        "latency_ms": 283.2
+        "latency_ms": 282.2
       },
       {
         "query": "公司有哪些福利？",
@@ -3128,7 +3128,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.8333333333333334
         },
-        "latency_ms": 311.6
+        "latency_ms": 283.8
       },
       {
         "query": "离职流程是怎样的？",
@@ -3144,17 +3144,17 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.8571428571428571
         },
-        "latency_ms": 294.1
+        "latency_ms": 255.7
       },
       {
         "query": "公司是哪一年成立的？",
         "relevant_chunks": [
-          "公司简介_chunk_1",
-          "公司简介_chunk_4",
+          "公司简介_chunk_0",
+          "公司简介_chunk_2",
           "公司简介_chunk_3",
           "公司简介_chunk_5",
-          "公司简介_chunk_2",
-          "公司简介_chunk_0"
+          "公司简介_chunk_4",
+          "公司简介_chunk_1"
         ],
         "metrics": {
           "chunk_recall_at_5": 0.6666666666666666,
@@ -3165,17 +3165,17 @@
           "redundancy_rate": 0.2,
           "key_info_coverage": 0.3333333333333333
         },
-        "latency_ms": 265.8
+        "latency_ms": 255.9
       },
       {
         "query": "公司发展历程",
         "relevant_chunks": [
-          "公司简介_chunk_1",
-          "公司简介_chunk_4",
+          "公司简介_chunk_0",
+          "公司简介_chunk_2",
           "公司简介_chunk_3",
           "公司简介_chunk_5",
-          "公司简介_chunk_2",
-          "公司简介_chunk_0"
+          "公司简介_chunk_4",
+          "公司简介_chunk_1"
         ],
         "metrics": {
           "chunk_recall_at_5": 0.5,
@@ -3186,17 +3186,17 @@
           "redundancy_rate": 0.4,
           "key_info_coverage": 0.0
         },
-        "latency_ms": 279.5
+        "latency_ms": 289.5
       },
       {
         "query": "公司的核心价值观是什么？",
         "relevant_chunks": [
-          "公司简介_chunk_1",
-          "公司简介_chunk_4",
+          "公司简介_chunk_0",
+          "公司简介_chunk_2",
           "公司简介_chunk_3",
           "公司简介_chunk_5",
-          "公司简介_chunk_2",
-          "公司简介_chunk_0"
+          "公司简介_chunk_4",
+          "公司简介_chunk_1"
         ],
         "metrics": {
           "chunk_recall_at_5": 0.3333333333333333,
@@ -3207,17 +3207,17 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 0.6666666666666666
         },
-        "latency_ms": 301.1
+        "latency_ms": 270.6
       },
       {
         "query": "公司有哪些部门？",
         "relevant_chunks": [
-          "公司简介_chunk_1",
-          "公司简介_chunk_4",
+          "公司简介_chunk_0",
+          "公司简介_chunk_2",
           "公司简介_chunk_3",
           "公司简介_chunk_5",
-          "公司简介_chunk_2",
-          "公司简介_chunk_0"
+          "公司简介_chunk_4",
+          "公司简介_chunk_1"
         ],
         "metrics": {
           "chunk_recall_at_5": 0.16666666666666666,
@@ -3228,28 +3228,28 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.8333333333333334
         },
-        "latency_ms": 285.9
+        "latency_ms": 285.2
       },
       {
         "query": "公司的联系方式是什么？",
         "relevant_chunks": [
-          "公司简介_chunk_1",
-          "公司简介_chunk_4",
+          "公司简介_chunk_0",
+          "公司简介_chunk_2",
           "公司简介_chunk_3",
           "公司简介_chunk_5",
-          "公司简介_chunk_2",
-          "公司简介_chunk_0"
+          "公司简介_chunk_4",
+          "公司简介_chunk_1"
         ],
         "metrics": {
-          "chunk_recall_at_5": 0.3333333333333333,
-          "chunk_recall_at_10": 0.3333333333333333,
-          "chunk_recall_at_20": 0.3333333333333333,
+          "chunk_recall_at_5": 0.16666666666666666,
+          "chunk_recall_at_10": 0.16666666666666666,
+          "chunk_recall_at_20": 0.16666666666666666,
           "chunk_mrr": 1.0,
           "context_completeness": 1.0,
-          "redundancy_rate": 0.6,
+          "redundancy_rate": 0.8,
           "key_info_coverage": 1.0
         },
-        "latency_ms": 282.2
+        "latency_ms": 274.6
       },
       {
         "query": "社会招聘的流程是什么？",
@@ -3265,7 +3265,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.9230769230769231
         },
-        "latency_ms": 279.4
+        "latency_ms": 305.2
       },
       {
         "query": "内部推荐有奖励吗？",
@@ -3281,7 +3281,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.6
         },
-        "latency_ms": 302.0
+        "latency_ms": 254.8
       },
       {
         "query": "面试有几轮？",
@@ -3297,7 +3297,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.9285714285714286
         },
-        "latency_ms": 279.8
+        "latency_ms": 269.4
       },
       {
         "query": "绩效考核有哪些维度？",
@@ -3313,7 +3313,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 1.0
         },
-        "latency_ms": 265.8
+        "latency_ms": 273.6
       },
       {
         "query": "绩效考核等级有哪些？",
@@ -3329,7 +3329,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 1.0
         },
-        "latency_ms": 310.7
+        "latency_ms": 279.3
       },
       {
         "query": "年终奖怎么发放？",
@@ -3345,7 +3345,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.42857142857142855
         },
-        "latency_ms": 277.5
+        "latency_ms": 272.2
       },
       {
         "query": "新员工培训多长时间？",
@@ -3362,7 +3362,7 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 0.7777777777777778
         },
-        "latency_ms": 292.7
+        "latency_ms": 271.0
       },
       {
         "query": "技术发展通道是什么？",
@@ -3379,7 +3379,7 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 1.0
         },
-        "latency_ms": 329.7
+        "latency_ms": 256.5
       },
       {
         "query": "外部培训费用可以报销吗？",
@@ -3396,7 +3396,7 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 0.5
         },
-        "latency_ms": 287.3
+        "latency_ms": 452.9
       },
       {
         "query": "差旅费报销标准是多少？",
@@ -3413,7 +3413,7 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 0.5
         },
-        "latency_ms": 286.3
+        "latency_ms": 272.1
       },
       {
         "query": "报销需要多长时间？",
@@ -3430,7 +3430,7 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 0.8571428571428571
         },
-        "latency_ms": 299.5
+        "latency_ms": 264.1
       },
       {
         "query": "招待客户费用标准是多少？",
@@ -3447,7 +3447,7 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 0.5
         },
-        "latency_ms": 308.4
+        "latency_ms": 283.0
       },
       {
         "query": "上班时间是几点？",
@@ -3463,7 +3463,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.75
         },
-        "latency_ms": 283.4
+        "latency_ms": 246.8
       },
       {
         "query": "访客如何进入公司？",
@@ -3479,13 +3479,13 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 1.0
         },
-        "latency_ms": 315.4
+        "latency_ms": 277.9
       },
       {
         "query": "IT服务热线是多少？",
         "relevant_chunks": [
-          "IT支持服务手册_chunk_21",
           "IT支持服务手册_chunk_22",
+          "IT支持服务手册_chunk_21",
           "IT支持服务手册_chunk_23"
         ],
         "metrics": {
@@ -3497,13 +3497,13 @@
           "redundancy_rate": 0.4,
           "key_info_coverage": 1.0
         },
-        "latency_ms": 278.6
+        "latency_ms": 289.2
       },
       {
         "query": "电脑无法开机怎么办？",
         "relevant_chunks": [
-          "IT支持服务手册_chunk_21",
           "IT支持服务手册_chunk_22",
+          "IT支持服务手册_chunk_21",
           "IT支持服务手册_chunk_23"
         ],
         "metrics": {
@@ -3515,7 +3515,7 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 0.8333333333333334
         },
-        "latency_ms": 283.5
+        "latency_ms": 287.1
       },
       {
         "query": "客户服务目标是什么？",
@@ -3532,7 +3532,7 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 1.0
         },
-        "latency_ms": 294.0
+        "latency_ms": 274.8
       },
       {
         "query": "客户投诉怎么处理？",
@@ -3549,13 +3549,13 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 0.875
         },
-        "latency_ms": 273.8
+        "latency_ms": 257.9
       },
       {
         "query": "合同签订流程是什么？",
         "relevant_chunks": [
-          "合同管理规定_chunk_27",
-          "合同管理规定_chunk_26"
+          "合同管理规定_chunk_26",
+          "合同管理规定_chunk_27"
         ],
         "metrics": {
           "chunk_recall_at_5": 0.0,
@@ -3566,13 +3566,13 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 0.8888888888888888
         },
-        "latency_ms": 270.7
+        "latency_ms": 281.2
       },
       {
         "query": "合同要保存多久？",
         "relevant_chunks": [
-          "合同管理规定_chunk_27",
-          "合同管理规定_chunk_26"
+          "合同管理规定_chunk_26",
+          "合同管理规定_chunk_27"
         ],
         "metrics": {
           "chunk_recall_at_5": 0.0,
@@ -3583,14 +3583,14 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 1.0
         },
-        "latency_ms": 293.2
+        "latency_ms": 267.2
       },
       {
         "query": "信息密级如何划分？",
         "relevant_chunks": [
-          "信息安全管理制度_chunk_15",
+          "信息安全管理制度_chunk_17",
           "信息安全管理制度_chunk_16",
-          "信息安全管理制度_chunk_17"
+          "信息安全管理制度_chunk_15"
         ],
         "metrics": {
           "chunk_recall_at_5": 0.0,
@@ -3601,14 +3601,14 @@
           "redundancy_rate": 0.6,
           "key_info_coverage": 1.0
         },
-        "latency_ms": 285.0
+        "latency_ms": 284.1
       },
       {
         "query": "密码要求是什么？",
         "relevant_chunks": [
-          "信息安全管理制度_chunk_15",
+          "信息安全管理制度_chunk_17",
           "信息安全管理制度_chunk_16",
-          "信息安全管理制度_chunk_17"
+          "信息安全管理制度_chunk_15"
         ],
         "metrics": {
           "chunk_recall_at_5": 0.0,
@@ -3619,14 +3619,14 @@
           "redundancy_rate": 0.4,
           "key_info_coverage": 0.7142857142857143
         },
-        "latency_ms": 296.3
+        "latency_ms": 280.4
       },
       {
         "query": "数据如何备份？",
         "relevant_chunks": [
-          "信息安全管理制度_chunk_15",
+          "信息安全管理制度_chunk_17",
           "信息安全管理制度_chunk_16",
-          "信息安全管理制度_chunk_17"
+          "信息安全管理制度_chunk_15"
         ],
         "metrics": {
           "chunk_recall_at_5": 0.0,
@@ -3637,7 +3637,7 @@
           "redundancy_rate": 0.4,
           "key_info_coverage": 0.3333333333333333
         },
-        "latency_ms": 284.4
+        "latency_ms": 274.4
       },
       {
         "query": "产品有哪些核心功能？",
@@ -3653,7 +3653,7 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.6666666666666666
         },
-        "latency_ms": 308.1
+        "latency_ms": 257.6
       },
       {
         "query": "技术架构是什么？",
@@ -3669,7 +3669,7 @@
           "redundancy_rate": 1.0,
           "key_info_coverage": 0.8571428571428571
         },
-        "latency_ms": 272.7
+        "latency_ms": 265.5
       },
       {
         "query": "部署要求是什么？",
@@ -3685,29 +3685,29 @@
           "redundancy_rate": 0.8,
           "key_info_coverage": 0.7777777777777778
         },
-        "latency_ms": 267.5
+        "latency_ms": 284.7
       }
     ],
     "total_queries": 38,
-    "avg_latency_ms": 289.6032207890561
+    "avg_latency_ms": 278.77456263491985
   },
   "E2E_RAG": {
     "stage": "E2E-RAG",
     "description": "端到端 RAG 生成质量评估",
     "metrics": {
-      "answer_accuracy": 0.6,
-      "partial_correct": 0.1,
-      "incorrect": 0.3,
-      "keyword_match_rate": 0.4527777777777778,
-      "avg_keyword_matches": 0.4527777777777778,
-      "hallucination_rate": 0.3,
+      "answer_accuracy": 0.5,
+      "partial_correct": 0.0,
+      "incorrect": 0.5,
+      "keyword_match_rate": 0.23888888888888893,
+      "avg_keyword_matches": 0.23888888888888893,
+      "hallucination_rate": 0.0,
       "retrieval_e2e_recall": 0.0
     },
     "details": [
       {
         "query": "新员工入职流程是什么？",
         "ground_truth": "1. 人力资源部发放Offer；2. 签署劳动合同；3. 办理入职手续，领取工牌；4. 参加部门入职培训；5. 分配工位和办公设备。",
-        "answer": "根据《员工手册》中的“入职指南”部分，新员工入职流程如下：\n\n1.  **发放录用通知**：由人力资源部向候选人发放 Offer（录用通知书）。[来源1: 员工手册]\n2.  **签署合同**：新员工需与公司签署劳动合同。[来源1: 员工手册]\n3.  **办理入职手续**：办理相关入职登记，并领取工牌。[来源1: 员工手册]\n4.  **参加入职培训**：新员工需参加部门组织的入职培训。[来源1: 员工手册]\n    *   依据《培训发展体系》，该培训时长为5天（共40学时），内容涵盖公司历史文化、组织架构、岗位职责、企业文化及信息安全等。[来源2: 培训发展体系]\n5.  **配置办公资源**：分配工位和办公设备。[来源1: 员工手册]\n    *   依据《IT支持服务手册》，新员工入职后系统会自动开通账号，并根据职级配备相应的计算机、手机等设备。[来源5: IT支持服务手册]\n\n此外，根据《招聘管理制度》，在正式入职前，候选人还需提交体检报告、学历证书及身份证复印件。[来源3: 招聘管理制度]\n\n入职后，试用期规定为3个月，试用期内享受基本工资的80%，试用期结束后将进行转正...",
+        "answer": "新员工入职流程如下：\n\n1.  **手续办理**：人力资源部发放 Offer，签署劳动合同，办理入职手续并领取工牌 [文档1]。\n2.  **入职培训**：参加为期 5 天（40 学时）的入职培训，内容涵盖公司文化、规章制度等，需通过考核 [文档2]。\n3.  **资源分配**：分配工位和办公设备，系统账号在入职时自动开通 [文档1][文档3]。\n4.  **试用期管理**：试用期为 3 个月，期间享受基本工资 80%，结束后进行转正评估 [文档1]。\n\n注：若涉及特殊软件安装或权限申请，需经部门负责人审批后由 IT 部门处理 [文档3]。",
         "metrics": {
           "answer_accuracy": 1.0,
           "partial_correct": 0.0,
@@ -3721,50 +3721,12 @@
           "matched_main": false,
           "keyword_matches": 4
         },
-        "latency_ms": 102162.5
+        "latency_ms": 35071.0
       },
       {
         "query": "试用期多长时间？",
         "ground_truth": "试用期为3个月，试用期内享受基本工资的80%，试用期结束后进行转正评估。",
-        "answer": "根据《员工手册》中的试用期规定，公司新员工的试用期为3个月。[来源1: 员工手册]\n\n此外，依据《招聘管理制度》第三章第十条关于试用期时长的规定，具体时长取决于劳动合同期限：\n- 劳动合同期限为1年以下的，试用期为1-3个月；\n- 劳动合同期限为1年至3年的，试用期为2-6个月；\n- 劳动合同期限为3年以上的，试用期为6个月。[来源2: 招聘管理制度]\n\n请注意，《员工手册》中提到的“3个月”可能适用于特定情况（如标准合同期限或新员工入职指南的通用说明），而《招聘管理制度》提供了更详细的分类标准，建议结合您的具体劳动合同期限确认最终试用期时长。[置信度提示]",
-        "metrics": {
-          "answer_accuracy": 0.0,
-          "partial_correct": 1.0,
-          "incorrect": 0.0,
-          "keyword_match_rate": 0.3333333333333333,
-          "avg_keyword_matches": 0.3333333333333333,
-          "hallucination_rate": 1.0,
-          "retrieval_e2e_recall": 0.0
-        },
-        "extra": {
-          "matched_main": false,
-          "keyword_matches": 1
-        },
-        "latency_ms": 64785.7
-      },
-      {
-        "query": "公司工作时间是怎么规定的？",
-        "ground_truth": "周一至周五为工作日，上班时间09:00，下班时间18:00，午休时间12:00-13:00。",
-        "answer": "根据《员工手册》和《行政办公管理制度》，公司工作时间规定如下：\n\n1.  **工作日**：周一至周五为工作日。[来源1: 员工手册]\n2.  **上班时间**：09:00。[来源2: 行政办公管理制度]\n3.  **下班时间**：18:00。[来源3: 员工手册]\n4.  **午休时间**：12:00-13:00。[来源4: 行政办公管理制度]\n\n以上信息来源于公司现行的《员工手册》及《行政办公管理制度》。[置信度提示：检索结果相关性较高，信息可靠]",
-        "metrics": {
-          "answer_accuracy": 1.0,
-          "partial_correct": 0.0,
-          "incorrect": 0.0,
-          "keyword_match_rate": 0.6666666666666666,
-          "avg_keyword_matches": 0.6666666666666666,
-          "hallucination_rate": 0.0,
-          "retrieval_e2e_recall": 0.0
-        },
-        "extra": {
-          "matched_main": false,
-          "keyword_matches": 6
-        },
-        "latency_ms": 101003.4
-      },
-      {
-        "query": "年假有多少天？",
-        "ground_truth": "工作满1年享受10天年假，请假规定需提供医院证明。",
-        "answer": "根据《员工手册》中的考勤制度规定，员工工作满1年可享受10天年假。[来源: 员工手册]\n\n请注意，虽然该文档内容明确提到了年假天数，但检索结果显示相关性分数为18.5%，属于较低的相关性水平，建议仅供参考。如需更准确的最新政策，建议联系人力资源部确认。",
+        "answer": "根据知识库检索结果，关于试用期时长存在以下信息差异及冲突：\n\n1. **《员工手册》**：明确规定试用期为 **3 个月**，试用期内享受基本工资 80% [文档 2]。\n2. **《招聘管理制度》**：规定劳动合同期限 1 年以下对应 1-3 个月试用期，但 1-3 年期限的具体时长在文档中显示不完整（内容截断）[文档 1]。\n\n**冲突说明**：\n① **文档间冲突**：文档 1 暗示试用期随合同期限浮动，文档 2 统一规定为 3 个月。\n② **文档内冲突**：系统检测到文档 1 内部关于“劳动合同期限”的数值存在不一致（1 年 vs 3 年），且关键信息截断。\n\n建议以《员工手册》的 3 个月规定为准，具体执行请以人力资源部解释为准。",
         "metrics": {
           "answer_accuracy": 0.0,
           "partial_correct": 0.0,
@@ -3778,50 +3740,69 @@
           "matched_main": false,
           "keyword_matches": 0
         },
-        "latency_ms": 74874.9
+        "latency_ms": 46573.3
       },
       {
-        "query": "工资什么时候发放？",
-        "ground_truth": "每月10日发放上月工资，发放方式为银行转账。",
-        "answer": "根据《员工手册》“薪酬福利”章节的规定，公司每月10日发放上月工资，发放方式为银行转账。[来源1: 员工手册.md]\n\n请注意，虽然检索结果显示的相关性分数（18.6%）在系统判定中属于高相关（>50%阈值），但具体数值较低，建议您在需要时再次确认最新政策或咨询人力资源部。[置信度提示]",
+        "query": "公司工作时间是怎么规定的？",
+        "ground_truth": "周一至周五为工作日，上班时间09:00，下班时间18:00，午休时间12:00-13:00。",
+        "answer": "根据公司《员工手册》规定，工作时间安排如下：\n\n1. **工作日**：周一至周五；\n2. **上下班时间**：上班时间为 09:00，下班时间为 18:00；\n3. **午休时间**：12:00-13:00[文档1]。\n\n以上信息基于知识库中检索到的员工手册文档。",
         "metrics": {
           "answer_accuracy": 1.0,
           "partial_correct": 0.0,
           "incorrect": 0.0,
-          "keyword_match_rate": 1.0,
-          "avg_keyword_matches": 1.0,
+          "keyword_match_rate": 0.5555555555555556,
+          "avg_keyword_matches": 0.5555555555555556,
           "hallucination_rate": 0.0,
           "retrieval_e2e_recall": 0.0
         },
         "extra": {
-          "matched_main": true,
-          "keyword_matches": 2
+          "matched_main": false,
+          "keyword_matches": 5
         },
-        "latency_ms": 82162.0
+        "latency_ms": 61641.6
       },
       {
-        "query": "公司有哪些福利？",
-        "ground_truth": "节日礼品、生日礼金、年度体检、团建活动、餐补和交通补贴；另外还有五险一金（养老保险、医疗保险、失业保险、工伤保险、生育保险、住房公积金）。",
-        "answer": "根据《员工手册》，公司的福利政策包括以下内容：\n\n1. **社会保险**：公司为全体员工缴纳五险一金，包括养老保险、医疗保险、失业保险、工伤保险、生育保险和住房公积金。[来源1: 员工手册]\n\n2. **假期福利**：\n   - 年假：工作满1年可享受10天年假。\n   - 带薪志愿服务假：每位员工每年享有2天带薪志愿服务假（依据《公司简介》）。[来源2: 公司简介]\n\n3. **节日与生日福利**：提供节日礼品和生日礼金。[来源1: 员工手册]\n\n4. **健康与活动福利**：\n   - 年度体检。\n   - 团建活动。[来源1: 员工手册]\n\n5. **补贴福利**：提供餐补和交通补贴。[来源1: 员工手册]\n\n6. **培训与发展支持**：\n   - 内部培训费用由公司全额承担。\n   - 外部专业认证报销50%-100%，行业会议全额报销，学历提升报销60%（需签署服务协议）。[来源4: 培训发展体系]\n\n请注意，以上信息均基于知识库中的文档内容整理，具体细节可能因部门或岗位不同而有所调整。建议进一步咨询人力资源部以获取最新信息。",
+        "query": "年假有多少天？",
+        "ground_truth": "工作满1年享受10天年假，请假规定需提供医院证明。",
+        "answer": "根据《员工手册》中的考勤制度规定，年假政策如下：\n\n- **享受条件**：工作满 1 年\n- **休假天数**：10 天 [文档1]\n\n如需了解病假（需提供医院证明）或事假（需提前 3 天申请）等其他假期规定，可参考该手册“请假规定”章节。",
         "metrics": {
-          "answer_accuracy": 1.0,
+          "answer_accuracy": 0.0,
           "partial_correct": 0.0,
-          "incorrect": 0.0,
-          "keyword_match_rate": 0.9166666666666666,
-          "avg_keyword_matches": 0.9166666666666666,
-          "hallucination_rate": 1.0,
+          "incorrect": 1.0,
+          "keyword_match_rate": 0.0,
+          "avg_keyword_matches": 0.0,
+          "hallucination_rate": 0.0,
           "retrieval_e2e_recall": 0.0
         },
         "extra": {
           "matched_main": false,
-          "keyword_matches": 11
+          "keyword_matches": 0
         },
-        "latency_ms": 164321.4
+        "latency_ms": 26061.5
       },
       {
-        "query": "离职流程是怎样的？",
-        "ground_truth": "1. 员工提交离职申请（提前30天）；2. 部门负责人审批；3. 人力资源部办理离职手续；4. 工作交接；5. 结算工资和福利。",
-        "answer": "根据《员工手册》中“离职流程”章节的规定，员工离职需遵循以下具体步骤：\n\n1. **提交申请**：员工需提前30天向公司提交离职申请。[来源1: 员工手册]\n2. **部门审批**：提交的离职申请需经过部门负责人审批。[来源1: 员工手册]\n3. **办理手续**：审批通过后，由人力资源部负责办理具体的离职手续。[来源1: 员工手册]\n4. **工作交接**：离职员工需完成相关工作内容的交接。[来源1: 员工手册]\n5. **薪资结算**：最后进行工资和福利的结算。[来源1: 员工手册]\n\n此外，相关制度还补充了以下细节：\n- **IT权限处理**：依据《IT支持服务手册》，员工离职时系统会自动注销其账号及权限。[来源2: IT支持服务手册]\n- **物品归还**：依据《行政办公管理制度》，员工离职时需归还门禁卡、办公设备等固定资产。[来源3: 行政办公管理制度]\n- **信息安全**：依据《信息安全管理制度》，离职时会立即回收访问权限并记录日志。[来源4: 信息安全管理制度]\n\n请注意，以上信息均基于《员工手册》及相关管理制度的明确规定。",
+        "query": "工资什么时候发放？",
+        "ground_truth": "每月10日发放上月工资，发放方式为银行转账。",
+        "answer": "根据《员工手册》，公司工资于**每月 10 日**发放上月工资，采用银行转账方式 [文档 1]。\n\n注意：检索发现知识库存在数据冲突。《招聘管理制度》中关于“劳动合同期限”的数值存在不一致（「1」与「3」），建议核实 [文档 3]。\n\n试用期薪资为基本工资的 80%，具体晋升调薪规则可参考绩效考核制度 [文档 1][文档 2]。",
+        "metrics": {
+          "answer_accuracy": 0.0,
+          "partial_correct": 0.0,
+          "incorrect": 1.0,
+          "keyword_match_rate": 0.0,
+          "avg_keyword_matches": 0.0,
+          "hallucination_rate": 0.0,
+          "retrieval_e2e_recall": 0.0
+        },
+        "extra": {
+          "matched_main": false,
+          "keyword_matches": 0
+        },
+        "latency_ms": 63192.6
+      },
+      {
+        "query": "公司有哪些福利？",
+        "ground_truth": "节日礼品、生日礼金、年度体检、团建活动、餐补和交通补贴；另外还有五险一金（养老保险、医疗保险、失业保险、工伤保险、生育保险、住房公积金）。",
+        "answer": "根据公司制度，主要福利如下：\n\n1. **社会保障**：全体员工缴纳五险一金（包含养老、医疗、失业、工伤、生育保险及住房公积金）[文档 1]。\n2. **薪酬补贴**：每月 10 日发放上月工资；提供节日礼品、生日礼金、餐补及交通补贴 [文档 1]。\n3. **假期福利**：工作满 1 年享受 10 天年假；每位员工每年享有 2 天带薪志愿服务假 [文档 1][文档 2]。\n4. **健康与成长**：提供年度体检、团建活动，建立了透明公平的晋升机制 [文档 1][文档 2]。\n5. **试用期待遇**：试用期为 3 个月，期间享受基本工资的 80% [文档 1]。",
         "metrics": {
           "answer_accuracy": 1.0,
           "partial_correct": 0.0,
@@ -3833,70 +3814,89 @@
         },
         "extra": {
           "matched_main": false,
-          "keyword_matches": 3
+          "keyword_matches": 6
         },
-        "latency_ms": 69774.1
+        "latency_ms": 81978.3
       },
       {
-        "query": "公司是哪一年成立的？",
-        "ground_truth": "智源科技成立于2015年，是一家专注于人工智能技术应用的创新型企业。",
-        "answer": "根据《公司简介》文档，智源科技成立于**2015年**。[来源: 公司简介.md]\n\n具体信息如下：\n- 2015年，智源科技在北京中关村注册成立。[来源: 公司简介.md]\n- 创始团队来自清华大学计算机系，最初仅有5名员工。[来源: 公司简介.md]\n\n请注意，以上信息来源于企业知识库中的简介文档。",
-        "metrics": {
-          "answer_accuracy": 0.0,
-          "partial_correct": 0.0,
-          "incorrect": 1.0,
-          "keyword_match_rate": 0.0,
-          "avg_keyword_matches": 0.0,
-          "hallucination_rate": 0.0,
-          "retrieval_e2e_recall": 0.0
-        },
-        "extra": {
-          "matched_main": false,
-          "keyword_matches": 0
-        },
-        "latency_ms": 78693.0
-      },
-      {
-        "query": "公司发展历程",
-        "ground_truth": "2015年公司成立；2017年获A轮融资1000万美元；2019年推出首款AI产品，用户突破100万；2021年在科创板上市；2023年成立海外研发中心。",
-        "answer": "根据《公司简介.md》文档，智源科技的发展历史如下：\n\n**成立初期（2015-2016年）**\n*   2015年，智源科技在北京中关村注册成立，创始团队来自清华大学计算机系，最初仅有5名员工，专注于自然语言处理技术研发。[来源1: 公司简介.md]\n*   2016年，公司推出首款企业级智能客服系统“智源晓助”，在金融和政务领域完成首批落地，同年完成天使轮融资500万元人民币。[来源2: 公司简介.md]\n\n**成长与扩张期（2017-2021年）**\n*   2017年，公司进行了A轮融资。[来源3: 公司简介.md]\n*   2019年，公司推出面向中小企业的SaaS版AI产品，用户数突破100万，并发布智源AI开放平台。[来源4: 公司简介.md]\n*   2020年，公司在新冠疫情期间免费向医疗机构提供智能随访机器人系统，协助超过50家医院实现自动化管理，当年营收突破1亿元人民币。[来源5: 公司简介.md]\n*   2021年，智源科技在上海证券交易所科创板上市（股票代码：688XXX），成为国内AI企业服务领域首家科创板上市企业，并在深圳、上海和杭州设立了分公司。[来源...",
-        "metrics": {
-          "answer_accuracy": 0.0,
-          "partial_correct": 0.0,
-          "incorrect": 1.0,
-          "keyword_match_rate": 0.0,
-          "avg_keyword_matches": 0.0,
-          "hallucination_rate": 0.0,
-          "retrieval_e2e_recall": 0.0
-        },
-        "extra": {
-          "matched_main": false,
-          "keyword_matches": 0
-        },
-        "latency_ms": 122909.0
-      },
-      {
-        "query": "公司的核心价值观是什么？",
-        "ground_truth": "1. 创新：持续创新是公司发展的源动力；2. 协作：团队协作是实现目标的关键；3. 客户至上：客户需求是工作的中心；4. 责任：对社会负责，对员工负责。",
-        "answer": "根据《公司简介.md》显示，智源科技的核心价值观包含以下两点（文档中明确列出的部分）：\n\n1.  **创新（Innovation）**：这是公司发展的源动力。具体体现在设立创新基金、举办Hackathon黑客松活动、鼓励员工发表学术论文以及对创新失败给予宽容等方面。[来源1: 公司简介.md]\n\n2.  **协作（Collaboration）**：团队协作是实现目标的关键。公司相信跨部门协作能创造更大价值，并实行“项目制”运作以确保团队紧密配合。[来源2: 公司简介.md]\n\n**注意**：检索到的文档在列出核心价值观时似乎不完整（在“协作”之后直接跳转到了其他内容），且文档中提到“以员工成长为核心价值观”，这可能也是价值观的一部分，但表述方式与其他条目略有不同。此外，文档开头曾提及“责任（Accountability）”，但未在核心价值观章节下详细展开。[来源3: 公司简介.md]\n\n由于部分信息可能存在截断或表述不一，以上核心内容基于现有文档整理，仅供参考。[置信度提示]",
+        "query": "离职流程是怎样的？",
+        "ground_truth": "1. 员工提交离职申请（提前30天）；2. 部门负责人审批；3. 人力资源部办理离职手续；4. 工作交接；5. 结算工资和福利。",
+        "answer": "根据《员工手册》，公司规定的离职流程如下 [文档1]：\n\n1.  **提交申请**：员工需提前 30 天提交离职申请。\n2.  **部门审批**：由部门负责人进行审批。\n3.  **手续办理**：人力资源部办理正式离职手续。\n4.  **工作交接**：完成相关工作内容的交接。\n5.  **薪资结算**：结算工资和福利待遇。\n\n此外，在 IT 权限管理方面，员工离职后系统账号将自动注销 [文档2]。",
         "metrics": {
           "answer_accuracy": 1.0,
           "partial_correct": 0.0,
           "incorrect": 0.0,
-          "keyword_match_rate": 0.4444444444444444,
-          "avg_keyword_matches": 0.4444444444444444,
-          "hallucination_rate": 1.0,
+          "keyword_match_rate": 0.3333333333333333,
+          "avg_keyword_matches": 0.3333333333333333,
+          "hallucination_rate": 0.0,
           "retrieval_e2e_recall": 0.0
         },
         "extra": {
           "matched_main": false,
-          "keyword_matches": 4
+          "keyword_matches": 2
         },
-        "latency_ms": 105709.4
+        "latency_ms": 63891.9
+      },
+      {
+        "query": "公司是哪一年成立的？",
+        "ground_truth": "智源科技成立于2015年，是一家专注于人工智能技术应用的创新型企业。",
+        "answer": "根据知识库检索结果，智源科技成立于 **2015 年**[文档 1]。\n\n详细信息如下：\n- **注册时间**：2015 年在北京中关村注册成立。\n- **创始团队**：由一群来自清华大学、北京大学和中国科学院的技术专家创立。\n- **总部位置**：北京市海淀区中关村科技园区。\n\n注：其他文档主要涉及公司发展历程后期（如上市、融资）及商务合作流程，未提及具体成立年份。",
+        "metrics": {
+          "answer_accuracy": 0.0,
+          "partial_correct": 0.0,
+          "incorrect": 1.0,
+          "keyword_match_rate": 0.0,
+          "avg_keyword_matches": 0.0,
+          "hallucination_rate": 0.0,
+          "retrieval_e2e_recall": 0.0
+        },
+        "extra": {
+          "matched_main": false,
+          "keyword_matches": 0
+        },
+        "latency_ms": 61575.6
+      },
+      {
+        "query": "公司发展历程",
+        "ground_truth": "2015年公司成立；2017年获A轮融资1000万美元；2019年推出首款AI产品，用户突破100万；2021年在科创板上市；2023年成立海外研发中心。",
+        "answer": "根据检索到的资料，智源科技的发展概况如下：\n\n1. **创立初期（2015年）**：公司于北京中关村注册成立，创始团队来自清华大学计算机系，初始员工仅5人，专注于自然语言处理技术研发 [文档2]。\n2. **产品落地与融资（2016年）**：推出首款企业级智能客服系统“智源晓助”，在金融和政务领域落地，并完成天使轮融资500万元人民币 [文档2]。\n3. **后续发展（2017年）**：启动A轮融资，但具体细节在现有文档中未完整披露 [文档2]。\n\n**说明**：当前知识库仅收录至2017年的部分信息，关于公司近期及更详细的发展历程暂无记录，建议查阅最新官方公告或联系相关部门获取完整信息。",
+        "metrics": {
+          "answer_accuracy": 0.0,
+          "partial_correct": 0.0,
+          "incorrect": 1.0,
+          "keyword_match_rate": 0.0,
+          "avg_keyword_matches": 0.0,
+          "hallucination_rate": 0.0,
+          "retrieval_e2e_recall": 0.0
+        },
+        "extra": {
+          "matched_main": false,
+          "keyword_matches": 0
+        },
+        "latency_ms": 47932.5
+      },
+      {
+        "query": "公司的核心价值观是什么？",
+        "ground_truth": "1. 创新：持续创新是公司发展的源动力；2. 协作：团队协作是实现目标的关键；3. 客户至上：客户需求是工作的中心；4. 责任：对社会负责，对员工负责。",
+        "answer": "根据检索到的《公司简介》文档，智源科技的核心价值观主要包含以下三个方面：\n\n1.  **创新（Innovation）**：被视为发展的源动力。公司鼓励员工挑战现状、尝试新技术，通过设立创新基金、举办黑客松活动以及对创新失败给予宽容来落实这一价值观[文档1]。\n2.  **协作（Collaboration）**：强调团队力量与跨部门配合。公司实行“项目制”运作，打破信息孤岛，并以公开透明的沟通作为高效协作的基础[文档2]。\n3.  **责任（Accountability）**：涵盖对社会、员工、客户及股东的责任。具体包括参与公益事业、提供有竞争力的薪酬、严格履行 SLA 协议以及规范治理等[文档2]。\n\n**说明**：以上信息基于现有检索片段整理。由于文档存在分段情况，若需获取完整的价值观条目列表或详细内容，建议查阅完整原文档。",
+        "metrics": {
+          "answer_accuracy": 1.0,
+          "partial_correct": 0.0,
+          "incorrect": 0.0,
+          "keyword_match_rate": 0.3333333333333333,
+          "avg_keyword_matches": 0.3333333333333333,
+          "hallucination_rate": 0.0,
+          "retrieval_e2e_recall": 0.0
+        },
+        "extra": {
+          "matched_main": false,
+          "keyword_matches": 3
+        },
+        "latency_ms": 75059.6
       }
     ],
     "total_queries": 10,
     "errors": 0,
-    "avg_latency_ms": 96639.52503204346
+    "avg_latency_ms": 56297.77534008026
   }
 }
