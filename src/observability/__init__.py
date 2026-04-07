@@ -1,35 +1,23 @@
 """
-可观测性子模块
-- tracer: 分布式追踪（trace_id / span）
-- metrics: Prometheus metrics 收集器
-- cost_tracker: LLM 调用成本估算
-- structured_logging: 结构化 JSON 日志
+可观测性模块（简化版）
+仅保留 @traced 装饰器，无额外依赖。
+如需完整追踪/指标/OTEL 导出，请安装对应依赖并重新引入。
 """
-from .tracer import (
-    start_span, end_span, get_trace_context, clear_trace_context,
-    SpanStatus, Span, traced,
-)
-from .metrics import (
-    get_metrics_collector, get_metrics, get_content_type,
-    MetricsCollector,
-)
-from .cost_tracker import get_cost_tracker, CostTracker, CostRecord
-from .structured_logging import (
-    configure_logging, structured_logger, set_log_context, clear_log_context,
-    get_log_context, LogContextFilter, log_chat_request, log_retrieval_event,
-    log_llm_error,
-)
+from functools import wraps
+from typing import Callable, Any
 
-__all__ = [
-    # tracer
-    "start_span", "end_span", "get_trace_context", "clear_trace_context",
-    "SpanStatus", "Span", "traced",
-    # metrics
-    "get_metrics_collector", "get_metrics", "get_content_type", "MetricsCollector",
-    # cost
-    "get_cost_tracker", "CostTracker", "CostRecord",
-    # structured logging
-    "configure_logging", "structured_logger", "set_log_context", "clear_log_context",
-    "get_log_context", "LogContextFilter",
-    "log_chat_request", "log_retrieval_event", "log_llm_error",
-]
+
+def traced(
+    name: str,
+    attrs_func: Callable = None,
+) -> Callable:
+    """
+    空操作追踪装饰器。
+    保留函数签名兼容，不记录任何数据。
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> Any:
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator

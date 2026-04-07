@@ -16,7 +16,8 @@ class Settings(BaseSettings):
         env_file="config/.env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore"
+        extra="ignore",
+        env_ignore=["DEBUG"],
     )
 
     # 阿里千问 API 配置
