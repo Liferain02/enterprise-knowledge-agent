@@ -135,9 +135,7 @@ docker-compose up -d
 │   │   │   └── multimodal.py        # Vision LLM 图片理解
 │   │   ├── storage/
 │   │   │   ├── vectorstore.py       # ChromaDB 向量存储管理
-│   │   │   ├── version_manager.py    # 文档版本管理
-│   │   │   ├── backup_manager.py    # 备份调度
-│   │   │   └── document_lifecycle.py # 文档生命周期管理
+│   │   │   └── version_manager.py    # 文档版本管理
 │   │   ├── ingestion/
 │   │   │   ├── document_processor.py # 文档处理流水线
 │   │   │   ├── worker.py            # 异步入库 Worker
