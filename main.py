@@ -10,7 +10,6 @@
 - 冲突检测与拒答策略
 - 异步入库 Pipeline（启动不阻塞）
 - 流式 SSE 输出
-- 可观测性（Prometheus metrics + 链路追踪）
 """
 import asyncio
 import sys
@@ -30,24 +29,22 @@ from config import get_settings
 # 初始化设置
 settings = get_settings()
 
-# 配置结构化日志：
-#   - 控制台：INFO 级别，human 格式（非生产）或 JSON 格式（生产）
-#   - 文件（logs/agent.log）：DEBUG 级别，JSON 格式（详细调试信息）
+# 配置结构化日志
 import logging as _logging
 from pathlib import Path
-from src.observability.structured_logging import configure_logging as _cfg_log
 
 _log_level = _logging.DEBUG if settings.debug else _logging.INFO
 _log_env = "development" if settings.debug else "production"
 _log_file = str(Path(__file__).parent / "logs" / "agent.log")
 
-_cfg_log(
-    level=_logging.INFO,       # 控制台始终 INFO（干净的关键信息）
-    log_file=_log_file,        # 详细调试信息写入文件
-    file_level=_log_level,     # DEBUG 模式写入文件 DEBUG 信息
-    service_name="enterprise-knowledge-agent",
-    environment=_log_env,
-    json_format=None,           # 自动：生产=True，调试=False
+# 简单日志配置（无外部依赖）
+_logging.basicConfig(
+    level=_logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        _logging.StreamHandler(),
+        _logging.FileHandler(_log_file, encoding="utf-8"),
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -70,9 +67,6 @@ from src.api.routes.websocket_routes import ws_router
 # 导入核心组件
 from src.models.mcp_client import mcp_manager as global_mcp_manager
 from src.rag import get_vectorstore_manager
-
-# 可观测性
-from src.observability.metrics import get_metrics, get_content_type
 
 # 启动日志
 logger = logging.getLogger(__name__)
@@ -132,11 +126,6 @@ async def lifespan(app: FastAPI):
     _workers.append((worker, t))
     print("✅ 入库 Worker 已启动（后台运行）")
 
-    # ── OpenTelemetry（可选，环境变量 OTEL_ENABLED=true）────────────────
-    from src.observability.otel_tracer import init_otel, instrument_fastapi_app
-    if await init_otel():
-        instrument_fastapi_app(app)
-
     print("=" * 60)
     print("服务就绪！")
     print(f"API: http://{settings.api_host}:{settings.api_port}")
@@ -147,9 +136,6 @@ async def lifespan(app: FastAPI):
 
     # ── 关闭（优雅关闭 Graceful Shutdown）─────────────────────
     import asyncio
-
-    from src.observability.otel_tracer import shutdown_otel
-    shutdown_otel()
 
     print("[Shutdown] 收到关闭信号，开始优雅关闭...")
 
@@ -181,9 +167,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[Shutdown] MCP 连接关闭出错 (可忽略): {e}")
 
-    # 6. 关闭 OpenTelemetry
-    print("[Shutdown] OpenTelemetry 已关闭")
-
     print("[Shutdown] 优雅关闭完成！")
 
 
@@ -200,7 +183,6 @@ app = FastAPI(
         "- 冲突检测与拒答策略\n"
         "- 异步入库 Pipeline\n"
         "- 流式 SSE 输出\n"
-        "- Prometheus 可观测性"
     ),
     version="1.0.0",
     lifespan=lifespan
@@ -349,18 +331,6 @@ async def readiness_check():
     except Exception:
         from fastapi import status
         return {"status": "not_ready"}, status.HTTP_503_SERVICE_UNAVAILABLE
-
-
-@app.get("/metrics")
-async def metrics():
-    """
-    Prometheus metrics 端点
-    暴露所有业务指标（延迟分布、决策计数、token 消耗等）
-    """
-    return Response(
-        content=get_metrics(),
-        media_type=get_content_type(),
-    )
 
 
 if __name__ == "__main__":

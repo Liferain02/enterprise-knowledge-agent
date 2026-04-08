@@ -27,8 +27,6 @@
 | bm25s | BM25 关键词检索 | `bm25s` |
 | FlashRank | 轻量级本地重排序 | `flashrank` |
 | Mem0 | 跨会话语义记忆 | `mem0ai` |
-| Arize Phoenix | RAG 可观测性 | `arize-phoenix` |
-| OpenTelemetry | 分布式追踪 | `opentelemetry-*` |
 | Redis | 评估缓存持久化 | `redis[hiredis]` |
 | Unstructured | 多格式文档解析 | `unstructured` |
 | ChromaDB | 向量数据库 | `chromadb` |
@@ -45,7 +43,6 @@
 - **文档冲突检测**：多文档数值/描述矛盾告警
 - **语义摘要压缩**：对话超过阈值自动压缩历史
 - **多 Agent 协作**：Planner 任务复杂度判断 + Supervisor 路由 + Worker Agents
-- **OTEL 可观测性**：Span/Trace 全链路追踪 + Prometheus 指标
 - **动态 Skill 加载**：Skill Loader 自动扫描 `skills/` 目录注册工具
 - **MCP 集成**：通过 MCP 协议连接外部工具服务器
 - **多模态**：支持上传图片，Vision LLM 理解后入库或提问
@@ -68,8 +65,6 @@ cp config/env.template config/.env
 
 # 3. 启动服务
 python main.py
-# 或 Docker Compose（包含 Redis + Prometheus + OTEL Collector + Jaeger）
-docker-compose up -d
 ```
 
 ## 项目结构
@@ -84,9 +79,6 @@ docker-compose up -d
 │   ├── env.template                     # 环境变量模板
 │   ├── base.env / staging.env / production.env
 │   ├── mcp_servers.json                 # MCP 服务器配置
-│   ├── otel-collector-config.yaml       # OpenTelemetry 配置
-│   ├── prometheus.yml                  # Prometheus 抓取配置
-│   └── prometheus_alerts.yml           # Prometheus 告警规则
 │
 ├── src/                                 # 源代码
 │   ├── agent/                           # LangGraph 多 Agent 编排
@@ -170,17 +162,6 @@ docker-compose up -d
 │   │   ├── vision.py             # Vision 模型
 │   │   └── mcp_client.py        # MCP 客户端管理器
 │   │
-│   ├── observability/               # 可观测性
-│   │   ├── tracer.py             # 自定义分布式追踪（ContextVar Span）
-│   │   ├── otel_tracer.py       # OpenTelemetry OTLP 导出
-│   │   ├── metrics.py           # Prometheus 指标
-│   │   ├── structured_logging.py # 结构化 JSON 日志
-│   │   ├── circuit_breaker.py  # 熔断器模式
-│   │   └── cost_tracker.py     # LLM 成本追踪
-│   │
-│   └── optimization/
-│       └── performance.py       # 性能优化工具
-│
 ├── frontend/                         # Vue 3 前端（SSE 流式聊天）
 ├── tests/                           # 测试套件（pytest）
 │   ├── conftest.py                 # Pytest fixtures
@@ -210,12 +191,8 @@ docker-compose up -d
 │       ├── VERSION_MANAGEMENT.md
 │       ├── REFUSAL_STRATEGY.md
 │       ├── INGESTION_PIPELINE.md
-│       ├── OBSERVABILITY.md
 │       └── ACL_DESIGN.md
 │
-├── grafana/                         # Grafana 仪表盘
-├── docker-compose.yml               # Docker 全家桶
-└── Dockerfile
 ```
 
 ## API 接口
@@ -238,4 +215,4 @@ docker-compose up -d
 | GET | `/health` | 健康检查（含组件状态） |
 | GET | `/health/live` | K8s Liveness Probe |
 | GET | `/health/ready` | K8s Readiness Probe |
-| GET | `/metrics` | Prometheus 指标端点 |
+

@@ -12,7 +12,7 @@ from langgraph.graph import MessagesState
 from langgraph.types import Send
 from langchain_core.messages import HumanMessage, RemoveMessage
 
-from src.observability import traced
+
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class AgentState(MessagesState):
 
 # ==================== 语义总结记忆节点 ====================
 
-@traced("agent.graph.maybe_summarize")
+
 async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
     """
     语义总结记忆节点（对话压缩）
@@ -163,7 +163,7 @@ async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
 
 # ==================== Mem0 记忆检索节点 ====================
 
-@traced("agent.graph.retrieve_mem0_memories")
+
 async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
     """
     Mem0 记忆检索节点
@@ -372,7 +372,7 @@ def create_multi_agent_graph() -> StateGraph:
 
 # ==================== Mem0 记忆保存节点 ====================
 
-@traced("agent.graph.save_to_mem0")
+
 async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
     """
     保存对话到 Mem0 记忆节点

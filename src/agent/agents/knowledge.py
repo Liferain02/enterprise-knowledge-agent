@@ -24,7 +24,7 @@ from langchain_core.documents import Document
 import logging
 
 from ._utils import get_last_user_message, inject_summary_to_messages, inject_context_to_messages
-from src.observability import traced
+
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # retrieval_agent_node - 检索阶段（核心改进）
 # ============================================================
 
-@traced("agent.retrieval.node")
+
 async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     检索阶段节点 - 替代原 knowledge_agent_node 中的 ReAct 循环
@@ -186,7 +186,7 @@ def _build_retrieval_context(
 # generation_agent_node - 生成阶段
 # ============================================================
 
-@traced("agent.generation.node")
+
 async def generation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     生成阶段节点 - 基于评估后的文档，独立生成答案
@@ -320,7 +320,7 @@ def _build_generation_prompt(
 # 仍然使用 SkillLoader ReAct 方式，后续可考虑废弃
 # ============================================================
 
-@traced("agent.knowledge.node")
+
 async def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     知识 Agent 节点（保留旧版 ReAct 方式，向后兼容）

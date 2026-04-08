@@ -18,15 +18,7 @@ unstructured>=0.22.0                    # 多格式文档解析（自动包含 p
 # pillow-heif              # HEIF/HEIC 图片格式支持（可选）
 
 # ============================================================
-# Arize Phoenix（Tier 1 开源复用：RAG 可观测性）
-# 生产级 RAG 追踪面板：幻觉检测、检索质量、延迟分析
-# ============================================================
-arize-phoenix>=12.0.0                  # 生产级 RAG 可观测性
-arize-phoenix-otel>=0.15.0             # OTEL 集成
-
-# ============================================================
-# FlashRank（Tier 1 开源复用：轻量级本地 Rerank）
-# 比 BGE 更轻量，5M 参数，延迟 <10ms，支持中文
+# LangGraph（Agent 工作流，保持）
 # ============================================================
 flashrank>=0.2.0                       # 轻量级 Rerank（可选，配合 Cohere 使用）
 
@@ -92,20 +84,10 @@ python-jose[cryptography]==3.4.0
 # Redis（评估缓存持久化 + 会话缓存）
 # ============================================================
 redis[hiredis]==5.2.0
-# OTEL（OpenTelemetry 全链路追踪）
-opentelemetry-api>=1.40.0
-opentelemetry-sdk>=1.40.0
-opentelemetry-exporter-otlp>=1.40.0
-opentelemetry-instrumentation-fastapi>=0.50b0
-opentelemetry-instrumentation-httpx>=0.50b0
-opentelemetry-instrumentation-asyncio>=0.50b0
 
 # ============================================================
 # 评估依赖（可选）
-# 用于 RAG 系统评估和测试
 # ============================================================
-ragas>=0.1.0          # RAG 评估框架
-datasets>=2.14.0      # 数据集管理
 
 # ============================================================
 # 多模态文档处理依赖（可选）

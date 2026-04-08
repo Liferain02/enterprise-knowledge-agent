@@ -11,7 +11,7 @@ from typing_extensions import TypedDict
 from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Send
 from src.models.llm import get_llm
-from src.observability import traced
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -134,7 +134,7 @@ def _quick_complexity_check(message: str) -> str:
 
 # ==================== Planner 节点 ====================
 
-@traced("agent.planner.node")
+
 async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Planner 节点 - 分析任务复杂度并拆解步骤
@@ -370,7 +370,7 @@ USE_LANGGRAPH_SEND = True
 PARALLEL_EXECUTION_ENABLED = False
 
 
-@traced("agent.planner.execute_plan")
+
 async def execute_plan_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     执行计划步骤的节点
@@ -529,7 +529,7 @@ def _send_batch(
     return sends
 
 
-@traced("agent.planner.execute_plan_continue")
+
 async def execute_plan_continue_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     继续执行下一批次的节点。
@@ -635,13 +635,6 @@ async def _finalize_plan(state: Dict[str, Any]) -> Dict[str, Any]:
 
 # ==================== Send Worker 节点（接收 Send 分派的步骤）====================
 
-@traced(
-    "agent.planner.knowledge_step",
-    attrs_func=lambda args, kw: {
-        "step_id": (args[0].get("step") or {}).get("step_id"),
-    }
-    if args and isinstance(args[0], dict) else {},
-)
 async def knowledge_step_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """Knowledge Worker 节点（通过 Send 调用）"""
     step = state.get("step", {})
@@ -674,13 +667,6 @@ async def knowledge_step_node(state: Dict[str, Any]) -> Dict[str, Any]:
         return _make_step_result(step, "", success=False, error=str(e))
 
 
-@traced(
-    "agent.planner.operation_step",
-    attrs_func=lambda args, kw: {
-        "step_id": (args[0].get("step") or {}).get("step_id"),
-    }
-    if args and isinstance(args[0], dict) else {},
-)
 async def operation_step_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """Operation Worker 节点（通过 Send 调用）"""
     step = state.get("step", {})
@@ -712,13 +698,6 @@ async def operation_step_node(state: Dict[str, Any]) -> Dict[str, Any]:
         return _make_step_result(step, "", success=False, error=str(e))
 
 
-@traced(
-    "agent.planner.general_step",
-    attrs_func=lambda args, kw: {
-        "step_id": (args[0].get("step") or {}).get("step_id"),
-    }
-    if args and isinstance(args[0], dict) else {},
-)
 async def general_step_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """General Worker 节点（通过 Send 调用）"""
     step = state.get("step", {})

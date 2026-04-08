@@ -8,7 +8,7 @@ from typing import Dict, Any
 from langchain_core.messages import AIMessage
 from src.agent.skills.skill_loader import get_skill_loader
 from ._utils import get_last_user_message, inject_context_to_messages
-from src.observability import traced
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ def _get_general_agent():
     return _agent_cache[cache_key]
 
 
-@traced("agent.general.node")
+
 async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     General Agent 节点 - 负责通用回答（问候、寒暄等）

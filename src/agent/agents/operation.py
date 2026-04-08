@@ -13,7 +13,7 @@ from ..prompts import OPERATION_AGENT_SYSTEM_PROMPT
 from ._utils import get_last_user_message, inject_summary_to_messages, inject_context_to_messages
 from config.settings import get_settings
 from ..checkpointer import get_sync_checkpointer as get_checkpointer
-from src.observability import traced
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def _get_operation_agent(tools):
     return _agent_cache[cache_key]
 
 
-@traced("agent.operation.node")
+
 async def operation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Operation Agent 节点 - 负责执行操作任务

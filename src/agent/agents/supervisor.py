@@ -7,7 +7,7 @@ from typing import Dict, Any
 from typing_extensions import TypedDict
 from langchain_core.messages import HumanMessage
 from src.models.llm import get_llm
-from src.observability import traced
+
 
 import logging
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ class RouteDecision(TypedDict):
     needs_expansion: bool  # 新增：知识检索时是否需要 Query Expansion
 
 
-@traced("agent.supervisor.node")
+
 async def supervisor_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Supervisor 节点 - 负责路由决策
