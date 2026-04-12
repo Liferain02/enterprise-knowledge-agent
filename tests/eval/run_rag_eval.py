@@ -4,7 +4,7 @@ RAG 检索质量综合评测脚本
 ==============================
 对项目真实向量库执行端到端评测，覆盖：
 1. 检索层指标：Recall@K / Precision@K / MRR / NDCG@K / MAP / Hit@K
-2. 端到端生成层指标（基于 RAGAS 框架）
+2. 端到端生成层指标（基于关键词重叠）
 3. 对抗查询测试（注入/模糊/超长/无答案）
 4. CRAG 决策分布统计
 5. 性能指标（延迟/P99/吞吐量）
@@ -13,7 +13,7 @@ RAG 检索质量综合评测脚本
     conda activate agent-demo
     export HTTPS_PROXY=http://127.0.0.1:7897
     export HTTP_PROXY=http://127.0.0.1:7897
-    python scripts/run_rag_eval.py
+    python -m tests.eval.run_eval
 """
 import asyncio
 import json
@@ -37,7 +37,7 @@ os.environ["DEBUG"] = "true"  # 避免 pydantic Settings 读取系统 DEBUG=rele
 
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
-from scripts.eval_dataset import EVAL_DATASET, EvalQuery
+from tests.eval.eval_dataset import EVAL_DATASET, EvalQuery
 
 
 # =============================================================================
