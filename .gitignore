@@ -37,9 +37,14 @@ conda_env/
 *~
 .DS_Store
 
-# 数据库文件
+# 数据库文件（包含用户数据，禁止提交）
 data/*.db
 data/*.db-*
+
+# 配置文件（包含敏感信息）
+config/.env
+config/*.env
+!config/env.template
 
 # Chroma 向量数据库
 chroma_db/
@@ -71,4 +76,3 @@ temp/
 *.tmp
 
 node_modules/
-config/.env
