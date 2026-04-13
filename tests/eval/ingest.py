@@ -4,8 +4,16 @@
 支持 Vision LLM 图片理解（文档中的图片将被自动理解并入库）
 """
 import sys
+import os
 import asyncio
 from pathlib import Path
+
+# 添加项目根目录到 Python 路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+# 设置代理（用于 API 调用）
+os.environ['http_proxy'] = 'http://127.0.0.1:7897'
+os.environ['https_proxy'] = 'http://127.0.0.1:7897'
 
 from src.rag.processing.document_loader import get_document_loader_manager
 from src.rag.processing.multimodal import get_multimodal_processor
@@ -129,6 +137,19 @@ def ingest_knowledge_base(
         return
 
     # ============================================================
+    # [3.5] 添加默认 confidentiality 字段
+    # ============================================================
+    print(f"\n[3.5/6] 添加默认 confidentiality 字段...")
+    docs_with_conf = 0
+    for doc in split_docs:
+        if doc.metadata is None:
+            doc.metadata = {}
+        if 'confidentiality' not in doc.metadata:
+            doc.metadata['confidentiality'] = 'internal'
+            docs_with_conf += 1
+    print(f"      为 {docs_with_conf} 个文档添加了 confidentiality=internal")
+
+    # ============================================================
     # [4/6] 将图片描述广播到同一文档的所有分块
     # ============================================================
     if image_descriptions:
@@ -140,6 +161,8 @@ def ingest_knowledge_base(
                 doc.page_content += "\n\n" + image_descriptions[fp]
                 chunks_with_description += 1
         print(f"      已将图片描述追加到 {chunks_with_description} 个分块")
+    else:
+        print(f"\n[4/6] 广播图片描述到所有分块（已跳过，无图片描述）")
 
     # 获取向量存储管理器
     print(f"\n[5/6] 向量化文档...")

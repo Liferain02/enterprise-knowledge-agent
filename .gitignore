@@ -37,6 +37,10 @@ conda_env/
 *~
 .DS_Store
 
+# 数据库文件
+data/*.db
+data/*.db-*
+
 # Chroma 向量数据库
 chroma_db/
 
