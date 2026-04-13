@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 from .agents.supervisor import supervisor_node, route_to_agent
 from .agents.knowledge import knowledge_agent_node, retrieval_agent_node, generation_agent_node
+from src.rag.retrieval.acl_filter import UserContext
 from .agents.operation import operation_agent_node
 from .agents.general import general_agent_node
 from .agents.planner import (
@@ -55,6 +56,7 @@ class AgentState(MessagesState):
     # ==================== Mem0 记忆字段 ====================
     mem0_memories: str  # 检索到的 Mem0 记忆（格式化后）
     user_id: str        # 用户ID（用于 Mem0 检索）
+    user_context: UserContext = None  # ACL 权限上下文（透传至检索链路）
 
     # ==================== Planner 状态 ====================
     is_complex: bool       # 是否复杂任务
@@ -77,6 +79,7 @@ class AgentState(MessagesState):
     retrieval_avg_score: float     # 平均相关分
     retrieval_rewrite_history: list # 查询改写/分解历史
     conflict_warnings: list        # 文档冲突警告列表
+    version_source: str             # 版本溯源信息（格式化的 Markdown，供前端展示）
 
 
 # ==================== 语义总结记忆节点 ====================
@@ -522,6 +525,7 @@ def _extract_result(result: Dict[str, Any]) -> Dict[str, Any]:
         "final_answer": result.get("final_answer", "抱歉，无法生成答案。"),
         "sources": result.get("sources", ""),
         "used_agent": result.get("used_agent", "unknown"),
+        "version_source": result.get("version_source", ""),
         "messages": result.get("messages", [])
     }
 
@@ -532,6 +536,7 @@ def run_agent(
     input_text: str,
     session_id: str = "default",
     user_id: str = "default_user",
+    user_context: UserContext = None,
     config: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
@@ -544,6 +549,7 @@ def run_agent(
         input_text: 用户输入文本
         session_id: 会话ID
         user_id: 用户ID（用于跨会话记忆）
+        user_context: ACL 权限上下文（用于检索权限过滤）
         config: 额外配置
     """
     async def _run():
@@ -553,6 +559,7 @@ def run_agent(
             "messages": [HumanMessage(content=input_text)],
             "session_id": session_id,
             "user_id": user_id,
+            "user_context": user_context,
         }
         return await graph.ainvoke(initial_state, run_config)
 
@@ -573,6 +580,7 @@ async def arun_agent(
     input_text: str,
     session_id: str = "default",
     user_id: str = "default_user",
+    user_context: UserContext = None,
     config: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
@@ -584,6 +592,7 @@ async def arun_agent(
         input_text: 用户输入文本
         session_id: 会话ID
         user_id: 用户ID（用于跨会话记忆）
+        user_context: ACL 权限上下文（用于检索权限过滤）
         config: 额外配置
     """
     graph = await get_agent_graph_async()
@@ -592,6 +601,7 @@ async def arun_agent(
         "messages": [HumanMessage(content=input_text)],
         "session_id": session_id,
         "user_id": user_id,
+        "user_context": user_context,
     }
 
     t0 = _time.time()

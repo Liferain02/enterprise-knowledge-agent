@@ -11,6 +11,7 @@ from ..schemas import (
 )
 from ..services import chat_service
 from ..security import get_current_user
+from src.rag.retrieval.acl_filter import UserContext
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,9 @@ async def chat(request: ChatRequest, current_user: dict = Depends(get_current_us
     try:
         username = current_user.get("username", "anonymous")
 
+        # 从 JWT payload 构建 ACL UserContext
+        user_context = UserContext.from_jwt_payload(current_user)
+
         images_data = None
         if request.images:
             images_data = [img.model_dump() if hasattr(img, "model_dump") else img for img in request.images]
@@ -42,6 +46,7 @@ async def chat(request: ChatRequest, current_user: dict = Depends(get_current_us
             session_id=request.session_id,
             username=username,
             images=images_data,
+            user_context=user_context,
         )
 
         return ChatResponse(
@@ -65,6 +70,9 @@ async def chat_stream(
     try:
         username = current_user.get("username", "anonymous")
 
+        # 从 JWT payload 构建 ACL UserContext
+        user_context = UserContext.from_jwt_payload(current_user)
+
         images_data = None
         if request.images:
             images_data = [
@@ -77,6 +85,7 @@ async def chat_stream(
             session_id=request.session_id,
             username=username,
             images=images_data,
+            user_context=user_context,
         )
 
         return StreamingResponse(

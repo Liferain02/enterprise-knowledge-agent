@@ -17,7 +17,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
-        env_ignore=["DEBUG"],
+        env_ignore=["DEBUG", "debug"],
     )
 
     # 阿里千问 API 配置
@@ -114,9 +114,9 @@ class Settings(BaseSettings):
         default=8000,
         description="API服务端口"
     )
-    debug: bool = Field(
+    debug: str | bool = Field(
         default=True,
-        description="调试模式"
+        description="调试模式（接受 True/False/release 等字符串）"
     )
 
     # Auth 配置（单用户）

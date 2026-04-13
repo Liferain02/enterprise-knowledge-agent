@@ -10,7 +10,7 @@ from langgraph.prebuilt import create_react_agent
 from src.models.llm import get_llm
 from ..tools import get_all_agent_tools
 from ..prompts import OPERATION_AGENT_SYSTEM_PROMPT
-from ._utils import get_last_user_message, inject_summary_to_messages, inject_context_to_messages
+from ._utils import get_last_user_message, inject_summary_to_messages, inject_user_identity_to_messages
 from config.settings import get_settings
 from ..checkpointer import get_sync_checkpointer as get_checkpointer
 
@@ -86,7 +86,12 @@ async def operation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # 避免与主图的 session_id 冲突，防止并发请求竞态
         thread_id = f"{session_id}_operation"
         config = {"configurable": {"thread_id": thread_id}}
-        messages_with_context = inject_context_to_messages(messages, summary, mem0_memories)
+        messages_with_context = inject_user_identity_to_messages(
+            messages,
+            user_context=state.get("user_context"),
+            summary=summary,
+            mem0_memories=mem0_memories,
+        )
 
         # 直接使用 await ainvoke
         result = await asyncio.wait_for(

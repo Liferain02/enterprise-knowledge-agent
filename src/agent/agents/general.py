@@ -7,7 +7,7 @@ import asyncio
 from typing import Dict, Any
 from langchain_core.messages import AIMessage
 from src.agent.skills.skill_loader import get_skill_loader
-from ._utils import get_last_user_message, inject_context_to_messages
+from ._utils import get_last_user_message, inject_user_identity_to_messages
 
 import logging
 
@@ -61,7 +61,12 @@ async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
         # 传递消息历史，若存在摘要和 Mem0 记忆则在头部注入 SystemMessage
         config = {"configurable": {"thread_id": f"general_{session_id}"}}
-        messages_with_context = inject_context_to_messages(messages, summary, mem0_memories)
+        messages_with_context = inject_user_identity_to_messages(
+            messages,
+            user_context=state.get("user_context"),
+            summary=summary,
+            mem0_memories=mem0_memories,
+        )
 
         # 使用 await 直接调用（ReAct Agent 内部处理工具调用循环）
         result = await asyncio.wait_for(

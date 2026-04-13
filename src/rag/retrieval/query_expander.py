@@ -27,6 +27,7 @@ import logging
 
 from src.models.llm import get_llm
 from config.settings import get_settings
+from .acl_filter import UserContext, check_doc_access
 
 
 logger = logging.getLogger(__name__)
@@ -855,18 +856,20 @@ async def multi_query_retrieve(
     queries: List[str],
     top_k_per_query: int = 3,
     use_reranker: bool = True,
+    user: Optional[UserContext] = None,
 ) -> List[Tuple[Any, float, str]]:
     """
-    多查询并行检索 + 结果合并
+    多查询并行检索 + 结果合并（集成 ACL 过滤）
 
     Args:
         queries: 子查询列表
         top_k_per_query: 每个子查询返回的结果数
         use_reranker: 是否使用 Reranker
+        user: 当前用户上下文（用于 ACL 权限过滤）
 
     Returns:
         合并后的文档列表 [(doc, score, source_query), ...]
-        按 Reciprocal Rank Fusion 排序
+        仅包含用户有权限访问的文档，按 Reciprocal Rank Fusion 排序
     """
     from src.rag.retrieval.retriever import get_retriever_manager
 
@@ -874,9 +877,9 @@ async def multi_query_retrieve(
 
     async def retrieve_single(query: str) -> List[Tuple[Any, float]]:
         if use_reranker:
-            results = retriever_manager.search_with_rerank(query, k=top_k_per_query)
+            results = retriever_manager.search_with_rerank(query, k=top_k_per_query, user=user)
         else:
-            results = retriever_manager.search_with_score(query, k=top_k_per_query)
+            results = retriever_manager.search_with_score_acl(query, k=top_k_per_query, user=user)
         return results
 
     # 并行检索所有子查询
@@ -1007,33 +1010,37 @@ async def decompose_and_retrieve(
     query: str,
     top_k: int = 5,
     strategy: ExpandStrategy = ExpandStrategy.HYBRID,
-) -> Tuple[List[Tuple[Any, float, str]], ExpansionResult]:
+    user: Optional[UserContext] = None,
+) -> Tuple[List[Tuple[Any, float, str]], Any]:
     """
-    分解 + 检索 + 合并（端到端函数）
+    分解 + 检索 + 合并（端到端函数，集成 ACL 过滤）
 
     Args:
         query: 原始查询
         top_k: 最终返回结果数
         strategy: 分解策略
+        user: 当前用户上下文（用于 ACL 权限过滤）
 
     Returns:
         (合并结果, 分解结果)
+        仅包含用户有权限访问的文档
     """
     # Step 1: 分解查询
     expander = QueryExpander(strategy=strategy)
     exp_result = await expander.expand_async(query)
 
     if len(exp_result.sub_queries) <= 1:
-        # 不需要分解，直接检索
+        # 不需要分解，直接检索（带 ACL 过滤）
         from src.rag.retrieval.retriever import get_retriever_manager
         rm = get_retriever_manager()
-        results = rm.search_with_score(query, k=top_k)
+        results = rm.search_with_score_acl(query, k=top_k, user=user)
         return [(doc, score, query) for doc, score in results], exp_result
 
-    # Step 2: 多查询并行检索
+    # Step 2: 多查询并行检索（带 ACL 过滤）
     all_results = await multi_query_retrieve(
         exp_result.all_queries,
         top_k_per_query=min(3, top_k),
+        user=user,
     )
 
     # Step 3: 截取 top_k

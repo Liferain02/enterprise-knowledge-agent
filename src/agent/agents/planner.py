@@ -200,11 +200,17 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
     # 获取 Mem0 记忆上下文
     mem0_memories = state.get("mem0_memories", "")
     memory_context = f"\n\n## 相关记忆上下文\n以下是你之前与用户交流时记录的相关信息：\n{mem0_memories}\n\n请结合以上记忆上下文来理解用户问题。" if mem0_memories else ""
-    
+
+    # 获取用户身份
+    user_context = state.get("user_context")
+    from ._utils import build_user_identity_context
+    user_identity = build_user_identity_context(user_context)
+
     # 构建分析提示词
     prompt = f"""请分析以下用户问题，判断是否需要拆解成多个步骤来处理。
 
 用户问题：{last_user_message}{memory_context}
+{user_identity}
 
 ## 复杂度判断标准
 
@@ -430,7 +436,10 @@ async def _execute_plan_with_send(state: Dict[str, Any]) -> Dict[str, Any]:
 
     # ── 预注入 Mem0 + 摘要上下文 ────────────────────────────────────
     from ._utils import inject_worker_context
-    messages_with_context = inject_worker_context(messages, summary, mem0_memories)
+    user_context = state.get("user_context")
+    messages_with_context = inject_worker_context(
+        messages, summary, mem0_memories, user_context
+    )
 
     # ── 拓扑排序分批 ────────────────────────────────────────────────
     batches = analyze_step_dependencies(plan_steps)
@@ -552,7 +561,8 @@ async def execute_plan_continue_node(state: Dict[str, Any]) -> Dict[str, Any]:
     summary = state.get("summary", "") or ""
 
     from ._utils import inject_worker_context
-    messages_with_context = inject_worker_context(messages, summary, "")
+    user_context = state.get("user_context")
+    messages_with_context = inject_worker_context(messages, summary, "", user_context)
 
     # Send 当前批次
     sends = []
@@ -758,7 +768,8 @@ async def _execute_plan_parallel(state: Dict[str, Any]) -> Dict[str, Any]:
     # ── 预注入 Mem0 + 摘要上下文（只注入一次，供所有 Worker 复用）──────
     # 这样每个并行步骤不必各自重复序列化 Mem0 + 摘要，节省 token 开销
     from ._utils import inject_worker_context
-    messages_with_context = inject_worker_context(messages, summary, mem0_memories)
+    user_context = state.get("user_context")
+    messages_with_context = inject_worker_context(messages, summary, mem0_memories, user_context)
 
     # 分析依赖关系并显示执行计划
     batches = analyze_step_dependencies(plan_steps)
@@ -828,7 +839,8 @@ async def _execute_plan_sequential(state: Dict[str, Any]) -> Dict[str, Any]:
         return {"current_step": -1}
 
     # ── 预注入 Mem0 + 摘要上下文（只注入一次，供所有 Worker 复用）
-    messages_with_context = inject_worker_context(messages, summary, mem0_memories)
+    user_context = state.get("user_context")
+    messages_with_context = inject_worker_context(messages, summary, mem0_memories, user_context)
 
     # 获取当前步骤
     step = plan_steps[current_step]

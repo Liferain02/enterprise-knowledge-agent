@@ -1,6 +1,7 @@
 """
 混合检索模块 - Tier 1 开源复用
 结合 bm25s（BM25）+ 向量检索，支持多种融合策略。
+同时集成 ACL 权限过滤：在检索前完成权限控制。
 
 bm25s: Rust+Python 实现，比 rank_bm25 快 10 倍，内置中文分词（jieba）。
 
@@ -17,6 +18,7 @@ import logging
 from rank_bm25 import BM25Okapi
 from ..storage.vectorstore import get_vectorstore
 from config.settings import get_settings
+from .acl_filter import build_acl_filter, UserContext, check_doc_access
 
 logger = logging.getLogger(__name__)
 
@@ -189,10 +191,10 @@ class HybridRetrieverManager:
         self,
         query: str,
         k: Optional[int] = None,
-        filter: Optional[Dict] = None
+        user: Optional[UserContext] = None,
     ) -> List[Document]:
         """
-        混合搜索（不带分数，用于不需要分数的场景）。
+        搜索文档（集成 ACL 权限过滤）。
 
         底层调用 search_with_scores()，丢弃分数后返回文档列表。
         与 search_with_scores() 共用相同的向量 + BM25 混合逻辑。
@@ -200,28 +202,51 @@ class HybridRetrieverManager:
         Args:
             query: 查询文本
             k: 返回结果数
-            filter: 元数据过滤条件
+            user: 当前用户上下文（用于 ACL 过滤）
 
         Returns:
-            检索到的文档列表
+            用户有权限访问的文档列表
         """
         k = k or self.top_k
 
         if self.enable_bm25:
-            results_with_scores = self.search_with_scores(query, k=k, filter=filter)
+            results_with_scores = self.search_with_scores(query, k=k, user=user)
             return [doc for doc, _, _ in results_with_scores]
 
-        # 纯向量检索
-        return self.vector_retriever.invoke(query)[:k]
+        # 纯向量检索（带 ACL 过滤）
+        final_filter = self._build_acl_filter(user)
+        return self.vector_retriever.invoke(query, filter=final_filter)[:k]
+
+    def _build_acl_filter(self, user: Optional[UserContext]) -> Optional[Dict[str, Any]]:
+        """构建 ACL filter"""
+        return build_acl_filter(user=user, include_expired=False) if user else None
+
+    def _acl_filter_results(
+        self,
+        results: List[Tuple[Document, float, str]],
+        user: Optional[UserContext],
+    ) -> List[Tuple[Document, float, str]]:
+        """对混合检索结果做二次 ACL 过滤（防止 filter 绕过）"""
+        if not user:
+            return results
+        filtered = []
+        for doc, score, source in results:
+            if check_doc_access(doc.metadata or {}, user):
+                filtered.append((doc, score, source))
+            else:
+                logger.debug(
+                    f"[Hybrid-ACL] 过滤无权限文档: source={doc.metadata.get('source', '?')}"
+                )
+        return filtered
 
     def search_with_scores(
         self,
         query: str,
         k: Optional[int] = None,
-        filter: Optional[Dict] = None
+        user: Optional[UserContext] = None,
     ) -> List[Tuple[Document, float, str]]:
         """
-        带分数的混合搜索
+        带分数的混合搜索（集成 ACL 权限过滤）。
 
         融合策略：
         - RRF（Reciprocal Rank Fusion）：按排名融合，不依赖分数绝对值
@@ -232,10 +257,11 @@ class HybridRetrieverManager:
         Args:
             query: 查询文本
             k: 返回结果数
-            filter: 元数据过滤条件
+            user: 当前用户上下文（用于 ACL 过滤）
 
         Returns:
-            (文档, 融合分数, 主要来源) 元组列表，按融合分降序
+            (文档, 融合分数, 主要来源) 元组列表，按融合分降序，
+            仅包含用户有权限访问的文档
         """
         k = k or self.top_k
         candidate_k = k * 2  # 两路各取 2k，留足融合余量
@@ -258,19 +284,20 @@ class HybridRetrieverManager:
             vec_w = self.vector_weight
             bm_w = self.bm25_weight
 
-        # ── 第一路：向量检索（返回 rank）────────────────────────────────
+        # ── 第一路：向量检索（返回 rank，带 ACL 过滤）───────────────
         vector_ranked: Dict[str, Tuple[Document, int]] = {}  # key → (doc, rank)
         if self.enable_vector:
             try:
+                final_filter = self._build_acl_filter(user)
                 results = self.vectorstore.similarity_search_with_score(
-                    query, k=candidate_k
+                    query, k=candidate_k, filter=final_filter
                 )
                 for rank, (doc, raw_score) in enumerate(results, 1):
                     key = hash(doc.page_content)
                     if key not in vector_ranked:
                         vector_ranked[key] = (doc, rank)
             except Exception as e:
-                print(f"向量检索错误: {e}")
+                logger.warning(f"[Hybrid] 向量检索错误: {e}")
 
         # ── 第二路：BM25 检索（返回 rank）─────────────────────────────
         bm25_ranked: Dict[str, Tuple[Document, int]] = {}  # key → (doc, rank)
@@ -317,7 +344,7 @@ class HybridRetrieverManager:
                     if key not in bm25_ranked:
                         bm25_ranked[key] = (doc, rank)
             except Exception as e:
-                print(f"BM25 检索错误: {e}")
+                logger.warning(f"[Hybrid] BM25 检索错误: {e}")
 
         # ── 融合 ──────────────────────────────────────────────────────
         all_keys = set(vector_ranked) | set(bm25_ranked)
@@ -360,6 +387,9 @@ class HybridRetrieverManager:
             has_bm = key in bm25_ranked
             source = "vector+bm25" if (has_vec and has_bm) else ("vector" if has_vec else "bm25")
             results.append((doc, score, source))
+
+        # ── ACL 二次过滤（防止 filter 绕过）──────────────────────
+        results = self._acl_filter_results(results, user)
 
         return results
 
@@ -532,46 +562,50 @@ def get_hybrid_retriever_manager(
 def hybrid_search(
     query: str,
     k: int = None,
-    documents: List[Document] = None
+    documents: List[Document] = None,
+    user: Optional[UserContext] = None,
 ) -> List[Document]:
     """
-    混合搜索的便捷函数
+    混合搜索的便捷函数（支持 ACL 过滤）
 
     Args:
         query: 查询文本
         k: 返回结果数
         documents: BM25 使用的文档集合
+        user: 当前用户上下文（用于 ACL 过滤）
 
     Returns:
-        检索到的文档列表
+        用户有权限访问的文档列表
     """
     manager = get_hybrid_retriever_manager()
 
     if documents:
         manager.set_documents(documents)
 
-    return manager.search(query, k=k)
+    return manager.search(query, k=k, user=user)
 
 
 def hybrid_search_with_scores(
     query: str,
     k: int = None,
-    documents: List[Document] = None
+    documents: List[Document] = None,
+    user: Optional[UserContext] = None,
 ) -> List[Tuple[Document, float, str]]:
     """
-    带分数的混合搜索
+    带分数的混合搜索（支持 ACL 过滤）
 
     Args:
         query: 查询文本
         k: 返回结果数
         documents: BM25 使用的文档集合
+        user: 当前用户上下文（用于 ACL 过滤）
 
     Returns:
-        (文档, 分数, 来源类型) 元组列表
+        (文档, 分数, 来源类型) 元组列表，仅包含用户有权限的文档
     """
     manager = get_hybrid_retriever_manager()
 
     if documents:
         manager.set_documents(documents)
 
-    return manager.search_with_scores(query, k=k)
+    return manager.search_with_scores(query, k=k, user=user)

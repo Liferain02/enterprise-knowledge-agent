@@ -31,6 +31,7 @@ from langchain_core.messages import HumanMessage
 from src.models.llm import get_llm
 from config.settings import get_settings
 from src.rag.evaluation import grade_cache
+from src.rag.retrieval.acl_filter import UserContext
 
 
 logger = logging.getLogger(__name__)
@@ -722,26 +723,30 @@ class CorrectiveRAGPipeline:
         query: str,
         top_k: int = 5,
         needs_expansion: bool = None,
+        user: Optional[UserContext] = None,
     ) -> tuple[List[tuple[Document, float]], GradeResult, List[str]]:
         """
-        Corrective RAG 检索（统一入口）
+        Corrective RAG 检索（统一入口，集成 ACL 权限过滤）
 
         完整流程：
         1. Query Expansion 前置（复杂查询主动分解 → 多查询并行检索 → RRF 合并）
         2. CRAG 主流程（检索 → Rerank → 评估 → 决策 → rewrite/分解兜底）
+        3. ACL 过滤（检索前 + 结果二次过滤两层防护）
 
         注意：
         - expansion 成功时，分解检索结果仍经过 CRAG 评估（质量保证）
         - expansion 失败或未触发时，退回标准 CRAG 流程
+        - user 不为 None 时，所有检索路径都会应用 ACL 权限过滤
 
         Args:
             query: 用户查询
             top_k: 期望返回的高相关文档数量
             needs_expansion: 是否需要 Query Expansion（None 时自动判断）
+            user: 当前用户上下文（用于 ACL 权限过滤）
 
         Returns:
             (results, grade_result, rewrite_history)
-            - results: (文档, 相关分数) 列表
+            - results: (文档, 相关分数) 列表（已过滤无权限文档）
             - grade_result: 评估结果
             - rewrite_history: 查询改写/分解历史，用于调试
         """
@@ -760,7 +765,7 @@ class CorrectiveRAGPipeline:
             logger.info(f"[CRAG] Query Expansion 前置触发: '{query}'")
             try:
                 decomp_results, exp_result = await self._decompose_and_search(
-                    query, top_k
+                    query, top_k, user=user
                 )
                 if decomp_results:
                     # 评估分解检索结果（CRAG 质量保证）
@@ -776,11 +781,11 @@ class CorrectiveRAGPipeline:
                 logger.warning(f"[CRAG] Query Expansion 前置失败，退回 CRAG: {e}")
 
         for attempt in range(self.max_retries + 1):
-            # Step 1: 检索更多候选（用于评估和筛选）
+            # Step 1: 检索更多候选（用于评估和筛选，带 ACL 过滤）
             candidate_k = top_k * self.candidate_multiplier
 
-            candidates = self.retriever_manager.search_with_score(
-                current_query, k=candidate_k
+            candidates = self.retriever_manager.search_with_score_acl(
+                current_query, k=candidate_k, user=user
             )
 
             # ────────────────────────────────────────────────────────────
@@ -849,7 +854,7 @@ class CorrectiveRAGPipeline:
                     )
                     try:
                         decomp_results, exp_result = await self._decompose_and_search(
-                            query, top_k
+                            query, top_k, user=user
                         )
                         if decomp_results:
                             logger.info(
@@ -924,18 +929,22 @@ class CorrectiveRAGPipeline:
         self,
         query: str,
         top_k: int,
+        user: Optional[UserContext] = None,
     ) -> tuple[List[tuple[Document, float]], Any]:
         """
-        使用 QueryExpander 分解查询并进行多路并行检索
+        使用 QueryExpander 分解查询并进行多路并行检索（集成 ACL 过滤）
 
         流程：
         1. QueryExpander.expand_async() 分解查询
         2. multi_query_retrieve() 并行检索所有子查询
         3. RRF 合并结果
 
+        Args:
+            user: 当前用户上下文（用于 ACL 权限过滤）
+
         Returns:
             (结果列表[(doc, score)], ExpansionResult)
-            注意：结果格式与 pipeline.retrieve() 一致（2-tuple，不含 source_query）
+            仅包含用户有权限访问的文档
         """
         from src.rag.retrieval.query_expander import decompose_and_retrieve
 
@@ -945,6 +954,7 @@ class CorrectiveRAGPipeline:
             query=query,
             top_k=top_k,
             strategy=self.query_expander.strategy,
+            user=user,
         )
 
         # 转换为 (doc, score) 格式

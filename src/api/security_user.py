@@ -218,7 +218,7 @@ def verify_user(username: str, password: str) -> Optional[dict]:
     验证用户名和密码
 
     Returns:
-        用户信息 dict（包含 id, username, created_at）或 None
+        用户信息 dict（包含 id, username, created_at, role, department 等）或 None
     """
     with _db_cursor() as cur:
         cur.execute(
@@ -235,10 +235,23 @@ def verify_user(username: str, password: str) -> Optional[dict]:
     if not secrets.compare_digest(computed_hash, row["password_hash"]):
         return None
 
+    # 获取用户角色（取第一个角色）
+    roles = get_user_roles(username)
+    role = roles[0] if roles else "employee"
+
+    # 获取用户部门信息（从 user_roles 关联获取，默认为空）
+    department = ""
+    department_name = ""
+    department_path = ""
+
     return {
         "id": row["id"],
         "username": row["username"],
         "created_at": row["created_at"],
+        "role": role,
+        "department": department,
+        "department_name": department_name,
+        "department_path": department_path,
     }
 
 

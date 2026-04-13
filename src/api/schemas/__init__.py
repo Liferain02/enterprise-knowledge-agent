@@ -87,6 +87,10 @@ class LoginResponse(BaseModel):
     """登录响应"""
     access_token: str = Field(description="访问令牌")
     token_type: str = Field(default="bearer", description="令牌类型")
+    user_info: Optional[dict] = Field(
+        default=None,
+        description="当前用户信息：username, role, department, department_name, role_display_name"
+    )
 
 
 class HealthResponse(BaseModel):

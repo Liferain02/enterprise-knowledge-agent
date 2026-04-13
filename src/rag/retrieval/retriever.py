@@ -112,7 +112,7 @@ class RetrieverManager:
         
         # 如果启用混合检索
         if self.use_hybrid and self.hybrid_manager:
-            results = self.hybrid_manager.search_with_scores(query, k=k)
+            results = self.hybrid_manager.search_with_scores(query, k=k, user=user)
             # 转换为 (doc, score) 格式
             return [(doc, score) for doc, score, _ in results]
         
@@ -145,6 +145,55 @@ class RetrieverManager:
 
         # AND 组合：同时满足基础过滤和 ACL 权限
         return {"$and": [base_filter, acl_filter]}
+
+    def _filter_results_by_base(
+        self,
+        results: List[tuple],
+        base_filter: Dict,
+    ) -> List[tuple]:
+        """
+        在检索结果层面应用 base_filter（用于 hybrid 路径的二次过滤）。
+
+        Chroma filter 支持的字段有限（如 $contains），复杂条件在结果层面过滤更可靠。
+        当前实现对 $and / $or 组合和 $in / $eq / $exists 等基本操作进行匹配。
+        """
+        def _matches(doc, f):
+            if not doc.metadata:
+                return False
+            for key, cond in f.items():
+                if key == "$and":
+                    return all(_matches(doc, sub) for sub in cond)
+                if key == "$or":
+                    return any(_matches(doc, sub) for sub in cond)
+                if key == "$eq":
+                    return doc.metadata.get(key) == cond
+                if key == "$ne":
+                    return doc.metadata.get(key) != cond
+                if key == "$in":
+                    return doc.metadata.get(key) in cond
+                if key == "$nin":
+                    return doc.metadata.get(key) not in cond
+                if key == "$exists":
+                    return (key in doc.metadata) == cond
+                if key == "$contains":
+                    val = doc.metadata.get(key)
+                    if isinstance(val, list):
+                        return cond in val
+                    if isinstance(val, str):
+                        return cond in val
+                    return False
+                if key == "$gte":
+                    return doc.metadata.get(key, "") >= cond
+                if key == "$lte":
+                    return doc.metadata.get(key, "") <= cond
+                if key == "$gt":
+                    return doc.metadata.get(key, "") > cond
+                if key == "$lt":
+                    return doc.metadata.get(key, "") < cond
+                # 默认：字段存在即匹配
+                return key in doc.metadata
+
+        return [(doc, score) for doc, score, *_rest in results if _matches(doc, base_filter)]
 
     def search_with_acl(
         self,
@@ -186,7 +235,7 @@ class RetrieverManager:
 
         # 检索
         if self.use_hybrid and self.hybrid_manager:
-            return self.hybrid_manager.search(query, k=k)
+            return self.hybrid_manager.search(query, k=k, user=user)
 
         vectorstore = get_vectorstore(self.collection_name)
         return vectorstore.similarity_search(query, k=k, filter=final_filter)
@@ -213,7 +262,12 @@ class RetrieverManager:
         )
 
         if self.use_hybrid and self.hybrid_manager:
-            results = self.hybrid_manager.search_with_scores(query, k=k)
+            # base_filter 和 user 的 ACL filter 合并后传给 hybrid manager
+            results = self.hybrid_manager.search_with_scores(query, k=k, user=user)
+            # 对 hybrid 结果再做二次 base_filter 过滤（Chroma 不支持 $contains 等复杂操作，
+            # 所以在结果层面过滤 base_filter 条件更可靠）
+            if base_filter:
+                results = self._filter_results_by_base(results, base_filter)
             return [(doc, score) for doc, score, _ in results]
 
         vectorstore = get_vectorstore(self.collection_name)

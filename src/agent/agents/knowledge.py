@@ -23,7 +23,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.documents import Document
 import logging
 
-from ._utils import get_last_user_message, inject_summary_to_messages, inject_context_to_messages
+from ._utils import get_last_user_message, inject_summary_to_messages, inject_user_identity_to_messages
 
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     mem0_memories = state.get("mem0_memories", "") or ""
     session_id = state.get("session_id", "default")
     user_id = state.get("user_id", "default_user")
+    user_context = state.get("user_context")
 
     if not last_user_message:
         return {
@@ -66,7 +67,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
         t0 = time.time()
 
-        # ── 核心：直接调用 Corrective RAG Pipeline ──────────────────────
+        # ── 核心：直接调用 Corrective RAG Pipeline（带 ACL 过滤）───────
         from src.rag.evaluation.retrieval_grader import get_corrective_rag_pipeline
 
         pipeline = get_corrective_rag_pipeline()
@@ -74,12 +75,13 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # 获取 top_k：从配置或 state 读取，默认 5
         top_k = state.get("retrieval_top_k", 5)
 
-        logger.debug("开始检索: query=%s top_k=%s", last_user_message[:50], top_k)
+        logger.debug("开始检索: query=%s top_k=%s user=%s", last_user_message[:50], top_k, getattr(user_context, 'username', 'anonymous'))
 
         results, grade_result, rewrite_history = await pipeline.retrieve(
             query=last_user_message,
             top_k=top_k,
             needs_expansion=needs_expansion,
+            user=user_context,
         )
 
         retrieval_time = time.time() - t0
@@ -101,7 +103,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
         # ── 构建检索上下文（供生成阶段用）─────────────────────────────
         docs = [doc for doc, _ in results]
-        retrieval_context = _build_retrieval_context(last_user_message, results, grade_result)
+        retrieval_context, version_source = _build_retrieval_context(last_user_message, results, grade_result)
 
         # ── 检测 NO_RESULTS：直接返回"知识库无相关信息"───────────────
         if decision == "no_results" or not docs:
@@ -114,6 +116,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
                 "retrieval_avg_score": 0.0,
                 "retrieval_rewrite_history": rewrite_history,
                 "conflict_warnings": [],
+                "version_source": "",
             }
 
         # ── 可选：检测多文档冲突 ──────────────────────────────────────
@@ -130,6 +133,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "retrieval_avg_score": avg_score,
             "retrieval_rewrite_history": rewrite_history,
             "conflict_warnings": conflicts,
+            "version_source": version_source,
         }
 
     except Exception as e:
@@ -142,6 +146,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "retrieval_avg_score": 0.0,
             "retrieval_rewrite_history": [],
             "conflict_warnings": [],
+            "version_source": "",
         }
 
 
@@ -149,10 +154,18 @@ def _build_retrieval_context(
     query: str,
     results: List[Tuple[Document, float]],
     grade_result: Any,
-) -> str:
-    """将检索结果格式化为上下文字符串（供生成阶段用）"""
+) -> Tuple[str, str]:
+    """
+    将检索结果格式化为上下文字符串（供生成阶段用）。
+    同时生成独立的版本溯源信息（供前端结构化展示）。
+
+    Returns:
+        (retrieval_context, version_source)
+        - retrieval_context: 供 LLM 生成的完整上下文
+        - version_source: 独立的版本溯源 Markdown，供前端展示
+    """
     if not results:
-        return "【知识库检索结果】\n未找到相关文档。"
+        return "【知识库检索结果】\n未找到相关文档。", ""
 
     lines = ["【知识库检索结果】"]
     lines.append(f"（共检索到 {len(results)} 篇相关文档）\n")
@@ -179,7 +192,17 @@ def _build_retrieval_context(
         lines.append(f"内容：{content}")
         lines.append("")
 
-    return "\n".join(lines)
+    # ── 版本溯源信息（调用 VersionManager）─────────────────────
+    docs = [doc for doc, _ in results]
+    version_source = ""
+    try:
+        from src.rag.storage.version_manager import get_version_manager
+        vm = get_version_manager()
+        version_source = vm.format_version_source(docs)
+    except Exception as e:
+        logger.debug(f"获取版本溯源信息失败: {e}")
+
+    return "\n".join(lines), version_source
 
 
 # ============================================================
@@ -235,10 +258,16 @@ async def generation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             conflict_warnings=conflict_warnings,
             summary=summary,
             mem0_memories=mem0_memories,
+            user_context=state.get("user_context"),
         )
 
         # 获取 Mem0 记忆注入
-        messages_with_context = inject_context_to_messages(messages, summary, mem0_memories)
+        messages_with_context = inject_user_identity_to_messages(
+            messages,
+            user_context=state.get("user_context"),
+            summary=summary,
+            mem0_memories=mem0_memories,
+        )
 
         # ── 调用 LLM 生成 ──────────────────────────────────────────────
         from src.models.llm import get_llm
@@ -275,12 +304,20 @@ def _build_generation_prompt(
     conflict_warnings: List[str],
     summary: str,
     mem0_memories: str,
+    user_context=None,
 ) -> str:
     """构建生成阶段的系统提示"""
     lines = [
         "你是一个企业知识库问答助手。",
         "",
     ]
+
+    # 用户身份（最优先）- 支持 dict 和 UserContext 对象
+    from ._utils import build_user_identity_context
+    user_identity = build_user_identity_context(user_context)
+    if user_identity:
+        lines.append(user_identity.strip())
+        lines.append("")
 
     # 摘要上下文
     if summary:
@@ -343,7 +380,12 @@ async def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         agent = loader.create_agent("knowledge")
 
         config = {"configurable": {"thread_id": f"{session_id}_knowledge"}}
-        messages_with_context = inject_context_to_messages(messages, summary, mem0_memories)
+        messages_with_context = inject_user_identity_to_messages(
+            messages,
+            user_context=state.get("user_context"),
+            summary=summary,
+            mem0_memories=mem0_memories,
+        )
 
         agent_inject = state.get("agent_inject_prompt", "") or ""
         if agent_inject:

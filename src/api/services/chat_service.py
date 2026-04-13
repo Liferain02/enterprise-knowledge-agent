@@ -19,6 +19,36 @@ _GREETING_PATTERNS = re.compile(
     re.IGNORECASE
 )
 
+# 角色权限提示（与前端 ACL_DESIGN.md 保持同步）
+_ACL_PERMISSION_HINTS = {
+    "admin": "您拥有系统全部权限，可以管理所有文档和用户。",
+    "manager": "您可以访问机密级文档，管理本部门知识内容。",
+    "hr": "您可以访问机密级 HR 文档，管理人事相关制度。",
+    "it_support": "您可以访问机密级 IT 文档，处理技术支持。",
+    "employee": "您可以访问内部公开文档，检索企业知识库。",
+}
+
+
+def _user_context_to_dict(user_context) -> Optional[Dict[str, Any]]:
+    """将 UserContext 对象转换为 dict，以便 LangGraph checkpointer 正确序列化"""
+    if user_context is None:
+        return None
+    if isinstance(user_context, dict):
+        return user_context
+    if hasattr(user_context, "__dict__"):
+        # dataclass 对象
+        result = {
+            "user_id": getattr(user_context, "user_id", ""),
+            "username": getattr(user_context, "username", ""),
+            "role": getattr(user_context, "role", "employee"),
+            "department": getattr(user_context, "department", ""),
+            "department_name": getattr(user_context, "department_name", ""),
+            "department_path": getattr(user_context, "department_path", ""),
+            "is_active": getattr(user_context, "is_active", True),
+        }
+        return result
+    return None
+
 
 class ChatService:
     """聊天服务类（用户隔离）"""
@@ -105,10 +135,12 @@ class ChatService:
         session_id: str,
         username: str = "anonymous",
         images: list = None,
+        user_context = None,
     ) -> Dict[str, Any]:
         """
         处理聊天请求（异步版本，支持多模态图片输入）。
         user_id 传入 session_service，保证用户间 session 隔离。
+        user_context 传入 agent，用于 ACL 检索权限过滤。
         """
         total_start = time.time()
         user_id = username
@@ -127,6 +159,7 @@ class ChatService:
             input_text=processed_message,
             session_id=session_id,
             user_id=user_id,
+            user_context=user_context,
         )
 
         answer = result.get("final_answer", "抱歉，无法生成答案。")
@@ -165,12 +198,42 @@ class ChatService:
         session_id: str,
         username: str = "anonymous",
         images: list = None,
+        user_context = None,
     ) -> AsyncGenerator[str, None]:
-        """流式聊天 SSE Generator。user_id 传入所有 session 操作。"""
+        """流式聊天 SSE Generator。user_context 传入用于 ACL 检索过滤。"""
         from langchain_core.messages import HumanMessage
 
         user_id = username
         session_service.ensure_session_exists(user_id, session_id)
+
+        # ── SSE 事件 1：立即发送当前用户权限信息 ──────────────────
+        if user_context:
+            role_display = {
+                "admin": "管理员",
+                "manager": "部门经理",
+                "hr": "HR专员",
+                "it_support": "IT支持",
+                "employee": "普通员工",
+            }.get(user_context.role, user_context.role)
+            yield self._sse_event("user_profile", {
+                "username": user_context.username,
+                "role": user_context.role,
+                "role_display": role_display,
+                "department": user_context.department,
+                "department_name": user_context.department_name,
+                "department_path": user_context.department_path,
+                "permission_hint": _ACL_PERMISSION_HINTS.get(user_context.role, ""),
+            })
+        else:
+            yield self._sse_event("user_profile", {
+                "username": username,
+                "role": "employee",
+                "role_display": "普通员工",
+                "department": "",
+                "department_name": "",
+                "department_path": "",
+                "permission_hint": "您可以访问内部公开文档，检索企业知识库。",
+            })
 
         # 图片理解
         if images:
@@ -183,13 +246,15 @@ class ChatService:
         graph = await get_agent_graph_async()
         config = {
             "configurable": {
-                "thread_id": session_id,
+                # 使用 user_id + session_id 作为 thread_id，确保不同用户的会话完全隔离
+                "thread_id": f"{user_id}_{session_id}",
             }
         }
         initial_state = {
             "messages": [HumanMessage(content=processed_message)],
             "session_id": session_id,
             "user_id": user_id,
+            "user_context": _user_context_to_dict(user_context),
         }
 
         collected_tokens = []
@@ -233,14 +298,16 @@ class ChatService:
 
             final_answer = "".join(collected_tokens)
 
-            # 从 checkpointer 提取 sources
-            config2 = {"configurable": {"thread_id": session_id}}
+            # 从 checkpointer 提取 sources、used_agent、version_source
+            config2 = {"configurable": {"thread_id": f"{user_id}_{session_id}"}}
             checkpoint = await graph.checkpointer.aget(config2)
             sources_raw = ""
             used_agent = "unknown"
+            version_source = ""
             if checkpoint:
                 sources_raw = checkpoint.get("sources", "")
                 used_agent = checkpoint.get("used_agent", "unknown")
+                version_source = checkpoint.get("version_source", "")
 
             # 获取 message_count（判断是否首条消息，用于标题生成）
             session_info = session_service.get_session(user_id, session_id)
@@ -257,11 +324,15 @@ class ChatService:
 
             yield self._sse_event("sources", sources_raw[:500] if sources_raw else "")
             yield self._sse_event("used_agent", used_agent)
+            # 发送版本溯源信息（供前端结构化展示）
+            yield self._sse_event("version_source", version_source)
             yield self._sse_event("done", final_answer[:100])
 
         except Exception as e:
             logger.exception("流式聊天出错: %s", e)
             yield self._sse_event("error", str(e))
+            # 确保发送 done 事件，通知前端流已结束
+            yield self._sse_event("done", "流处理异常")
 
     # ==================== 会话管理（全部带 user_id） ====================
 
@@ -280,9 +351,9 @@ class ChatService:
             if messages:
                 return {"session_id": session_id, "messages": messages}
 
-            # 降级：从 checkpointer 读取（仍然受 user_id 控制的 session_id 影响）
+            # 降级：从 checkpointer 读取（使用 user_id 确保跨用户隔离）
             graph = get_agent_graph()
-            config = {"configurable": {"thread_id": session_id}}
+            config = {"configurable": {"thread_id": f"{user_id}_{session_id}"}}
             checkpoint = graph.checkpointer.get(config)
             if checkpoint is None:
                 return {"session_id": session_id, "messages": []}

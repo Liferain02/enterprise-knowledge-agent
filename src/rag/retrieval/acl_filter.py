@@ -93,6 +93,15 @@ class Confidentiality:
 
 # ==================== ACL Filter 构建 ====================
 
+def _get_user_attr(user, attr: str, default=None):
+    """获取用户上下文的属性，支持 dict 和对象"""
+    if user is None:
+        return default
+    if isinstance(user, dict):
+        return user.get(attr, default)
+    return getattr(user, attr, default)
+
+
 def build_acl_filter(
     user: Optional[UserContext] = None,
     include_expired: bool = False,
@@ -124,83 +133,55 @@ def build_acl_filter(
     conditions = []
 
     # ────────────────────────────────────────────────────────────
-    # 条件1：版本时效过滤
+    # 条件1：版本时效过滤（暂时禁用，避免 ChromaDB 日期比较问题）
     # ────────────────────────────────────────────────────────────
-    time_conditions = {
-        "effective_date": {"$lte": today},
-    }
-    if not include_expired:
-        time_conditions = {
-            "$and": [
-                {"effective_date": {"$lte": today}},
-                {
-                    "$or": [
-                        {"expiry_date": {"$gte": today}},
-                        {"expiry_date": {"$exists": False}},
-                        {"expiry_date": {"$eq": ""}},
-                    ]
-                },
-            ]
-        }
-    conditions.append(time_conditions)
+    # 注：由于 ChromaDB 的 $lte/$gte 操作符对日期字符串处理有问题，
+    # 暂时禁用版本时效过滤。如果需要启用，需要在入库时将日期转换为时间戳。
+    # if not include_expired:
+    #     conditions.append({
+    #         "$and": [
+    #             {"effective_date": {"$lte": today}},
+    #             {
+    #                 "$or": [
+    #                     {"expiry_date": {"$gte": today}},
+    #                     {"expiry_date": {"$exists": False}},
+    #                     {"expiry_date": {"$eq": ""}},
+    #                 ]
+    #             },
+    #         ]
+    #     })
 
     # ────────────────────────────────────────────────────────────
-    # 条件2：密级过滤
+    # ChromaDB where clause 仅支持以下过滤：
+    #   1. 密级过滤（$in，不混类型，可工作）
+    #
+    # 以下维度无法用 ChromaDB where 表达，交给 Python 层 _acl_filter_results：
+    #   - 部门限制（department_restrict）：ChromaDB $contains 不支持空值/None
+    #   - 角色限制（role_restrict）：同上
+    #   - 版本时效（effective_date/expiry_date）：ChromaDB 对日期字符串比较有问题
+    #
+    # 因此这里只构建密级 filter，部门/角色/时效全部在 Python 层事后过滤。
     # ────────────────────────────────────────────────────────────
-    allowed_confidentiality = Confidentiality.allowed_levels_for_role(user.role)
+    user_role = _get_user_attr(user, "role", "employee")
+    allowed_confidentiality = Confidentiality.allowed_levels_for_role(user_role)
     if allowed_confidentiality:
         conditions.append({
             "confidentiality": {"$in": allowed_confidentiality}
         })
 
     # ────────────────────────────────────────────────────────────
-    # 条件3：部门/角色访问限制
-    # Chroma 不支持 $contains 对嵌套数组，需展平后用 $in 匹配
-    # 规则：
-    #   - department_restrict 为空 + role_restrict 为空 → 允许所有人（公开文档）
-    #   - department_restrict 非空 → 当前用户部门在列表中即可
-    #   - role_restrict 非空 → 当前用户角色在列表中即可
-    # ────────────────────────────────────────────────────────────
-    #
-    # Chroma $or/$and 支持：{"$or": [cond1, cond2, cond3]}
-    #   - 空限制（无限制字段）→ 允许所有人
-    #   - 有限制 → 检查用户是否匹配
-    access_conditions = []
-
-    # 规则A：限制字段不存在或为空数组 → 允许所有人（公开文档）
-    access_conditions.append({
-        "$and": [
-            {"department_restrict": {"$in": ["", [], None]}},
-            {"role_restrict": {"$in": ["", [], None]}},
-        ]
-    })
-
-    # 规则B：department_restrict 非空 → 当前用户部门在允许列表中
-    if user.department:
-        access_conditions.append({
-            "department_restrict": {"$contains": user.department}
-        })
-
-    # 规则C：role_restrict 非空 → 当前用户角色在允许列表中
-    if user.role:
-        access_conditions.append({
-            "role_restrict": {"$contains": user.role}
-        })
-
-    # 规则D：特定用户白名单（doc_id 精确匹配，在 retrieval 层处理）
-    # 注：此处不处理，基于 department/role 的过滤已经足够覆盖大多数场景
-
-    conditions.append({"$or": access_conditions})
-
-    # ────────────────────────────────────────────────────────────
     # 组合所有条件
     # ────────────────────────────────────────────────────────────
+    if not conditions:
+        return None
+
     if len(conditions) == 1:
         result = conditions[0]
     else:
         result = {"$and": conditions}
 
-    logger.debug(f"[ACL] 用户 {user.username}({user.role}) filter: {result}")
+    username = _get_user_attr(user, "username", "unknown")
+    logger.debug(f"[ACL] 用户 {username}({user_role}) filter: {result}")
     return result
 
 
@@ -238,38 +219,52 @@ def check_doc_access(
     2. 部门限制
     3. 角色限制
     """
-    if not user or not user.is_active:
+    if not user:
+        return False
+
+    # 检查用户是否激活
+    is_active = _get_user_attr(user, "is_active", True)
+    if not is_active:
         return False
 
     # 1. 密级检查
     doc_level = doc_metadata.get("confidentiality", Confidentiality.INTERNAL)
-    if not Confidentiality.can_access(user.role, doc_level):
+    user_role = _get_user_attr(user, "role", "employee")
+    username = _get_user_attr(user, "username", "unknown")
+    if not Confidentiality.can_access(user_role, doc_level):
         logger.warning(
-            f"[ACL] 用户 {user.username} 角色 {user.role} 无法访问 "
+            f"[ACL] 用户 {username} 角色 {user_role} 无法访问 "
             f"密级 {doc_level} 的文档 {doc_metadata.get('doc_id', '?')}"
         )
         return False
 
     # 2. 部门限制检查
     dept_restrict = doc_metadata.get("department_restrict", [])
-    if dept_restrict and dept_restrict not in ([], ["", None], [""]):
-        # Chroma 存为数组，需要检查
+    # 无限制的语义：字段不存在/空字符串/空数组 → 允许访问
+    if dept_restrict and dept_restrict != "" and dept_restrict != []:
         if isinstance(dept_restrict, str):
             dept_restrict = [dept_restrict]
-        if user.department and user.department not in dept_restrict:
+        user_department = _get_user_attr(user, "department", "")
+        # 如果文档有部门限制，但用户没有部门 → 拒绝
+        if not user_department:
             logger.warning(
-                f"[ACL] 用户部门 {user.department} 不在允许列表 {dept_restrict}"
+                f"[ACL] 用户无部门，无法访问限制部门文档 {doc_metadata.get('doc_id', '?')}"
+            )
+            return False
+        if user_department not in dept_restrict:
+            logger.warning(
+                f"[ACL] 用户部门 {user_department} 不在允许列表 {dept_restrict}"
             )
             return False
 
     # 3. 角色限制检查
     role_restrict = doc_metadata.get("role_restrict", [])
-    if role_restrict and role_restrict not in ([], ["", None], [""]):
+    if role_restrict and role_restrict != "" and role_restrict != []:
         if isinstance(role_restrict, str):
             role_restrict = [role_restrict]
-        if user.role and user.role not in role_restrict:
+        if user_role and user_role not in role_restrict:
             logger.warning(
-                f"[ACL] 用户角色 {user.role} 不在允许列表 {role_restrict}"
+                f"[ACL] 用户角色 {user_role} 不在允许列表 {role_restrict}"
             )
             return False
 

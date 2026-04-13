@@ -60,24 +60,47 @@ class IngestionWorker:
             # ── 1. 解析文档 ──────────────────────────────────
             docs = self._load_and_chunk(job.file_path, job.category)
 
-            # ── 2. 版本检测（若已有 doc_id）─────────────────
+            # ── 2. 版本管理（入库前）───────────────────────────
             doc_id = job.metadata.get("doc_id")
             version = job.metadata.get("version", "1.0")
 
             if doc_id:
-                from src.rag.storage.version_manager import get_version_manager
+                from src.rag.storage.version_manager import (
+                    get_version_manager, DocumentVersion,
+                )
+                import uuid
+                from datetime import datetime
 
                 vm = get_version_manager()
-                conflict_report = vm.detect_conflicts(
+                new_version_obj = DocumentVersion(
+                    id=str(uuid.uuid4()),
                     doc_id=doc_id,
-                    new_version=version,
-                    new_effective_date=job.metadata.get("effective_date"),
+                    version=version,
+                    effective_date=job.metadata.get("effective_date", datetime.now().date().isoformat()),
+                    expiry_date=job.metadata.get("expiry_date"),
+                    status="active",
+                    superseded_by=None,
+                    source_system=job.metadata.get("source_system", "manual"),
+                    changelog=job.metadata.get("changelog", ""),
+                    uploaded_by=job.metadata.get("uploaded_by", "system"),
+                    created_at=datetime.now().timestamp(),
                 )
-                if conflict_report:
-                    logger.warning(
-                        f"[{self._worker_id}] 版本冲突: "
-                        f"{[c.description for c in conflict_report.conflicts]}"
+                try:
+                    conflicts = vm.archive_and_replace(
+                        doc_id=doc_id,
+                        new_version_id=new_version_obj.id,
+                        new_version=new_version_obj,
                     )
+                    if conflicts:
+                        logger.warning(
+                            f"[{self._worker_id}] 版本替换: doc_id={doc_id} "
+                            f"冲突数量={len(conflicts)}"
+                        )
+                    else:
+                        logger.info(f"[{self._worker_id}] 版本入库: doc_id={doc_id} v{version}")
+                except ValueError as ve:
+                    # 严重冲突拒绝入库
+                    raise RuntimeError(f"版本冲突严重，拒绝入库: {ve}") from ve
 
             # ── 3. 嵌入 + 入库 ─────────────────────────────
             self._embed_and_store(docs, job.metadata)

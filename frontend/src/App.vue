@@ -87,6 +87,21 @@
       <header class="chat-header">
         <h1>{{ chatTitle }}</h1>
         <div class="header-actions">
+          <!-- 用户信息区域 -->
+          <div v-if="currentUser" class="user-info">
+            <div class="user-avatar" :class="currentUser.role">
+              {{ currentUser.username?.charAt(0)?.toUpperCase() || '?' }}
+            </div>
+            <div class="user-details">
+              <span class="user-name">{{ currentUser.username }}</span>
+              <span class="role-badge" :class="currentUser.role">
+                {{ currentUser.role_display || currentUser.role }}
+              </span>
+              <span v-if="currentUser.department_name" class="dept-name">
+                {{ currentUser.department_name }}
+              </span>
+            </div>
+          </div>
           <span class="connection-status" :class="{ connected: apiConnected }">
             {{ apiConnected ? '🟢 已连接' : '🔴 未连接' }}
           </span>
@@ -256,6 +271,18 @@ const registerError = ref('')
 const registerSuccess = ref('')
 const registerLoading = ref(false)
 
+// 当前登录用户信息（从后端 /me 或登录响应获取）
+interface CurrentUser {
+  username: string
+  role: string
+  role_display: string
+  department: string
+  department_name: string
+  department_path: string
+  permission_hint: string
+}
+const currentUser = ref<CurrentUser | null>(null)
+
 const isAuthed = computed(() => token.value.length > 0)
 
 const applyAuthHeader = () => {
@@ -271,13 +298,50 @@ const login = async () => {
   loginError.value = ''
   loginLoading.value = true
   try {
-    const resp = await axios.post<{ access_token: string; token_type: string }>('/api/v1/auth/login', {
+    const resp = await axios.post<{
+      access_token: string
+      token_type: string
+      user_info?: {
+        username: string
+        role: string
+        department: string
+        department_name: string
+        department_path: string
+      }
+    }>('/api/v1/auth/login', {
       username: loginUsername.value,
       password: loginPassword.value
     })
     token.value = resp.data.access_token
     localStorage.setItem('eka_token', token.value)
     applyAuthHeader()
+
+    // 解析并保存用户信息
+    const ui = resp.data.user_info
+    if (ui) {
+      const roleDisplayMap: Record<string, string> = {
+        admin: '管理员', manager: '部门经理', hr: 'HR专员',
+        it_support: 'IT支持', employee: '普通员工'
+      }
+      const hintMap: Record<string, string> = {
+        admin: '您拥有系统全部权限，可以管理所有文档和用户。',
+        manager: '您可以访问机密级文档，管理本部门知识内容。',
+        hr: '您可以访问机密级 HR 文档，管理人事相关制度。',
+        it_support: '您可以访问机密级 IT 文档，处理技术支持。',
+        employee: '您可以访问内部公开文档，检索企业知识库。',
+      }
+      currentUser.value = {
+        username: ui.username,
+        role: ui.role || 'employee',
+        role_display: roleDisplayMap[ui.role || 'employee'] || ui.role || '普通员工',
+        department: ui.department || '',
+        department_name: ui.department_name || '',
+        department_path: ui.department_path || '',
+        permission_hint: hintMap[ui.role || 'employee'] || '',
+      }
+      localStorage.setItem('eka_current_user', JSON.stringify(currentUser.value))
+    }
+
     loginPassword.value = ''
     await checkConnection()
     await loadSessions()
@@ -322,10 +386,12 @@ const register = async () => {
 const logout = () => {
   token.value = ''
   localStorage.removeItem('eka_token')
+  localStorage.removeItem('eka_current_user')
   applyAuthHeader()
   apiConnected.value = false
   messages.value = []
   sessions.value = []
+  currentUser.value = null
   loginMode.value = 'login'
   regUsername.value = ''
   regPassword.value = ''
@@ -344,6 +410,7 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const sessions = ref<Session[]>([])
 const partialAnswer = ref('')      // 流式累积中的部分回答
 const partialAnswerKey = ref<number | null>(null)  // 流式消息在 messages 中的索引
+const pendingVersionSource = ref('')  // SSE 中收到的版本溯源（等待 done 后追加到消息）
 
 // 用于取消请求
 let abortController: AbortController | null = null
@@ -577,6 +644,13 @@ const sendMessage = async () => {
             // 可选：显示思考状态（暂时静默处理）
           } else if (event.type === 'used_agent' && event.data) {
             currentAgent.value = event.data
+          } else if (event.type === 'user_profile' && event.data) {
+            // 更新当前用户信息（优先使用服务端最新信息）
+            currentUser.value = event.data
+            localStorage.setItem('eka_current_user', JSON.stringify(event.data))
+          } else if (event.type === 'version_source' && event.data) {
+            // 缓存版本溯源，等待流结束后追加到消息
+            pendingVersionSource.value = event.data
           } else if (event.type === 'done') {
             // 流式完成，最终答案已通过 llm_token 累积
           }
@@ -591,7 +665,13 @@ const sendMessage = async () => {
     partialAnswer.value = ''
 
     if (messages.value.length > 0 && messages.value[messages.value.length - 1].role === 'assistant') {
-      messages.value[messages.value.length - 1].agent = currentAgent.value
+      const lastMsg = messages.value[messages.value.length - 1]
+      lastMsg.agent = currentAgent.value
+      // 追加版本溯源信息到消息末尾
+      if (pendingVersionSource.value) {
+        lastMsg.content += '\n\n' + pendingVersionSource.value
+        pendingVersionSource.value = ''
+      }
     }
 
     // 刷新会话列表（更新标题和消息数）
@@ -615,6 +695,7 @@ const sendMessage = async () => {
     loading.value = false
     partialAnswerKey.value = null
     partialAnswer.value = ''
+    pendingVersionSource.value = ''  // 重置版本溯源缓存
     abortController = null
     scrollToBottom()
   }
@@ -634,11 +715,25 @@ const checkConnection = async () => {
 }
 
 onMounted(async () => {
+  // 页面加载时恢复用户信息
+  const savedUser = localStorage.getItem('eka_current_user')
+  if (savedUser) {
+    try {
+      currentUser.value = JSON.parse(savedUser)
+    } catch {
+      localStorage.removeItem('eka_current_user')
+    }
+  }
+
   // 页面加载时验证 token 是否有效
   if (isAuthed.value) {
     try {
-      // 调用验证接口检查 token 是否有效
+      // 调用验证接口检查 token 是否有效，同时获取最新用户信息
       await axios.get(`${API_BASE}/sessions`, { timeout: 3000 })
+      // 如果没有缓存的用户信息，调用 /me 获取
+      if (!currentUser.value) {
+        await fetchCurrentUser()
+      }
       await checkConnection()
       await loadSessions()
       await loadHistory(sessionId.value)
@@ -650,6 +745,39 @@ onMounted(async () => {
     }
   }
 })
+
+// 获取当前用户详情（调用 /me 接口）
+const fetchCurrentUser = async () => {
+  try {
+    const resp = await axios.get<{
+      username: string; role: string; department: string
+      department_name: string; department_path: string
+      role_display_name: string; permission_hint: string
+    }>(`${API_BASE}/auth/me`)
+    const u = resp.data
+    currentUser.value = {
+      username: u.username,
+      role: u.role || 'employee',
+      role_display: u.role_display_name || u.role || '普通员工',
+      department: u.department || '',
+      department_name: u.department_name || '',
+      department_path: u.department_path || '',
+      permission_hint: u.permission_hint || '',
+    }
+    localStorage.setItem('eka_current_user', JSON.stringify(currentUser.value))
+  } catch {
+    // 获取失败，使用默认匿名用户
+    currentUser.value = {
+      username: 'anonymous',
+      role: 'employee',
+      role_display: '普通员工',
+      department: '',
+      department_name: '',
+      department_path: '',
+      permission_hint: '您可以访问内部公开文档，检索企业知识库。',
+    }
+  }
+}
 
 // 监听 session 变化，重新加载历史
 watch(sessionId, async (newSid) => {
