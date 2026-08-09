@@ -22,7 +22,7 @@ async def register(req: RegisterRequest):
 
     - 支持用户名 + 密码注册
     - 用户数据存储在 data/users.db（SQLite）
-    - 密码使用 SHA-256 加盐哈希
+    - 新密码使用 Argon2 哈希，旧哈希在成功登录后自动升级
     """
     success, message = register_user(username=req.username, password=req.password)
     if not success:
@@ -45,6 +45,7 @@ async def login(req: LoginRequest):
         - user_info: 当前用户的完整信息（username, role, department 等）
     """
     settings = get_settings()
+    auth_source = "database"
 
     # 优先验证数据库用户
     user = verify_user(username=req.username, password=req.password)
@@ -56,6 +57,7 @@ async def login(req: LoginRequest):
         if db_user is None:
             # 没有数据库用户，回退到 admin
             if req.username == settings.admin_username and req.password == settings.admin_password:
+                auth_source = "config_admin"
                 user = {
                     "username": settings.admin_username,
                     "role": "admin",
@@ -75,7 +77,7 @@ async def login(req: LoginRequest):
     # 构建用户信息（用于前端展示）
     user_info = {
         "username": user["username"],
-        "role": user.get("role", "employee"),
+        "role": user.get("role", "student"),
         "department": user.get("department", ""),
         "department_name": user.get("department_name", ""),
         "department_path": user.get("department_path", ""),
@@ -89,6 +91,7 @@ async def login(req: LoginRequest):
         department=user_info["department"],
         department_name=user_info["department_name"],
         department_path=user_info["department_path"],
+        auth_source=auth_source,
     )
     return LoginResponse(access_token=token, user_info=user_info)
 
@@ -102,15 +105,15 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     """
     return {
         "username": current_user.get("username", "anonymous"),
-        "role": current_user.get("role", "employee"),
+        "role": current_user.get("role", "student"),
         "department": current_user.get("department", ""),
         "department_name": current_user.get("department_name", ""),
         "department_path": current_user.get("department_path", ""),
         "role_display_name": _ROLE_DISPLAY_NAMES.get(
-            current_user.get("role", "employee"), current_user.get("role", "employee")
+            current_user.get("role", "student"), current_user.get("role", "student")
         ),
         "permission_hint": _ROLE_PERMISSION_HINTS.get(
-            current_user.get("role", "employee"), ""
+            current_user.get("role", "student"), ""
         ),
     }
 
@@ -118,18 +121,34 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 # 角色展示名映射（供前端显示）
 _ROLE_DISPLAY_NAMES = {
     "admin": "管理员",
-    "manager": "部门经理",
-    "hr": "HR专员",
-    "it_support": "IT支持",
-    "employee": "普通员工",
+    "pi": "导师/PI",
+    "teacher": "教师",
+    "lab_admin": "实验室管理员",
+    "senior_student": "高年级成员",
+    "student": "研究生",
+    "assistant": "助研/本科生",
+    "editor": "资料维护者",
+    "viewer": "普通成员",
+    "manager": "项目负责人",
+    "hr": "实验室管理员",
+    "it_support": "平台支持",
+    "employee": "研究组成员",
 }
 
 
 # 角色权限提示（供前端展示）
 _ROLE_PERMISSION_HINTS = {
-    "admin": "您拥有系统全部权限，可以管理所有文档和用户。",
-    "manager": "您可以访问机密级文档，管理本部门知识内容。",
-    "hr": "您可以访问机密级 HR 文档，管理人事相关制度。",
-    "it_support": "您可以访问机密级 IT 文档，处理技术支持。",
-    "employee": "您可以访问内部公开文档，检索企业知识库。",
+    "admin": "您可管理全部实验室资料与用户。",
+    "pi": "您可查看公共、项目组内和负责人可见资料。",
+    "teacher": "您可查看公共与项目组内资料。",
+    "lab_admin": "您可维护公共流程、FAQ 与资料入口。",
+    "senior_student": "您可查看公共与项目组内资料，并维护部分项目资料。",
+    "student": "您可查看实验室公共资料与新人导览内容。",
+    "assistant": "您可查看公共资料与基础流程说明。",
+    "editor": "您可维护实验室公共与项目资料。",
+    "viewer": "您可查看实验室公共资料。",
+    "manager": "您可查看公共与项目组内资料。",
+    "hr": "您可维护公共流程资料。",
+    "it_support": "您可维护环境配置和平台说明资料。",
+    "employee": "您可查看实验室公共资料。",
 }

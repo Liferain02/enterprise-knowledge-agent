@@ -303,7 +303,7 @@ def _extract_numeric_data(text: str) -> dict:
     从文本结果中提取数值数据（用于下游步骤的结构化输入）。
 
     例如：
-    - "根据公司规定，年假天数为 15 天" → {"type": "numeric", "value": 15, "unit": "天", "label": "年假天数"}
+    - "根据实验室组会制度，每周组会时长为 2 小时" → {"type": "numeric", "value": 2, "unit": "小时", "label": "组会时长"}
     - "计算结果为 1250.5 元" → {"type": "numeric", "value": 1250.5, "unit": "元", "label": "计算结果"}
 
     这使得第1步检索的结果可以机器可读地传给第2步计算。

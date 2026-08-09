@@ -17,10 +17,10 @@ class UserContext:
     """当前用户的权限上下文，在 JWT 解码后构建，贯穿整个检索链路"""
     user_id: str
     username: str
-    role: str  # employee / hr / admin / it_support / manager
-    department: str  # 部门 ID
-    department_name: str  # 部门名称
-    department_path: str  # "/技术部/后端组"，树形路径
+    role: str  # student / senior_student / teacher / pi / lab_admin / admin
+    department: str  # 项目组或研究方向 ID（兼容旧字段名）
+    department_name: str  # 项目组或研究方向名称
+    department_path: str  # "/实验室/分布式系统组" 之类的树形路径
     is_active: bool = True
 
     @classmethod
@@ -29,7 +29,7 @@ class UserContext:
         return cls(
             user_id="anonymous",
             username="anonymous",
-            role="employee",
+            role="student",
             department="",
             department_name="",
             department_path="",
@@ -42,7 +42,7 @@ class UserContext:
         return cls(
             user_id=payload.get("sub", payload.get("user_id", "unknown")),
             username=payload.get("username", "unknown"),
-            role=payload.get("role", "employee"),
+            role=payload.get("role", "student"),
             department=payload.get("department", ""),
             department_name=payload.get("department_name", ""),
             department_path=payload.get("department_path", ""),
@@ -66,6 +66,12 @@ class Confidentiality:
         """判断某角色是否能访问某密级的文档"""
         user_max = {
             "employee": cls.INTERNAL,
+            "student": cls.INTERNAL,
+            "assistant": cls.INTERNAL,
+            "lab_admin": cls.CONFIDENTIAL,
+            "teacher": cls.CONFIDENTIAL,
+            "senior_student": cls.CONFIDENTIAL,
+            "pi": cls.SECRET,
             "hr": cls.CONFIDENTIAL,
             "it_support": cls.CONFIDENTIAL,
             "manager": cls.SECRET,
@@ -81,6 +87,12 @@ class Confidentiality:
         """返回某角色可以访问的所有密级列表"""
         user_max = {
             "employee": cls.INTERNAL,
+            "student": cls.INTERNAL,
+            "assistant": cls.INTERNAL,
+            "lab_admin": cls.CONFIDENTIAL,
+            "teacher": cls.CONFIDENTIAL,
+            "senior_student": cls.CONFIDENTIAL,
+            "pi": cls.SECRET,
             "hr": cls.CONFIDENTIAL,
             "it_support": cls.CONFIDENTIAL,
             "manager": cls.SECRET,
@@ -89,6 +101,26 @@ class Confidentiality:
 
         rank = cls._LEVEL_RANK.get(user_max, 1)
         return [k for k, v in cls._LEVEL_RANK.items() if v <= rank]
+
+
+def allowed_visibilities_for_role(role: str) -> list[str]:
+    """返回角色允许浏览和检索的资料可见范围。"""
+    return {
+        "admin": ["public", "project", "restricted"],
+        "pi": ["public", "project", "restricted"],
+        "teacher": ["public", "project"],
+        "lab_admin": ["public", "project"],
+        "senior_student": ["public", "project"],
+        "editor": ["public", "project"],
+        # 历史兼容角色
+        "manager": ["public", "project"],
+        "hr": ["public", "project"],
+        "it_support": ["public", "project"],
+        "student": ["public"],
+        "assistant": ["public"],
+        "viewer": ["public"],
+        "employee": ["public"],
+    }.get(role, ["public"])
 
 
 # ==================== ACL Filter 构建 ====================
@@ -162,12 +194,15 @@ def build_acl_filter(
     #
     # 因此这里只构建密级 filter，部门/角色/时效全部在 Python 层事后过滤。
     # ────────────────────────────────────────────────────────────
-    user_role = _get_user_attr(user, "role", "employee")
+    user_role = _get_user_attr(user, "role", "student")
     allowed_confidentiality = Confidentiality.allowed_levels_for_role(user_role)
     if allowed_confidentiality:
         conditions.append({
             "confidentiality": {"$in": allowed_confidentiality}
         })
+
+    allowed_visibility = allowed_visibilities_for_role(user_role)
+    conditions.append({"visibility": {"$in": allowed_visibility}})
 
     # ────────────────────────────────────────────────────────────
     # 组合所有条件
@@ -216,8 +251,9 @@ def check_doc_access(
 
     检查顺序：
     1. 密级权限
-    2. 部门限制
-    3. 角色限制
+    2. 可见性
+    3. 部门限制
+    4. 角色限制
     """
     if not user:
         return False
@@ -229,7 +265,7 @@ def check_doc_access(
 
     # 1. 密级检查
     doc_level = doc_metadata.get("confidentiality", Confidentiality.INTERNAL)
-    user_role = _get_user_attr(user, "role", "employee")
+    user_role = _get_user_attr(user, "role", "student")
     username = _get_user_attr(user, "username", "unknown")
     if not Confidentiality.can_access(user_role, doc_level):
         logger.warning(
@@ -238,7 +274,16 @@ def check_doc_access(
         )
         return False
 
-    # 2. 部门限制检查
+    # 2. 可见性检查
+    visibility = doc_metadata.get("visibility", "public")
+    allowed_visibility = set(allowed_visibilities_for_role(user_role))
+    if visibility not in allowed_visibility:
+        logger.warning(
+            f"[ACL] 用户 {username} 角色 {user_role} 无法访问 visibility={visibility}"
+        )
+        return False
+
+    # 3. 部门限制检查
     dept_restrict = doc_metadata.get("department_restrict", [])
     # 无限制的语义：字段不存在/空字符串/空数组 → 允许访问
     if dept_restrict and dept_restrict != "" and dept_restrict != []:
@@ -257,7 +302,7 @@ def check_doc_access(
             )
             return False
 
-    # 3. 角色限制检查
+    # 4. 角色限制检查
     role_restrict = doc_metadata.get("role_restrict", [])
     if role_restrict and role_restrict != "" and role_restrict != []:
         if isinstance(role_restrict, str):

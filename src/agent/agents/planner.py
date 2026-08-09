@@ -36,11 +36,6 @@ class TaskPlan(TypedDict):
     final_agent: str
 
 
-class SummaryOutput(TypedDict):
-    """汇总步骤结果的结构化输出"""
-    final_answer: str
-
-
 # ==================== 快速复杂度预判 ====================
 
 # 命中任意一条 → 判定为复杂任务（走 LLM planner 拆步骤）
@@ -179,7 +174,19 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     if quick_result == "complex":
-        logger.debug("快速判断: 复杂任务（进入 LLM 拆步骤）")
+        # 当前产品的核心是实验室知识检索。对比、列举、多文档总结等
+        # “复杂知识问题”应由 CRAG 的查询扩展/分解处理，而不是进入一套
+        # 独立的多 Agent fan-out。旧 Send 执行分支无法作为普通节点状态
+        # 返回，并且会让复杂知识查询绕开当前 ACL 感知的确定性 RAG 主链。
+        logger.debug("快速判断: 复杂知识任务（直接进入 RAG 查询扩展）")
+        return {
+            "is_complex": True,
+            "plan_steps": [],
+            "plan_reasoning": "复杂知识查询，交由 RAG 查询扩展处理",
+            "current_step": 0,
+            "_quick_agent": "knowledge_agent",
+            "needs_expansion": True,
+        }
     else:
         # ── 中等复杂度（< 40字 + 无复杂信号）：快速路由不调 LLM ──────────
         if len(last_user_message) <= 40:
@@ -216,16 +223,16 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
 **简单任务**（不需要拆解）：
 - 单一问题，可以一步回答
-- 如："现在几点"、"公司年假多少天"、"你好"
+- 如："现在几点"、"组会多久一次"、"你好"
 
 **复杂任务**（需要拆解成多步骤）：
 - 需要对比多个内容（如"对比A和B"）
 - 需要先查询多个信息再计算或总结
 - 包含多个子问题
 - 如：
-  - "对比年假和病假政策的差异" → 需要分别查年假政策、病假政策，然后对比
-  - "我下个月能休几天假" → 需要查假期政策 + 查当前月份 + 计算
-  - "总结Q1和Q2的业绩表现" → 需要分别查Q1、Q2数据，然后汇总
+  - "对比 RDMA 和 TCP 在高性能网络实验中的差异" → 需要分别查 RDMA、TCP 资料，然后对比
+  - "我这周组会前还需要准备什么" → 需要查组会制度 + 新人/项目资料，再总结
+  - "总结分布式 NUMA 项目最近两次组会结论" → 需要分别查多份纪要，然后汇总
 
 ## Agent 类型说明
 
@@ -275,12 +282,20 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
             for s in steps:
                 logger.debug("步骤 %s: %s -> %s", s["step_id"], s["description"], s["agent"])
 
-        return {
+        result = {
             "is_complex": is_complex,
             "plan_steps": steps,
             "plan_reasoning": reasoning,
             "current_step": 0,
         }
+        if is_complex:
+            # 多步骤计划保留为可观测信息，但执行统一走 ACL 感知的 RAG 主链。
+            result["_quick_agent"] = "knowledge_agent"
+            result["needs_expansion"] = True
+        else:
+            # Planner 已完成判断，直接给出路由，避免再调用 Supervisor。
+            result["_quick_agent"] = _quick_route(last_user_message)
+        return result
         
     except Exception as e:
         logger.exception("规划失败: %s", e)
@@ -290,7 +305,8 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "is_complex": False,
             "plan_steps": [],
             "plan_reasoning": f"规划失败，降级为简单任务: {str(e)}",
-            "current_step": 0
+            "current_step": 0,
+            "_quick_agent": _quick_route(last_user_message),
         }
 
 
@@ -317,13 +333,20 @@ def _quick_route(question: str) -> str:
     if any(k in q for k in history_keywords):
         return "operation_agent"
 
-    # 明确的计算（只涉及纯数字计算）
-    calc_only = ["1+1", "2*3", "计算器", "算术"]
-    if any(k in q for k in calc_only):
+    # 明确的纯数字计算。不能只匹配几个示例，否则常见的
+    # “帮我计算 123 * 456”会错误落入知识检索。
+    has_arithmetic_expression = bool(
+        re.search(
+            r"\d+(?:\.\d+)?\s*(?:[+\-*/×÷%^]|乘以|除以|加上|减去)\s*\d+(?:\.\d+)?",
+            q,
+        )
+    )
+    calc_only = ["计算器", "算术"]
+    if has_arithmetic_expression or any(k in q for k in calc_only):
         return "operation_agent"
 
-    # 默认路由到知识库（处理公司制度、政策、具体信息查询）
-    # 包括：年假、病假、报销、请假、流程、制度等问题
+    # 默认路由到知识库（处理实验室制度、项目资料、技术说明、具体信息查询）
+    # 包括：组会、实验、报销、请假、环境配置、论文、流程等问题
     return "knowledge_agent"
 
 
@@ -344,23 +367,27 @@ def route_from_planner(state: Dict[str, Any]) -> str:
     """
     从 Planner 路由到下一个节点
 
-    - 复杂任务 -> execute_plan
-    - 简单任务 + 有 _quick_agent（快速路由）-> 直接跳转到对应 Worker Agent，跳过 Supervisor
-    - 简单任务 + 无 _quick_agent -> 交给 Supervisor 决策
+    Planner 是唯一请求路由器：
+    - 复杂知识任务 -> retrieval_agent，并启用 RAG 查询扩展
+    - 简单任务 -> 直接跳转到对应 Worker
+    - 无法识别 -> 默认进入知识检索
     """
     is_complex = state.get("is_complex", False)
 
     if is_complex:
-        return "execute_plan"
+        return "retrieval_agent"
 
     # Planner 已经通过快速路由确定了 Agent → 直接跳转，跳过 Supervisor（省去一次 LLM 调用）
     quick_agent = state.get("_quick_agent")
     if quick_agent:
-        logger.debug("快速路由: %s，跳过 Supervisor", quick_agent)
-        return quick_agent
+        logger.debug("快速路由: %s", quick_agent)
+        if quick_agent == "knowledge_agent":
+            return "retrieval_agent"
+        if quick_agent in ("operation_agent", "general_agent"):
+            return quick_agent
 
-    # Planner 无法快速确定 → 交给 Supervisor 决策
-    return "supervisor"
+    # 产品默认能力是实验室知识问答；路由异常时安全降级到检索链路。
+    return "retrieval_agent"
 
 
 # ==================== 计划执行节点 ====================
@@ -964,10 +991,11 @@ async def _summarize_results(messages: list, plan_results: list) -> str:
 最终答案："""
 
     try:
-        llm_structured = llm.with_structured_output(SummaryOutput)
-        summary: SummaryOutput = await llm_structured.ainvoke(prompt)
-        # TypedDict 返回普通 dict
-        return summary["final_answer"]
+        response = await llm.ainvoke(
+            prompt,
+            config={"tags": ["user_visible_answer"]},
+        )
+        return response.content.strip()
     except Exception as e:
         # 如果汇总失败，简单拼接结果
         logger.warning("Execute Plan 汇总失败: %s", e)

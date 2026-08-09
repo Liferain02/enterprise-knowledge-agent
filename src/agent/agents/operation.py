@@ -6,13 +6,13 @@ Operation Agent 节点
 import os
 from typing import Dict, Any
 import asyncio
+from langchain_core.messages import AIMessage
 from langgraph.prebuilt import create_react_agent
 from src.models.llm import get_llm
 from ..tools import get_all_agent_tools
 from ..prompts import OPERATION_AGENT_SYSTEM_PROMPT
 from ._utils import get_last_user_message, inject_summary_to_messages, inject_user_identity_to_messages
 from config.settings import get_settings
-from ..checkpointer import get_sync_checkpointer as get_checkpointer
 
 import logging
 
@@ -32,14 +32,10 @@ def _get_operation_agent(tools):
     if cache_key not in _agent_cache:
         llm = get_llm()
 
-        # 使用单例 checkpointer
-        checkpointer = get_checkpointer()
-
         _agent_cache[cache_key] = create_react_agent(
             model=llm,
             tools=tools,
             prompt=OPERATION_AGENT_SYSTEM_PROMPT,
-            checkpointer=checkpointer
         )
     return _agent_cache[cache_key]
 
@@ -82,10 +78,8 @@ async def operation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         agent = _get_operation_agent(tools)
 
         # 传递消息历史，若存在摘要和 Mem0 记忆则在头部注入 SystemMessage
-        # 使用独立的 thread_id：{session_id}_{agent_name}
-        # 避免与主图的 session_id 冲突，防止并发请求竞态
-        thread_id = f"{session_id}_operation"
-        config = {"configurable": {"thread_id": thread_id}}
+        # 会话历史只由主图维护，子 Agent 不再创建第二套持久化状态。
+        config = {}
         messages_with_context = inject_user_identity_to_messages(
             messages,
             user_context=state.get("user_context"),
@@ -99,7 +93,7 @@ async def operation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             timeout=OPERATION_TIMEOUT
         )
 
-        # 获取 Agent 返回的所有消息（包含工具调用和最终回复）
+        # 子 Agent 内部消息只用于本次工具循环，不写回主会话状态。
         agent_messages = result.get("messages", [])
 
         # 获取最终回复
@@ -107,11 +101,11 @@ async def operation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
         logger.debug("操作完成: len=%d", len(final_answer))
 
-        # 返回时包含 messages，LangGraph 会自动将 AIMessage 添加到状态
+        # 主图只接收最终用户可见回答，避免工具调用污染摘要和长期记忆。
         return {
             "final_answer": final_answer,
             "used_agent": "operation_agent",
-            "messages": agent_messages  # 让主图也保存这些消息
+            "messages": [AIMessage(content=final_answer)],
         }
         
     except asyncio.TimeoutError:

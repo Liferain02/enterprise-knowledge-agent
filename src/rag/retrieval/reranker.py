@@ -61,6 +61,16 @@ class RerankerManager:
             except Exception as e:
                 logger.warning(f"FlashRank 初始化失败: {e}")
 
+        # 阿里百炼（配置为 qwen 时使用已有的 TextReRank 实现）
+        if self.provider == "qwen":
+            logger.info("[Reranker] 使用 Qwen 后端")
+            return QwenReranker(
+                model=self.reranker_model,
+                api_key=self.settings.dashscope_api_key,
+                top_n=self.top_n,
+                score_threshold=self.score_threshold,
+            )
+
         # 2. Cohere（需要 API Key）
         if self.provider in ("cohere", "auto"):
             try:

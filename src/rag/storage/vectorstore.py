@@ -10,19 +10,23 @@ from langchain_core.documents import Document
 from src.models.embeddings import get_embeddings
 from config.settings import get_settings
 
+DEFAULT_COLLECTION_NAME = "lab_knowledge"
+LEGACY_COLLECTION_NAME = "enterprise_knowledge"
+
 
 class VectorStoreManager:
     """向量存储管理器"""
     
     def __init__(
         self,
-        collection_name: str = "enterprise_knowledge",
+        collection_name: str = DEFAULT_COLLECTION_NAME,
         persist_directory: Optional[str] = None
     ):
         self.settings = get_settings()
         self.collection_name = collection_name
         self.persist_directory = persist_directory or str(self.settings.chroma_dir)
         self._vectorstore: Optional[Chroma] = None
+        self._raw_client = None
     
     @property
     def vectorstore(self) -> Chroma:
@@ -39,6 +43,46 @@ class VectorStoreManager:
                 )
             )
         return self._vectorstore
+
+    @property
+    def raw_client(self):
+        """获取不依赖 embedding 模型的 Chroma 原生客户端。"""
+        if self._raw_client is None:
+            self._raw_client = chromadb.PersistentClient(
+                path=self.persist_directory,
+                settings=ChromaSettings(
+                    anonymized_telemetry=False,
+                    allow_reset=True,
+                ),
+            )
+        return self._raw_client
+
+    @property
+    def raw_collection(self):
+        """获取原生 collection，适合目录、统计和删除等管理操作。"""
+        self._migrate_legacy_collection()
+        return self.raw_client.get_or_create_collection(self.collection_name)
+
+    def _migrate_legacy_collection(self):
+        """首次访问时迁移旧集合，避免更名后丢失已入库资料。"""
+        if self.collection_name != DEFAULT_COLLECTION_NAME:
+            return
+
+        existing = {collection.name for collection in self.raw_client.list_collections()}
+        if DEFAULT_COLLECTION_NAME in existing or LEGACY_COLLECTION_NAME not in existing:
+            return
+
+        legacy = self.raw_client.get_collection(LEGACY_COLLECTION_NAME)
+        target = self.raw_client.get_or_create_collection(DEFAULT_COLLECTION_NAME)
+        payload = legacy.get(include=["documents", "metadatas", "embeddings"])
+        ids = payload.get("ids") or []
+        if ids:
+            target.add(
+                ids=ids,
+                documents=payload.get("documents"),
+                metadatas=payload.get("metadatas"),
+                embeddings=payload.get("embeddings"),
+            )
     
     def add_documents(
         self,
@@ -104,13 +148,45 @@ class VectorStoreManager:
     
     def delete_collection(self):
         """删除集合"""
-        self.vectorstore.delete_collection()
+        try:
+            self.raw_client.delete_collection(self.collection_name)
+        except Exception:
+            pass
         self._vectorstore = None  # 重置实例，下次访问时重新创建
+
+    def list_documents(
+        self,
+        limit: int = 1000,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """读取原始 chunks，供资料目录按文档来源聚合。"""
+        return self.raw_collection.get(
+            include=["metadatas", "documents"],
+            limit=limit,
+            offset=offset,
+        )
+
+    def delete_documents_by_source(self, source: str) -> int:
+        """按来源文件删除所有 chunks，返回删除前匹配数量。"""
+        ids = self.get_document_ids_by_source(source)
+        self.delete_documents_by_ids(ids)
+        return len(ids)
+
+    def get_document_ids_by_source(self, source: str) -> List[str]:
+        """读取来源文件已有 chunk IDs，用于安全替换。"""
+        matched = self.raw_collection.get(where={"source": source}, include=[])
+        return matched.get("ids", [])
+
+    def delete_documents_by_ids(self, ids: List[str]) -> int:
+        """按 ID 删除 chunks。"""
+        if ids:
+            self.raw_collection.delete(ids=ids)
+        return len(ids)
     
     def reset(self):
         """重置向量存储：删除并重建集合"""
         try:
-            self.vectorstore.delete_collection()
+            self.raw_client.delete_collection(self.collection_name)
         except Exception:
             pass
         self._vectorstore = None  # 重置实例，下次访问时重新创建
@@ -118,7 +194,7 @@ class VectorStoreManager:
     def get_collection_info(self) -> Dict[str, Any]:
         """获取集合信息"""
         try:
-            count = self.vectorstore._collection.count()
+            count = self.raw_collection.count()
             return {
                 "name": self.collection_name,
                 "count": count,
@@ -138,7 +214,7 @@ _vectorstore_manager: Optional[VectorStoreManager] = None
 
 
 def get_vectorstore_manager(
-    collection_name: str = "enterprise_knowledge"
+    collection_name: str = DEFAULT_COLLECTION_NAME
 ) -> VectorStoreManager:
     """获取向量存储管理器实例"""
     global _vectorstore_manager
@@ -148,9 +224,8 @@ def get_vectorstore_manager(
 
 
 def get_vectorstore(
-    collection_name: str = "enterprise_knowledge"
+    collection_name: str = DEFAULT_COLLECTION_NAME
 ) -> Chroma:
     """获取向量存储实例"""
     manager = get_vectorstore_manager(collection_name)
     return manager.vectorstore
-

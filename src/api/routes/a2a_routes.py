@@ -130,24 +130,24 @@ def _build_agent_card() -> AgentCard:
     base_url = f"http://{settings.api_host}:{settings.api_port}"
 
     # 计算 Agent ID（基于版本和名称的哈希）
-    agent_id_input = f"enterprise-knowledge-agent-v1.0.0"
+    agent_id_input = f"lab-knowledge-assistant-v1.0.0"
     agent_id = hashlib.sha256(agent_id_input.encode()).hexdigest()[:16]
 
     # 定义支持的技能
     skills = [
         AgentSkill(
             id="knowledge_retrieval",
-            name="企业知识库检索",
+            name="实验室知识库检索",
             description=(
-                "从企业知识库检索制度、政策、流程等信息。"
-                "支持：公司制度、年假政策、报销流程、绩效考核、 IT 支持等。"
+                "从实验室知识库检索制度、项目资料、论文笔记、组会纪要和流程说明。"
+                "支持：入组导览、组会制度、环境配置、报销采购、RDMA/NUMA 相关资料等。"
             )
         ),
         AgentSkill(
-            id="hr_policy_query",
-            name="HR 政策查询",
+            id="lab_onboarding_query",
+            name="实验室导览与制度查询",
             description=(
-                "查询员工手册、入职流程、离职流程、福利政策、薪酬体系等信息。"
+                "查询新生入组流程、实验室考勤、组会规范、资源预约和公共流程资料。"
             )
         ),
         AgentSkill(
@@ -170,7 +170,7 @@ def _build_agent_card() -> AgentCard:
             name="多步骤规划",
             description=(
                 "处理复杂任务，自动拆解为多个子步骤并行或顺序执行。"
-                "例如：对比 A 政策和 B 政策 → 先查年假再计算工资。"
+                "例如：对比两篇论文方案，或先查组会要求再整理汇报清单。"
             )
         ),
     ]
@@ -203,11 +203,10 @@ def _build_agent_card() -> AgentCard:
     }
 
     return AgentCard(
-        name="企业知识库智能助手",
+        name="实验室智能助手",
         description=(
-            "企业内部制度问答与流程检索系统。"
-            "优先服务 HR / 行政 / IT 支持三大高频场景。"
-            "支持知识库检索、多步骤规划、 Mem0 记忆、权限隔离。"
+            "面向科研实验室的资料检索与协作助手。"
+            "支持知识库检索、多步骤规划、Mem0 记忆、权限隔离与来源引用。"
         ),
         url=base_url,
         version="1.0.0",
@@ -219,7 +218,7 @@ def _build_agent_card() -> AgentCard:
         ),
         skills=skills,
         provider=AgentProvider(
-            organization="Enterprise Knowledge Base Team",
+            organization="Research Lab Assistant Team",
             version="1.0.0"
         ),
         authentication=AuthenticationVerify(
@@ -315,8 +314,8 @@ async def get_agent_card_handler(request: Request):
 
     返回内容示例：
     {
-        "name": "企业知识库智能助手",
-        "description": "企业内部制度问答与流程检索系统...",
+        "name": "实验室智能助手",
+        "description": "面向科研实验室的资料检索与协作系统...",
         "url": "http://localhost:8080",
         "version": "1.0.0",
         "capabilities": {
@@ -325,7 +324,7 @@ async def get_agent_card_handler(request: Request):
             ...
         },
         "skills": [
-            {"id": "knowledge_retrieval", "name": "企业知识库检索", ...},
+            {"id": "knowledge_retrieval", "name": "实验室知识库检索", ...},
             ...
         ],
         "endpoints": {
@@ -464,7 +463,7 @@ def _skill_matches_endpoint(skill_id: str, endpoint: str) -> bool:
     """判断技能是否与某端点相关"""
     mapping = {
         "knowledge_retrieval": ["chat", "knowledge_search"],
-        "hr_policy_query": ["chat", "knowledge_search"],
+        "lab_onboarding_query": ["chat", "knowledge_search"],
         "operation_execution": ["chat"],
         "general_conversation": ["chat"],
         "multi_step_planning": ["chat"],

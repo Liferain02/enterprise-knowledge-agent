@@ -21,6 +21,7 @@ import pytest
 import asyncio
 import time
 import re
+from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock
 from typing import List
 from langchain_core.documents import Document
@@ -319,14 +320,14 @@ class TestQueryBoundaryConditions:
 
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
-        mock_rm.search_with_score = MagicMock(return_value=[])
+        original_search = mock_rm.search_with_score_acl
+        mock_rm.search_with_score_acl = MagicMock(return_value=[])
 
         try:
             results, grade_result, history = await pipeline.retrieve("假", top_k=5)
             assert grade_result.decision.value in ("no_results", "low")
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
     @pytest.mark.asyncio
     async def test_extremely_short_query_2char(self):
@@ -336,15 +337,15 @@ class TestQueryBoundaryConditions:
         pipeline = get_corrective_rag_pipeline(rerank_before_grade=False)
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
-        mock_rm.search_with_score = MagicMock(return_value=[])
+        original_search = mock_rm.search_with_score_acl
+        mock_rm.search_with_score_acl = MagicMock(return_value=[])
         pipeline.grader._llm = make_mock_llm(score=4)
 
         try:
             results, grade_result, history = await pipeline.retrieve("年假", top_k=5)
             assert grade_result.decision.value in ("no_results", "low")
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
     @pytest.mark.asyncio
     async def test_punctuation_only_query(self):
@@ -354,16 +355,18 @@ class TestQueryBoundaryConditions:
         pipeline = get_corrective_rag_pipeline(rerank_before_grade=False)
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
-        mock_rm.search_with_score = MagicMock(return_value=[])
+        original_search = mock_rm.search_with_score_acl
+        mock_rm.search_with_score_acl = MagicMock(return_value=[])
         pipeline.grader._llm = make_mock_llm(score=4)
 
         try:
             # 减少到1个查询避免超时
-            results, grade_result, _ = await pipeline.retrieve("???", top_k=5)
+            results, grade_result, _ = await pipeline.retrieve(
+                "???", top_k=5, needs_expansion=False
+            )
             assert grade_result.decision.value in ("no_results", "low")
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
     @pytest.mark.asyncio
     async def test_repeated_characters_query(self):
@@ -373,15 +376,15 @@ class TestQueryBoundaryConditions:
         pipeline = get_corrective_rag_pipeline(rerank_before_grade=False)
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
-        mock_rm.search_with_score = MagicMock(return_value=[])
+        original_search = mock_rm.search_with_score_acl
+        mock_rm.search_with_score_acl = MagicMock(return_value=[])
         pipeline.grader._llm = make_mock_llm(score=4)
 
         try:
             results, grade_result, _ = await pipeline.retrieve("年假年假年假", top_k=5)
             assert grade_result.decision.value in ("no_results", "low")
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
     @pytest.mark.asyncio
     async def test_mixed_language_query(self):
@@ -391,14 +394,14 @@ class TestQueryBoundaryConditions:
         pipeline = get_corrective_rag_pipeline(rerank_before_grade=False)
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
+        original_search = mock_rm.search_with_score_acl
         mock_doc = Document(
             page_content="年假15天",
             metadata={"source": "test.pdf", "version": "1.0",
                       "effective_date": "2026-01-01",
                       "department_restrict": [], "role_restrict": [], "confidentiality": "internal"},
         )
-        mock_rm.search_with_score = MagicMock(return_value=[(mock_doc, 0.9)])
+        mock_rm.search_with_score_acl = MagicMock(return_value=[(mock_doc, 0.9)])
 
         pipeline.grader._llm = make_mock_llm(score=4)
 
@@ -407,7 +410,7 @@ class TestQueryBoundaryConditions:
                 results, grade_result, _ = await pipeline.retrieve(q, top_k=5)
                 assert isinstance(grade_result.decision.value, str)
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
     @pytest.mark.asyncio
     async def test_semantic_vague_query(self):
@@ -417,8 +420,8 @@ class TestQueryBoundaryConditions:
         pipeline = get_corrective_rag_pipeline(rerank_before_grade=False)
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
-        mock_rm.search_with_score = MagicMock(return_value=[])
+        original_search = mock_rm.search_with_score_acl
+        mock_rm.search_with_score_acl = MagicMock(return_value=[])
 
         pipeline.grader._llm = make_mock_llm(score=4)
 
@@ -427,7 +430,7 @@ class TestQueryBoundaryConditions:
                 results, grade_result, _ = await pipeline.retrieve(q, top_k=5)
                 assert grade_result.decision.value in ("no_results", "low")
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
     @pytest.mark.asyncio
     async def test_very_long_query_500chars(self):
@@ -437,8 +440,8 @@ class TestQueryBoundaryConditions:
         pipeline = get_corrective_rag_pipeline(rerank_before_grade=False)
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
-        mock_rm.search_with_score = MagicMock(return_value=[])
+        original_search = mock_rm.search_with_score_acl
+        mock_rm.search_with_score_acl = MagicMock(return_value=[])
 
         pipeline.grader._llm = make_mock_llm(score=4)
 
@@ -450,7 +453,7 @@ class TestQueryBoundaryConditions:
         except Exception as e:
             pytest.fail(f"超长查询不应导致异常: {e}")
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
     @pytest.mark.asyncio
     async def test_query_with_special_unicode(self):
@@ -460,8 +463,8 @@ class TestQueryBoundaryConditions:
         pipeline = get_corrective_rag_pipeline(rerank_before_grade=False)
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
-        mock_rm.search_with_score = MagicMock(return_value=[])
+        original_search = mock_rm.search_with_score_acl
+        mock_rm.search_with_score_acl = MagicMock(return_value=[])
 
         pipeline.grader._llm = make_mock_llm(score=4)
 
@@ -470,7 +473,7 @@ class TestQueryBoundaryConditions:
                 results, grade_result, _ = await pipeline.retrieve(q, top_k=5)
                 assert isinstance(grade_result.decision.value, str)
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
 
 # ================================================================
@@ -624,10 +627,10 @@ class TestCRAGDecisionBoundaries:
 
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
+        original_search = mock_rm.search_with_score_acl
 
-        # sync mock for synchronous search_with_score
-        mock_rm.search_with_score = lambda q, k: [(mock_doc, 0.9)]
+        # sync mock for synchronous ACL-aware retrieval
+        mock_rm.search_with_score_acl = lambda q, k, **kwargs: [(mock_doc, 0.9)]
         # Also mock reranker to avoid actual call
         original_rerank = mock_rm._reranker.rerank if hasattr(mock_rm, '_reranker') else None
         mock_rm._reranker = MagicMock(rerank=lambda q, docs, top_n: docs[:top_n])
@@ -641,7 +644,7 @@ class TestCRAGDecisionBoundaries:
             decisions = [r[1].decision for r in results_list]
             assert len(set(decisions)) <= 2
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
             if original_rerank:
                 mock_rm._reranker = original_rerank
 
@@ -701,8 +704,8 @@ class TestRRFFusion:
 
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
-        mock_rm.search_with_score = MagicMock(return_value=[(docs[0], 0.9)])
+        original_search = mock_rm.search_with_score_acl
+        mock_rm.search_with_score_acl = MagicMock(return_value=[(docs[0], 0.9)])
 
         pipeline.grader._llm = make_mock_llm(score=4)
 
@@ -710,7 +713,7 @@ class TestRRFFusion:
             results, grade_result, _ = await pipeline.retrieve("年假政策", top_k=5)
             assert isinstance(results, list)
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
 
 # ================================================================
@@ -746,8 +749,11 @@ class TestQueryExpansionAdversarial:
         pipeline = get_corrective_rag_pipeline(rerank_before_grade=False)
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
-        mock_rm.search_with_score = MagicMock(return_value=[])
+        original_search = mock_rm.search_with_score_acl
+        mock_rm.search_with_score_acl = MagicMock(return_value=[])
+        pipeline._decompose_and_search = AsyncMock(
+            return_value=([], MagicMock(all_queries=[]))
+        )
 
         pipeline.grader._llm = make_mock_llm(score=4)
 
@@ -759,7 +765,7 @@ class TestQueryExpansionAdversarial:
             )
             assert grade_result.decision.value in ("no_results", "low")
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
     @pytest.mark.asyncio
     async def test_llm_rewrite_returns_garbage(self):
@@ -804,14 +810,14 @@ class TestQueryExpansionAdversarial:
 
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
-        mock_rm.search_with_score = MagicMock(return_value=[(docs[0], 0.9), (docs[1], 0.8), (docs[2], 0.7)])
+        original_search = mock_rm.search_with_score_acl
+        mock_rm.search_with_score_acl = MagicMock(return_value=[(docs[0], 0.9), (docs[1], 0.8), (docs[2], 0.7)])
 
         try:
             results, grade_result, history = await pipeline.retrieve("年假", top_k=5)
             assert len(history) >= 1
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
 
 # ================================================================
@@ -831,8 +837,8 @@ class TestRetrievalPoisoning:
 
         _ = pipeline.retriever_manager
         mock_rm = pipeline._retriever_manager
-        original_search = mock_rm.search_with_score
-        mock_rm.search_with_score = MagicMock(return_value=[(poison_docs[0], 0.95)])
+        original_search = mock_rm.search_with_score_acl
+        mock_rm.search_with_score_acl = MagicMock(return_value=[(poison_docs[0], 0.95)])
 
         try:
             results, grade_result, _ = await pipeline.retrieve(
@@ -840,7 +846,7 @@ class TestRetrievalPoisoning:
             )
             assert grade_result.low_count >= 0
         finally:
-            mock_rm.search_with_score = original_search
+            mock_rm.search_with_score_acl = original_search
 
     @pytest.mark.asyncio
     async def test_semantic_contradiction_detection(self, conflict_docs):
@@ -883,7 +889,7 @@ class TestRetrievalPoisoning:
         pipeline.grader._llm = make_mock_llm(score=4)
 
         with patch.object(
-            pipeline.retriever_manager, "search_with_score",
+            pipeline.retriever_manager, "search_with_score_acl",
             return_value=[(confidential_doc, 0.9)]
         ):
             results, grade_result, _ = await pipeline.retrieve("年假", top_k=5)
@@ -906,7 +912,7 @@ class TestRetrievalPoisoning:
         pipeline.grader._llm = make_mock_llm(score=4)
 
         with patch.object(
-            pipeline.retriever_manager, "search_with_score",
+            pipeline.retriever_manager, "search_with_score_acl",
             return_value=[(expired_doc, 0.9)]
         ):
             results, grade_result, _ = await pipeline.retrieve("年假", top_k=5)
@@ -940,7 +946,7 @@ class TestRetrievalPerformance:
         pipeline.grader._llm = make_mock_llm(score=4)
 
         with patch.object(
-            pipeline.retriever_manager, "search_with_score",
+            pipeline.retriever_manager, "search_with_score_acl",
             return_value=[(doc, 0.9-i*0.03) for i, doc in enumerate(mock_docs)]
         ):
             start = time.time()
@@ -967,7 +973,7 @@ class TestRetrievalPerformance:
         pipeline.grader._llm = make_mock_llm(score=4)
 
         with patch.object(
-            pipeline.retriever_manager, "search_with_score",
+            pipeline.retriever_manager, "search_with_score_acl",
             return_value=[(mock_doc, 0.9)]
         ):
             start = time.time()
@@ -997,7 +1003,7 @@ class TestRetrievalPerformance:
         pipeline.grader._llm = make_mock_llm(score=2, reasoning="无关")
 
         with patch.object(
-            pipeline.retriever_manager, "search_with_score",
+            pipeline.retriever_manager, "search_with_score_acl",
             return_value=[(mock_low_doc, 0.1)]
         ):
             results, grade_result, history = await pipeline.retrieve(
@@ -1010,6 +1016,9 @@ class TestRetrievalPerformance:
     async def test_llm_rate_limit_retry_success(self):
         """LLM 429限流重试：第3次成功"""
         from src.rag.evaluation.retrieval_grader import RetrievalGrader
+        from src.rag.evaluation.grade_cache import grade_cache_clear
+
+        await grade_cache_clear()
 
         call_count = {"count": 0}
 
@@ -1031,13 +1040,20 @@ class TestRetrievalPerformance:
                       "department_restrict": [], "role_restrict": [], "confidentiality": "internal"},
         )
 
-        grade = await grader.grade_single("年假", doc)
+        with patch(
+            "src.rag.evaluation.retrieval_grader.asyncio.sleep",
+            new=AsyncMock(),
+        ):
+            grade = await grader.grade_single("年假", doc)
         assert call_count["count"] == 3
 
     @pytest.mark.asyncio
     async def test_llm_all_retries_fail(self):
         """LLM 3次重试全部失败 → 返回LOW"""
         from src.rag.evaluation.retrieval_grader import RetrievalGrader
+        from src.rag.evaluation.grade_cache import grade_cache_clear
+
+        await grade_cache_clear()
 
         async def always_fail(prompt):
             raise Exception("500 Internal Server Error")
@@ -1054,7 +1070,11 @@ class TestRetrievalPerformance:
                       "department_restrict": [], "role_restrict": [], "confidentiality": "internal"},
         )
 
-        grade = await grader.grade_single("年假", doc)
+        with patch(
+            "src.rag.evaluation.retrieval_grader.asyncio.sleep",
+            new=AsyncMock(),
+        ):
+            grade = await grader.grade_single("年假", doc)
         assert grade.grade.value == GradeLevel.LOW
         assert "评估失败" in grade.reasoning
 
@@ -1075,7 +1095,7 @@ class TestRetrievalIntegration:
         pipeline.grader._llm = make_mock_llm(score=4, reasoning="高度相关")
 
         with patch.object(
-            pipeline.retriever_manager, "search_with_score",
+            pipeline.retriever_manager, "search_with_score_acl",
             return_value=[(doc, 0.9-i*0.1) for i, doc in enumerate(sample_kb_docs)]
         ):
             results, grade_result, history = await pipeline.retrieve(
@@ -1093,7 +1113,7 @@ class TestRetrievalIntegration:
         pipeline.grader._llm = make_mock_llm(score=4)
 
         with patch.object(
-            pipeline.retriever_manager, "search_with_score",
+            pipeline.retriever_manager, "search_with_score_acl",
             return_value=[(doc, 0.9-i*0.1) for i, doc in enumerate(sample_kb_docs)]
         ):
             results, grade_result, history = await pipeline.retrieve(
@@ -1112,7 +1132,7 @@ class TestRetrievalIntegration:
         pipeline.grader._llm = make_mock_llm(score=4)
 
         with patch.object(
-            pipeline.retriever_manager, "search_with_score",
+            pipeline.retriever_manager, "search_with_score_acl",
             return_value=[(sample_kb_docs[0], 0.9)]
         ):
             results, grade_result, history = await pipeline.retrieve("年假", top_k=5)
@@ -1503,7 +1523,12 @@ class TestRetrievalQualityMetrics:
 
     def test_metrics_engine_evaluate_query(self, sample_kb_docs):
         """引擎：评估单个查询"""
-        engine = RetrievalMetricsEngine()
+        engine = RetrievalMetricsEngine({
+            "公司年假政策是什么": {
+                "relevant": ["员工手册.pdf"],
+                "category": "normal",
+            },
+        })
         retrieved = [
             (sample_kb_docs[0], 0.95),
             (sample_kb_docs[1], 0.90),
@@ -1518,7 +1543,20 @@ class TestRetrievalQualityMetrics:
 
     def test_metrics_engine_aggregate(self, sample_kb_docs):
         """引擎：聚合多个查询结果"""
-        engine = RetrievalMetricsEngine()
+        engine = RetrievalMetricsEngine({
+            "公司年假政策是什么": {
+                "relevant": ["员工手册.pdf"],
+                "category": "normal",
+            },
+            "病假怎么扣": {
+                "relevant": ["HR制度.pdf"],
+                "category": "normal",
+            },
+            "完全不存在的XYZABC内容": {
+                "relevant": [],
+                "category": "adversarial_nonexistent",
+            },
+        })
 
         retrieved_map = {
             "公司年假政策是什么": [
@@ -1551,7 +1589,12 @@ class TestRetrievalQualityMetrics:
 
     def test_metrics_engine_conflict_query(self, conflict_docs):
         """引擎：冲突文档查询"""
-        engine = RetrievalMetricsEngine()
+        engine = RetrievalMetricsEngine({
+            "年假多少天": {
+                "relevant": ["员工手册.pdf", "新政策.pdf"],
+                "category": "normal",
+            },
+        })
         # 2个相关文档：员工手册.pdf、新政策.pdf
         # 检索到：新政策.pdf（第1）、旧政策.pdf（第2）
         retrieved = [
@@ -1573,7 +1616,12 @@ class TestRetrievalQualityMetrics:
 
     def test_metrics_result_to_dict(self, sample_kb_docs):
         """结果序列化：to_dict输出"""
-        engine = RetrievalMetricsEngine()
+        engine = RetrievalMetricsEngine({
+            "公司年假政策是什么": {
+                "relevant": ["员工手册.pdf"],
+                "category": "normal",
+            },
+        })
         retrieved = [(sample_kb_docs[0], 0.95), (sample_kb_docs[1], 0.80)]
         # "公司年假政策是什么"的GT是["员工手册.pdf"]（单个doc）
         result = engine.evaluate_query("公司年假政策是什么", retrieved)
@@ -1589,7 +1637,12 @@ class TestRetrievalQualityMetrics:
 
     def test_aggregated_metrics_to_dict(self, sample_kb_docs):
         """聚合结果序列化"""
-        engine = RetrievalMetricsEngine()
+        engine = RetrievalMetricsEngine({
+            "公司年假政策是什么": {
+                "relevant": ["员工手册.pdf"],
+                "category": "normal",
+            },
+        })
         retrieved_map = {
             "公司年假政策是什么": [(sample_kb_docs[0], 0.95)],
         }
@@ -1618,11 +1671,8 @@ class TestRetrievalQualityMetrics:
 
     def test_ground_truth_doc_ids_valid(self):
         """Ground Truth：所有relevant doc_id均有效"""
-        valid_ids = {
-            "员工手册.pdf", "HR制度.pdf", "加班管理.pdf",
-            "OA操作指南.pdf", "薪酬福利手册.pdf",
-            "新政策.pdf", "旧政策.pdf", "技术部门.pdf",
-        }
+        knowledge_dir = Path(__file__).resolve().parents[1] / "data" / "knowledge"
+        valid_ids = {path.name for path in knowledge_dir.rglob("*") if path.is_file()}
         for q, info in GROUND_TRUTH_DATASET.items():
             for doc_id in info.get("relevant", []):
                 assert doc_id in valid_ids, f"查询'{q}'中的doc_id'{doc_id}'不在有效集合中"
@@ -1640,7 +1690,12 @@ class TestAdversarialMetrics:
 
     def test_poison_keyword_stuffing_recall_impact(self, poison_docs, sample_kb_docs):
         """投毒攻击 Recall 影响：关键词填充不应拉高Recall"""
-        engine = RetrievalMetricsEngine()
+        engine = RetrievalMetricsEngine({
+            "公司年假政策是什么": {
+                "relevant": ["员工手册.pdf"],
+                "category": "normal",
+            },
+        })
 
         # 正常检索：相关文档排在第1
         normal_retrieved = [
@@ -1667,7 +1722,12 @@ class TestAdversarialMetrics:
 
     def test_contradict_doc_precision_impact(self, conflict_docs):
         """冲突文档 Precision 影响：过期/矛盾文档应拉低Precision"""
-        engine = RetrievalMetricsEngine()
+        engine = RetrievalMetricsEngine({
+            "年假多少天": {
+                "relevant": ["员工手册.pdf", "新政策.pdf"],
+                "category": "normal",
+            },
+        })
 
         # 权威检索：新政策.pdf 排在第1（相关文档）
         authoritative_retrieved = [

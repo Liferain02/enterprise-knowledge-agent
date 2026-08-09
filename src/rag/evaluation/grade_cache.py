@@ -29,8 +29,9 @@ logger = logging.getLogger(__name__)
 # 缓存键前缀
 # ============================================================
 
-_GRADE_KEY_PREFIX = "ekb:grade:"
-_METRIC_KEY_PREFIX = "ekb:metric:"
+_CACHE_VERSION = "v2"
+_GRADE_KEY_PREFIX = f"lab:grade:{_CACHE_VERSION}:"
+_METRIC_KEY_PREFIX = f"lab:metric:{_CACHE_VERSION}:"
 
 
 # ============================================================
@@ -39,6 +40,8 @@ _METRIC_KEY_PREFIX = "ekb:metric:"
 
 _redis_client: Optional[Redis] = None
 _redis_available: bool = False
+_redis_retry_after: float = 0.0
+_REDIS_RETRY_COOLDOWN = 30.0
 
 
 async def get_redis_client() -> Optional[Redis]:
@@ -49,10 +52,12 @@ async def get_redis_client() -> Optional[Redis]:
         Redis 客户端实例（连接成功时）
         None（Redis 不可用，降级到内存缓存）
     """
-    global _redis_client, _redis_available
+    global _redis_client, _redis_available, _redis_retry_after
 
     if _redis_available and _redis_client is not None:
         return _redis_client
+    if time.time() < _redis_retry_after:
+        return None
 
     try:
         settings = get_settings()
@@ -82,6 +87,7 @@ async def get_redis_client() -> Optional[Redis]:
         # 测试连接
         await _redis_client.ping()
         _redis_available = True
+        _redis_retry_after = 0.0
         logger.info(f"[Redis Cache] 连接成功: {host}:{port}/{db}")
         return _redis_client
 
@@ -89,12 +95,13 @@ async def get_redis_client() -> Optional[Redis]:
         logger.warning(f"[Redis Cache] Redis 连接失败: {e}，降级到内存缓存")
         _redis_available = False
         _redis_client = None
+        _redis_retry_after = time.time() + _REDIS_RETRY_COOLDOWN
         return None
 
 
 async def close_redis():
     """关闭 Redis 连接（应用关闭时调用）"""
-    global _redis_client, _redis_available
+    global _redis_client, _redis_available, _redis_retry_after
     if _redis_client is not None:
         try:
             await _redis_client.aclose()
@@ -104,6 +111,7 @@ async def close_redis():
         finally:
             _redis_client = None
             _redis_available = False
+            _redis_retry_after = 0.0
 
 
 def is_redis_available() -> bool:

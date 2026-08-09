@@ -74,5 +74,6 @@ scripts/reports/
 tmp/
 temp/
 *.tmp
+.run/
 
 node_modules/

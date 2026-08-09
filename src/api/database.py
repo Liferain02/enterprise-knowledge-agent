@@ -1,35 +1,38 @@
 """
-生产级数据库层 - SQLite
-包含所有生产所需的表：用户、角色、权限、部门、文档元数据、审计日志。
+实验室智能助手数据库层 - SQLite
+包含用户、角色、权限、项目组、文档元数据和审计日志等核心表。
 """
 import sqlite3
-import hashlib
-import secrets
 import time
 import logging
 import re
 import json
+import shutil
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
 from enum import Enum
 from dataclasses import dataclass
 
+from .passwords import hash_password, verify_password_and_upgrade
+
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"
+DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH = DATA_DIR / "enterprise.db"
-
-SALT_LENGTH = 32
-
+DB_PATH = DATA_DIR / "lab_assistant.db"
+LEGACY_DB_PATH = DATA_DIR / "enterprise.db"
+if not DB_PATH.exists() and LEGACY_DB_PATH.exists():
+    shutil.copy2(LEGACY_DB_PATH, DB_PATH)
 
 class RoleEnum(str, Enum):
     ADMIN = "admin"
-    MANAGER = "manager"
-    HR = "hr"
-    EMPLOYEE = "employee"
-    IT_SUPPORT = "it_support"
+    PI = "pi"
+    TEACHER = "teacher"
+    LAB_ADMIN = "lab_admin"
+    SENIOR_STUDENT = "senior_student"
+    STUDENT = "student"
+    ASSISTANT = "assistant"
 
 
 class PermissionEnum(str, Enum):
@@ -82,17 +85,6 @@ def _db_cursor():
         raise
     finally:
         conn.close()
-
-
-def _hash_password(password: str, salt: str) -> str:
-    combined = salt + password + salt
-    for _ in range(3):
-        combined = hashlib.sha256(combined.encode()).hexdigest()
-    return combined
-
-
-def _generate_salt() -> str:
-    return secrets.token_hex(SALT_LENGTH)
 
 
 def init_database():
@@ -193,20 +185,38 @@ def init_database():
 def _init_default_data():
     now = time.time()
     default_roles = [
-        ("admin", "超级管理员，拥有所有权限", 1, [
+        ("admin", "系统管理员，拥有所有权限", 1, [
             "doc:upload", "doc:delete", "doc:update", "doc:read",
             "kb:manage", "kb:read", "user:manage", "audit:read", "sys:config",
         ]),
-        ("manager", "部门经理，可管理本部门文档", 1, [
+        ("pi", "导师/PI，可查看和管理受限资料", 1, [
             "doc:upload", "doc:delete", "doc:update", "doc:read", "kb:read",
         ]),
-        ("hr", "HR，可管理员工相关文档", 1, [
+        ("teacher", "教师，可维护研究方向和项目资料", 1, [
             "doc:upload", "doc:delete", "doc:update", "doc:read", "kb:read",
         ]),
-        ("employee", "普通员工，仅可查看", 1, [
+        ("lab_admin", "实验室管理员，可维护制度、FAQ 与流程资料", 1, [
+            "doc:upload", "doc:delete", "doc:update", "doc:read", "kb:read",
+        ]),
+        ("senior_student", "高年级成员，可维护部分项目资料", 1, [
+            "doc:upload", "doc:delete", "doc:update", "doc:read", "kb:read",
+        ]),
+        ("student", "研究生成员，仅可查看公共资料", 1, [
             "doc:read", "kb:read",
         ]),
-        ("it_support", "IT 支持，可管理 IT 相关文档", 1, [
+        ("assistant", "助研/本科生，可查看公共资料", 1, [
+            "doc:read", "kb:read",
+        ]),
+        ("manager", "兼容旧角色：项目负责人", 1, [
+            "doc:upload", "doc:delete", "doc:update", "doc:read", "kb:read",
+        ]),
+        ("hr", "兼容旧角色：实验室管理员", 1, [
+            "doc:upload", "doc:delete", "doc:update", "doc:read", "kb:read",
+        ]),
+        ("employee", "兼容旧角色：研究组成员", 1, [
+            "doc:read", "kb:read",
+        ]),
+        ("it_support", "兼容旧角色：平台支持", 1, [
             "doc:upload", "doc:delete", "doc:update", "doc:read", "kb:read",
         ]),
     ]
@@ -224,11 +234,11 @@ def _init_default_data():
                         "INSERT OR IGNORE INTO role_permissions (role_id, permission) VALUES (?, ?)",
                         (role_id, perm)
                     )
-        cur.execute("SELECT id FROM departments WHERE name = '总公司'")
+        cur.execute("SELECT id FROM departments WHERE name = '实验室'")
         if not cur.fetchone():
             cur.execute(
                 "INSERT INTO departments (name, parent_id, path, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                ("总公司", None, "/总公司", "根部门", now, now)
+                ("实验室", None, "/实验室", "实验室根节点", now, now)
             )
 
 
@@ -260,7 +270,7 @@ def create_user(
     username: str,
     email: str,
     password: str,
-    role_name: str = "employee",
+    role_name: str = "student",
     department_id: Optional[int] = None,
 ) -> tuple[bool, str, Optional[int]]:
     username = username.strip()
@@ -287,14 +297,13 @@ def create_user(
         role_row = cur.fetchone()
         if not role_row:
             return False, f"角色 {role_name} 不存在", None
-        salt = _generate_salt()
-        password_hash = _hash_password(password, salt)
+        password_hash = hash_password(password)
         cur.execute(
             """INSERT INTO users
                (username, email, password_hash, salt, role_id, department_id,
                 is_active, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)""",
-            (username, email, password_hash, salt, role_row[0], department_id, now, now)
+            (username, email, password_hash, "", role_row[0], department_id, now, now)
         )
         user_id = cur.lastrowid
         write_audit_log(user_id=user_id, username=username, action=AuditAction.USER_CREATE.value,
@@ -321,9 +330,17 @@ def verify_user(username: str, password: str) -> Optional[dict]:
         row = cur.fetchone()
     if not row:
         return None
-    computed_hash = _hash_password(password, row["salt"])
-    if not secrets.compare_digest(computed_hash, row["password_hash"]):
+    valid, upgraded_hash = verify_password_and_upgrade(
+        password, row["password_hash"], row["salt"]
+    )
+    if not valid:
         return None
+    if upgraded_hash:
+        with _db_cursor() as cur:
+            cur.execute(
+                "UPDATE users SET password_hash = ?, salt = '' WHERE id = ?",
+                (upgraded_hash, row["id"]),
+            )
     if not row["is_active"]:
         return None
     with _db_cursor() as cur:
@@ -334,7 +351,7 @@ def verify_user(username: str, password: str) -> Optional[dict]:
         "id": row["id"],
         "username": row["username"],
         "email": row["email"],
-        "role": row["role_name"] or "employee",
+        "role": row["role_name"] or "student",
         "role_id": row["role_id"],
         "department": row["department_name"] or "",
         "department_id": row["department_id"],
@@ -375,7 +392,7 @@ def get_user_by_id(user_id: int) -> Optional[dict]:
         "id": row["id"],
         "username": row["username"],
         "email": row["email"],
-        "role": row["role_name"] or "employee",
+        "role": row["role_name"] or "student",
         "role_id": row["role_id"],
         "department": row["department_name"] or "",
         "department_id": row["department_id"],
@@ -435,7 +452,7 @@ def list_users(
         "id": r["id"],
         "username": r["username"],
         "email": r["email"],
-        "role": r["role_name"] or "employee",
+        "role": r["role_name"] or "student",
         "department": r["department_name"] or "",
         "is_active": bool(r["is_active"]),
         "is_superadmin": bool(r["is_superadmin"]),
@@ -510,14 +527,15 @@ def change_password(user_id: int, old_password: str, new_password: str) -> tuple
         row = cur.fetchone()
     if not row:
         return False, "用户不存在"
-    computed_hash = _hash_password(old_password, row["salt"])
-    if not secrets.compare_digest(computed_hash, row["password_hash"]):
+    valid, _ = verify_password_and_upgrade(
+        old_password, row["password_hash"], row["salt"]
+    )
+    if not valid:
         return False, "原密码错误"
-    salt = _generate_salt()
-    new_hash = _hash_password(new_password, salt)
+    new_hash = hash_password(new_password)
     with _db_cursor() as cur:
         cur.execute("UPDATE users SET password_hash = ?, salt = ?, updated_at = ? WHERE id = ?",
-                    (new_hash, salt, time.time(), user_id))
+                    (new_hash, "", time.time(), user_id))
     logger.info(f"Password changed: {row['username']}")
     return True, "密码修改成功"
 

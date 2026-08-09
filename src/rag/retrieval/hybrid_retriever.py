@@ -52,7 +52,7 @@ class HybridRetrieverManager:
 
     def __init__(
         self,
-        collection_name: str = "enterprise_knowledge",
+        collection_name: str = "lab_knowledge",
         top_k: int = 5,
         vector_weight: float = 0.5,
         bm25_weight: float = 0.5,
@@ -532,7 +532,7 @@ _hybrid_retriever_manager: Optional[HybridRetrieverManager] = None
 
 
 def get_hybrid_retriever_manager(
-    collection_name: str = "enterprise_knowledge",
+    collection_name: str = "lab_knowledge",
     top_k: int = None,
     vector_weight: float = 0.5,
     bm25_weight: float = 0.5,

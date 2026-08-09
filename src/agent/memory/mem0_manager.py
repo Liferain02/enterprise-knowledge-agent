@@ -9,6 +9,7 @@ Mem0 记忆管理器
 - 多会话记忆聚合
 """
 import os
+import asyncio
 import logging
 from typing import Dict, Any, List, Optional
 from config.settings import get_settings
@@ -141,10 +142,11 @@ class Mem0MemoryManager:
                 memory_metadata["session_id"] = session_id
             
             # 添加到 mem0
-            result = self._client.add(
+            result = await asyncio.to_thread(
+                self._client.add,
                 messages=messages,
                 user_id=user_id,
-                metadata=memory_metadata
+                metadata=memory_metadata,
             )
             
             logger.info(f"Mem0 添加记忆成功: user={user_id}, session={session_id}")
@@ -185,11 +187,12 @@ class Mem0MemoryManager:
             if session_id:
                 filters["session_id"] = session_id
             
-            results = self._client.search(
+            results = await asyncio.to_thread(
+                self._client.search,
                 query=query,
                 user_id=user_id,
                 limit=limit,
-                filters=filters if filters else None
+                filters=filters if filters else None,
             )
             
             return results.get("results", [])

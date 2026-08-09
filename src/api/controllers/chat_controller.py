@@ -9,7 +9,7 @@ from ..schemas import (
     ChatRequest, ChatResponse,
     CreateSessionRequest, UpdateTitleRequest, ChatStreamRequest
 )
-from ..services import chat_service
+from ..services.chat_service import chat_service
 from ..security import get_current_user
 from src.rag.retrieval.acl_filter import UserContext
 
@@ -23,7 +23,7 @@ async def health_check():
     """健康检查"""
     return {
         "status": "ok",
-        "service": "enterprise-knowledge-assistant",
+        "service": "lab-knowledge-assistant",
         "version": "1.0.0"
     }
 

@@ -30,7 +30,7 @@ def fix_confidentiality_field():
         settings=ChromaSettings(anonymized_telemetry=False)
     )
 
-    collection = client.get_collection('enterprise_knowledge')
+    collection = client.get_collection('lab_knowledge')
     print(f"\n集合名称: {collection.name}")
     print(f"文档数量: {collection.count()}")
 
@@ -108,7 +108,7 @@ def fix_confidentiality_field():
     from langchain_core.documents import Document
 
     vectorstore = Chroma(
-        collection_name='enterprise_knowledge',
+        collection_name='lab_knowledge',
         embedding_function=embeddings,
         persist_directory='./chroma_db',
         client_settings=ChromaSettings(anonymized_telemetry=False, allow_reset=True)

@@ -2,9 +2,9 @@
 """
 RAG 检索质量综合评测脚本
 ==============================
-对项目真实向量库执行端到端评测，覆盖：
+对线上知识 Agent 使用的真实检索链路执行评测，覆盖：
 1. 检索层指标：Recall@K / Precision@K / MRR / NDCG@K / MAP / Hit@K
-2. 端到端生成层指标（基于关键词重叠）
+2. 检索上下文覆盖指标（基于关键词重叠，不冒充最终答案评测）
 3. 对抗查询测试（注入/模糊/超长/无答案）
 4. CRAG 决策分布统计
 5. 性能指标（延迟/P99/吞吐量）
@@ -13,7 +13,7 @@ RAG 检索质量综合评测脚本
     conda activate agent-demo
     export HTTPS_PROXY=http://127.0.0.1:7897
     export HTTP_PROXY=http://127.0.0.1:7897
-    python -m tests.eval.run_eval
+    python -m tests.eval.run_rag_eval
 """
 import asyncio
 import json
@@ -24,19 +24,16 @@ import math
 import re
 import jieba  # for keyword-based evaluation
 from datetime import datetime
-from pathlib import Path
-from dataclasses import dataclass, field, asdict
-from typing import List, Dict, Any, Optional, Set, Tuple
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Set, Tuple
 from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 os.environ.setdefault("HTTPS_PROXY", "http://127.0.0.1:7897")
 os.environ.setdefault("HTTP_PROXY", "http://127.0.0.1:7897")
-os.environ["DEBUG"] = "true"  # 避免 pydantic Settings 读取系统 DEBUG=release 导致验证失败
 
 from langchain_core.documents import Document
-from langchain_core.messages import AIMessage
 from tests.eval.eval_dataset import EVAL_DATASET, EvalQuery
 
 
@@ -60,24 +57,10 @@ def short_chunk_id(doc: Document, idx: int) -> str:
 
 
 # =============================================================================
-# Ground Truth 标准化（eval_dataset 用的是完整档名，映射到向量库实际文件名）
+# Ground Truth 标准化
 # =============================================================================
 
-# 映射关系：EVAL_DATASET 中的 doc_id → 向量库 metadata["source"] 中的文件名（basename）
-_DOC_NAME_MAP: Dict[str, str] = {
-    "员工手册": "员工手册",
-    "公司简介": "公司简介",
-    "招聘管理制度": "招聘管理制度",
-    "绩效考核制度": "绩效考核制度",
-    "培训发展体系": "培训发展体系",
-    "财务报销制度": "财务报销制度",
-    "行政办公管理制度": "行政办公管理制度",
-    "IT支持服务手册": "IT支持服务手册",
-    "客户服务标准": "客户服务标准",
-    "合同管理规定": "合同管理规定",
-    "信息安全管理制度": "信息安全管理制度",
-    "产品技术文档": "产品技术文档",
-}
+_DOC_NAME_MAP: Dict[str, str] = {}
 
 
 def normalize_doc_ids(ids: List[str]) -> Set[str]:
@@ -92,17 +75,29 @@ def normalize_doc_ids(ids: List[str]) -> Set[str]:
 # 检索指标计算
 # =============================================================================
 
+def _unique_doc_ids(retrieved: List[Document]) -> List[str]:
+    """文档级指标按 source 去重，避免同一文档多个 chunk 重复得分。"""
+    seen = set()
+    result = []
+    for doc in retrieved:
+        doc_id = short_doc_id(doc)
+        if doc_id and doc_id not in seen:
+            seen.add(doc_id)
+            result.append(doc_id)
+    return result
+
+
 def recall_at_k(retrieved: List[Document], relevant: Set[str], k: int) -> float:
     if not relevant:
-        return 1.0
-    topk_ids = {short_doc_id(d) for d in retrieved[:k]}
+        return 0.0
+    topk_ids = set(_unique_doc_ids(retrieved)[:k])
     return len(topk_ids & relevant) / len(relevant)
 
 
 def precision_at_k(retrieved: List[Document], relevant: Set[str], k: int) -> float:
     if k <= 0:
         return 0.0
-    topk_ids = {short_doc_id(d) for d in retrieved[:k]}
+    topk_ids = set(_unique_doc_ids(retrieved)[:k])
     return len(topk_ids & relevant) / k
 
 
@@ -115,8 +110,8 @@ def f1_at_k(p: float, r: float) -> float:
 def mrr(retrieved: List[Document], relevant: Set[str]) -> float:
     if not relevant:
         return 0.0
-    for i, doc in enumerate(retrieved, 1):
-        if short_doc_id(doc) in relevant:
+    for i, doc_id in enumerate(_unique_doc_ids(retrieved), 1):
+        if doc_id in relevant:
             return 1.0 / i
     return 0.0
 
@@ -129,8 +124,8 @@ def ndcg_at_k(retrieved: List[Document], relevant: Set[str], k: int) -> float:
     if k <= 0:
         return 0.0
     if not relevant:
-        return 1.0
-    gains = [1.0 if short_doc_id(d) in relevant else 0.0 for d in retrieved[:k]]
+        return 0.0
+    gains = [1.0 if doc_id in relevant else 0.0 for doc_id in _unique_doc_ids(retrieved)[:k]]
     dcg = _dcg(gains)
     # IDCG: relevant docs at top
     num_rel = min(len(relevant), k)
@@ -140,10 +135,10 @@ def ndcg_at_k(retrieved: List[Document], relevant: Set[str], k: int) -> float:
 
 def _average_precision(retrieved: List[Document], relevant: Set[str]) -> float:
     if not relevant:
-        return 1.0
+        return 0.0
     hits, ap = 0, 0.0
-    for i, doc in enumerate(retrieved, 1):
-        if short_doc_id(doc) in relevant:
+    for i, doc_id in enumerate(_unique_doc_ids(retrieved), 1):
+        if doc_id in relevant:
             hits += 1
             ap += hits / i
     return ap / len(relevant)
@@ -151,8 +146,8 @@ def _average_precision(retrieved: List[Document], relevant: Set[str]) -> float:
 
 def hit_at_k(retrieved: List[Document], relevant: Set[str], k: int) -> float:
     if not relevant:
-        return 1.0
-    topk_ids = {short_doc_id(d) for d in retrieved[:k]}
+        return 0.0
+    topk_ids = set(_unique_doc_ids(retrieved)[:k])
     return 1.0 if topk_ids & relevant else 0.0
 
 
@@ -194,9 +189,9 @@ class QueryResult:
     chunk_r_at_10: float = 0.0
     chunk_mrr: float = 0.0
 
-    # 端到端生成层指标（RAGAS）
-    faithfulness: float = 0.0
-    answer_relevancy: float = 0.0
+    # 检索上下文覆盖指标（不代表最终答案质量）
+    query_context_overlap: float = 0.0
+    ground_truth_coverage: float = 0.0
     context_recall: float = 0.0
     context_precision: float = 0.0
 
@@ -240,9 +235,9 @@ class QueryResult:
             "hit_at_1": round(self.hit_at_1, 4),
             "hit_at_3": round(self.hit_at_3, 4),
             "hit_at_5": round(self.hit_at_5, 4),
-            # 生成层指标
-            "faithfulness": round(self.faithfulness, 4),
-            "answer_relevancy": round(self.answer_relevancy, 4),
+            # 检索上下文覆盖指标
+            "query_context_overlap": round(self.query_context_overlap, 4),
+            "ground_truth_coverage": round(self.ground_truth_coverage, 4),
             "context_recall": round(self.context_recall, 4),
             "context_precision": round(self.context_precision, 4),
             # 性能
@@ -287,35 +282,8 @@ def _categorize_query(q: EvalQuery) -> Tuple[str, str, bool, bool, bool, bool]:
 
 
 # =============================================================================
-# Mock LLM（用于 CRAG 评估）
+# 检索上下文覆盖评估（基于关键词重叠，快速无额外 LLM 调用）
 # =============================================================================
-
-def _make_grade_mock(score: int, reasoning: str):
-    """生成返回固定评分的 mock LLM"""
-    from unittest.mock import MagicMock
-    mock = MagicMock()
-    mock.ainvoke = asyncio.coroutine(
-        lambda prompt: AIMessage(content=f"SCORE: {score}\nREASONING: {reasoning}")
-    )()
-    mock.invoke = MagicMock(return_value=AIMessage(content=f"SCORE: {score}\nREASONING: {reasoning}"))
-    return mock
-
-
-# =============================================================================
-# 答案质量评估（基于关键词重叠，快速无 LLM 调用）
-# =============================================================================
-
-def _keyword_overlap(text1: str, text2: str) -> float:
-    """计算两个文本的关键词重叠率（jieba 分词，>=2字词）"""
-    def _keywords(text):
-        cleaned = re.sub(r'[0-9a-zA-Z\W]', ' ', text)
-        return set(w for w in jieba.cut(cleaned) if len(w) >= 2)
-
-    k1 = _keywords(text1)
-    k2 = _keywords(text2)
-    if not k2:
-        return 1.0
-    return len(k1 & k2) / len(k2)
 
 
 def _keyword_based_eval(
@@ -324,11 +292,11 @@ def _keyword_based_eval(
     query: str,
 ) -> Tuple[float, float, float, float]:
     """
-    基于关键词重叠的答案质量评估（无需 LLM）。
-    返回 (faithfulness, answer_relevancy, context_recall, context_precision)
+    基于关键词重叠的上下文覆盖评估（无需额外 LLM）。
+    返回 (query_context_overlap, ground_truth_coverage, context_recall, context_precision)
 
-    - Faithfulness: 检索上下文中的关键词有多少与查询相关（代理"上下文是否支撑答案"）
-    - Answer Relevancy: ground_truth 关键词在检索文档中出现的比例
+    - Query Context Overlap: 检索上下文中的关键词有多少与查询相关
+    - Ground Truth Coverage: ground_truth 关键词在检索文档中出现的比例
     - Context Recall: 检索到的文档覆盖了多少 ground_truth 关键词
     - Context Precision: 检索到的文档中有多少关键词与查询/答案相关
     """
@@ -355,14 +323,11 @@ def _keyword_based_eval(
     # Context Precision: 上下文关键词中有多少与 GT 相关
     ctx_precision = len(ctx_kw & gt_kw) / len(ctx_kw) if ctx_kw else 0.0
 
-    # Answer Relevancy: GT 关键词在检索文档中的覆盖（等同于 Context Recall）
-    answer_relevancy = ctx_recall
+    ground_truth_coverage = ctx_recall
 
-    # Faithfulness proxy: 上下文关键词中有多少与查询相关
-    # 高Faithfulness表示检索内容紧密围绕查询主题
-    faithfulness = len(ctx_kw & q_kw) / len(ctx_kw) if ctx_kw else 0.0
+    query_context_overlap = len(ctx_kw & q_kw) / len(ctx_kw) if ctx_kw else 0.0
 
-    return faithfulness, answer_relevancy, ctx_recall, ctx_precision
+    return query_context_overlap, ground_truth_coverage, ctx_recall, ctx_precision
 
 
 # =============================================================================
@@ -375,72 +340,40 @@ class RAGEvalEngine:
 
     工作流程：
     1. 对每个查询调用真实 CRAG pipeline 检索
-    2. 计算检索层 + 生成层指标
+    2. 计算检索层 + 上下文覆盖指标
     3. 聚合所有查询的指标
     4. 输出报告
     """
 
-    def __init__(self, top_k: int = 10, enable_ragas: bool = True):
+    def __init__(self, top_k: int = 10, enable_context_metrics: bool = True):
         self.top_k = top_k
-        self.enable_ragas = enable_ragas
+        self.enable_context_metrics = enable_context_metrics
         self._pipeline = None
-        self._retriever = None
-        self._llm = None
 
     @property
     def pipeline(self):
         if self._pipeline is None:
             from src.rag.evaluation.retrieval_grader import get_corrective_rag_pipeline
-            self._pipeline = get_corrective_rag_pipeline(rerank_before_grade=False)
+            self._pipeline = get_corrective_rag_pipeline(rerank_before_grade=True)
         return self._pipeline
 
-    @property
-    def retriever(self):
-        if self._retriever is None:
-            from src.rag.retrieval.retriever import RetrieverManager
-            self._retriever = RetrieverManager(
-                top_k=self.top_k,
-                use_reranker=False,
-                use_hybrid=False,
-            )
-        return self._retriever
-
-    @property
-    def llm(self):
-        if self._llm is None:
-            from src.models.llm import get_llm
-            self._llm = get_llm(temperature=0.1)
-        return self._llm
-
     async def _retrieve_docs(self, query: str) -> Tuple[List[Document], str, float, int, int, str]:
-        """
-        直接调用 ChromaDB 向量检索（绕过 Settings + RetrieverManager，避免配置问题）。
-        ChromaDB 返回的是距离（distance），越低表示越相似。
-        返回 (docs, decision, avg_sim, high_count, low_count, warning)
-        """
+        """调用与线上知识 Agent 相同的 ACL + Hybrid + Rerank + CRAG 链路。"""
         try:
-            from src.rag.storage.vectorstore import VectorStoreManager
-            vs = VectorStoreManager(collection_name="enterprise_knowledge")
-            raw_results = vs.similarity_search_with_score(query, k=self.top_k)
-            docs = [doc for doc, _ in raw_results]
-            # ChromaDB 返回的是 distance（越低越相似），转为相似度
-            distances = [score for _, score in raw_results]
-            similarities = [1.0 / (1.0 + d) for d in distances]
+            from src.rag.retrieval.acl_filter import UserContext
 
-            if not docs:
-                decision = "no_results"
-            else:
-                avg_sim = sum(similarities) / len(similarities)
-                high_count = sum(1 for s in similarities if s >= 0.4)
-                low_count = sum(1 for s in similarities if s < 0.2)
-                if avg_sim >= 0.4 and high_count / len(similarities) >= 0.2:
-                    decision = "high"
-                elif avg_sim < 0.2:
-                    decision = "low"
-                else:
-                    decision = "medium"
-
-            return docs, decision, avg_sim, high_count, low_count, ""
+            results, grade_result, _ = await self.pipeline.retrieve(
+                query=query,
+                top_k=self.top_k,
+                needs_expansion=None,
+                user=UserContext.anonymous(),
+            )
+            docs = [doc for doc, _ in results]
+            decision = grade_result.decision.value if grade_result else "no_results"
+            avg_score = grade_result.avg_score if grade_result else 0.0
+            high_count = grade_result.high_count if grade_result else 0
+            low_count = grade_result.low_count if grade_result else 0
+            return docs, decision, avg_score, high_count, low_count, ""
         except Exception as e:
             print(f"    [WARN] 检索出错 '{query}': {e}")
             return [], "error", 0.0, 0, 0, str(e)
@@ -507,37 +440,18 @@ class RAGEvalEngine:
         result.is_short = is_short_q
         result.has_answer = has_answer
 
-        # 答案质量评估（基于关键词重叠，无需 LLM 调用）
-        if self.enable_ragas and retrieved and not is_adv:
+        # 上下文覆盖评估（基于关键词重叠，不冒充最终答案质量）
+        if self.enable_context_metrics and retrieved and not is_adv:
             contexts = retrieved[:5]
-            faith, rel, crec, cprec = _keyword_based_eval(
+            overlap, coverage, crec, cprec = _keyword_based_eval(
                 contexts, eq.ground_truth, eq.query
             )
-            result.faithfulness = faith
-            result.answer_relevancy = rel
+            result.query_context_overlap = overlap
+            result.ground_truth_coverage = coverage
             result.context_recall = crec
             result.context_precision = cprec
 
         return result
-
-    async def _generate_answer(self, query: str, docs: List[Document]) -> str:
-        """用 LLM 基于检索上下文生成答案"""
-        try:
-            from src.models.llm import get_llm
-            llm = get_llm(temperature=0.3)
-            context_text = "\n\n".join(f"[{i+1}] {d.page_content}" for i, d in enumerate(docs[:5]))
-            prompt = f"""基于以下上下文回答用户问题。只使用上下文中的信息，不要编造。
-
-上下文：
-{context_text}
-
-问题：{query}
-
-回答："""
-            resp = await llm.ainvoke(prompt)
-            return resp.content
-        except Exception as e:
-            return f"[生成失败: {e}]"
 
     async def _eval_adversarial(self) -> List[QueryResult]:
         """评测对抗查询"""
@@ -549,21 +463,21 @@ class RAGEvalEngine:
                 description="无答案对抗",
             ),
             EvalQuery(
-                query="公司决定取消年假制度是真的吗？",
-                relevant_doc_ids=[],
-                ground_truth="无答案（诱导性错误信息）",
+                query="听说实验室已经取消实验记录要求了，是真的吗？",
+                relevant_doc_ids=["论文阅读与实验记录要求"],
+                ground_truth="不是真的，现有制度明确要求每次实验保留目标、环境、代码版本、参数、结果和异常记录。",
                 description="诱导性错误信息",
             ),
             EvalQuery(
-                query="年假年假年假年假年假年假年假年假",
-                relevant_doc_ids=["员工手册"],
-                ground_truth="年假相关",
+                query="RDMA RDMA RDMA RDMA RDMA RDMA RDMA",
+                relevant_doc_ids=["RDMA与高性能网络实验规范"],
+                ground_truth="RDMA 实验规范相关",
                 description="重复字符攻击",
             ),
             EvalQuery(
-                query="\u200b\u200c\u200d\ufeff年假政策是什么？",
-                relevant_doc_ids=["员工手册"],
-                ground_truth="年假政策",
+                query="\u200b\u200c\u200d\ufeff组会多久召开一次？",
+                relevant_doc_ids=["实验室组会制度与汇报要求"],
+                ground_truth="全组组会每周一次",
                 description="零宽字符注入",
             ),
             EvalQuery(
@@ -579,9 +493,9 @@ class RAGEvalEngine:
                 description="超长查询攻击（500字）",
             ),
             EvalQuery(
-                query="年假sick leave policy年假",
-                relevant_doc_ids=["员工手册"],
-                ground_truth="年假相关",
+                query="RDMA network 实验需要记录哪些 NUMA 信息",
+                relevant_doc_ids=["RDMA与高性能网络实验规范"],
+                ground_truth="需要记录网卡、线程和内存 buffer 所在的 NUMA node",
                 description="中英混杂",
             ),
         ]
@@ -633,9 +547,9 @@ class RAGEvalEngine:
                 "Hit@1": _mean([r.hit_at_1 for r in items]),
                 "Hit@3": _mean([r.hit_at_3 for r in items]),
                 "Hit@5": _mean([r.hit_at_5 for r in items]),
-                # RAGAS
-                "Faithfulness": _mean([r.faithfulness for r in items if r.faithfulness > 0]),
-                "Answer-Relevancy": _mean([r.answer_relevancy for r in items if r.answer_relevancy > 0]),
+                # 检索上下文覆盖
+                "Query-Context-Overlap": _mean([r.query_context_overlap for r in items if r.query_context_overlap > 0]),
+                "Ground-Truth-Coverage": _mean([r.ground_truth_coverage for r in items if r.ground_truth_coverage > 0]),
                 "Context-Recall": _mean([r.context_recall for r in items if r.context_recall > 0]),
                 "Context-Precision": _mean([r.context_precision for r in items if r.context_precision > 0]),
                 # 性能
@@ -670,6 +584,10 @@ class RAGEvalEngine:
             "contrast": _agg("Contrast", contrast_q),
             "short": _agg("Short", short_q),
             "no_answer": _agg("No-Answer", no_answer),
+            "no_answer_accuracy": _mean([
+                1.0 if r.crag_decision == "no_results" else 0.0
+                for r in no_answer
+            ]),
             "p99_latency_ms": p99,
             "details": [r.to_dict() for r in results],
         }
@@ -701,10 +619,10 @@ class RAGEvalEngine:
             print(f"{prefix}    Hit@1/3/5       : "
                   f"{s.get('Hit@1',0):.1%} / {s.get('Hit@3',0):.1%} / "
                   f"{s.get('Hit@5',0):.1%}")
-            if s.get("Faithfulness", 0) > 0:
-                print(f"{prefix}  生成层指标 (RAGAS):")
-                print(f"{prefix}    Faithfulness      : {s.get('Faithfulness',0):.4f}")
-                print(f"{prefix}    Answer-Relevancy   : {s.get('Answer-Relevancy',0):.4f}")
+            if s.get("Query-Context-Overlap", 0) > 0:
+                print(f"{prefix}  检索上下文覆盖指标:")
+                print(f"{prefix}    Query-Context-Overlap : {s.get('Query-Context-Overlap',0):.4f}")
+                print(f"{prefix}    Ground-Truth-Coverage : {s.get('Ground-Truth-Coverage',0):.4f}")
                 print(f"{prefix}    Context-Recall     : {s.get('Context-Recall',0):.4f}")
                 print(f"{prefix}    Context-Precision  : {s.get('Context-Precision',0):.4f}")
             if "avg_latency_ms" in s:
@@ -723,8 +641,10 @@ class RAGEvalEngine:
         _print_section("列举查询 Enumerate", agg["enumerate"])
         _print_section("对比查询 Contrast", agg["contrast"])
         _print_section("短查询 Short", agg["short"])
+        _print_section("无答案查询 No-Answer", agg["no_answer"])
 
         print(f"\n  P99 延迟: {agg.get('p99_latency_ms', 0):.0f} ms")
+        print(f"  无答案正确拒答率: {agg.get('no_answer_accuracy', 0):.1%}")
 
         # 单查询详情
         print("\n" + "-" * 80)
@@ -747,7 +667,7 @@ class RAGEvalEngine:
         print(f" RAG 检索质量综合评测")
         print(f" 时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f" 向量库: ChromaDB enterprise_knowledge (top_k={self.top_k})")
-        print(f" RAGAS 评估: {'启用' if self.enable_ragas else '禁用'}")
+        print(f" 上下文覆盖指标: {'启用' if self.enable_context_metrics else '禁用'}")
         print(f"{'='*80}\n")
 
         # 评测正常查询
@@ -778,7 +698,13 @@ async def main():
 
     parser = argparse.ArgumentParser(description="RAG 检索质量综合评测")
     parser.add_argument("--top-k", type=int, default=10, help="检索 top_k（默认10）")
-    parser.add_argument("--no-ragas", action="store_true", help="禁用 RAGAS 生成层评估（节省 LLM 调用）")
+    parser.add_argument(
+        "--no-context-metrics",
+        "--no-ragas",
+        dest="no_context_metrics",
+        action="store_true",
+        help="禁用关键词上下文覆盖指标（--no-ragas 为兼容旧命令）",
+    )
     parser.add_argument("--output", type=str, default="", help="结果 JSON 输出路径")
     parser.add_argument("--dataset", type=str, default="full",
                         choices=["full", "quick"],
@@ -799,7 +725,10 @@ async def main():
         EVAL_DATASET[:] = selected
         print(f"[Quick 模式] 选取 {len(EVAL_DATASET)} 条查询")
 
-    engine = RAGEvalEngine(top_k=args.top_k, enable_ragas=not args.no_ragas)
+    engine = RAGEvalEngine(
+        top_k=args.top_k,
+        enable_context_metrics=not args.no_context_metrics,
+    )
     agg = await engine.run()
 
     if args.output:

@@ -1,5 +1,5 @@
 {
-  "name": "enterprise-knowledge-agent-frontend",
+  "name": "lab-knowledge-assistant-frontend",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -21,4 +21,3 @@
     "vue-tsc": "^2.0.6"
   }
 }
-

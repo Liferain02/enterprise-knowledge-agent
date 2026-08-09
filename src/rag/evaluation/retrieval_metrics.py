@@ -36,128 +36,100 @@ from langchain_core.documents import Document
 
 # 格式: { query: {"relevant": List[doc_id], "category": str, "note": str} }
 GROUND_TRUTH_DATASET: Dict[str, Dict[str, Any]] = {
-    # ----- 核心知识库查询（员工手册相关）-----
-    "公司年假政策是什么": {
-        "relevant": ["员工手册.pdf"],
+    # ----- 核心制度与流程查询 -----
+    "实验室组会怎么汇报": {
+        "relevant": ["实验室组会制度与汇报要求.md"],
         "category": "normal",
-        "note": "员工手册明确说明年假政策（满1年10天，满3年15天）",
+        "note": "组会制度文档明确说明汇报结构和提交流程",
     },
-    "年假多少天": {
-        "relevant": ["员工手册.pdf", "新政策.pdf"],
+    "新生入组第一周看什么": {
+        "relevant": ["新生入组第一周任务清单.md"],
         "category": "normal",
-        "note": "员工手册提供精确天数；新政策.pdf是2026年最新权威版本；旧政策.pdf为过期版本，不应作为答案",
+        "note": "新生入组清单给出推荐阅读顺序和常见任务入口",
     },
-    "年假怎么算": {
-        "relevant": ["员工手册.pdf"],
+    "实验室考勤怎么请假": {
+        "relevant": ["实验室考勤与请假制度.md"],
         "category": "normal",
-        "note": "员工手册提供年假计算规则",
+        "note": "考勤制度文档包含请假申请流程和注意事项",
     },
-    "公司年假": {
-        "relevant": ["员工手册.pdf"],
+    "报销流程是什么": {
+        "relevant": ["报销与采购说明.md"],
         "category": "normal",
-        "note": "直接命中员工手册",
+        "note": "报销与采购说明包含票据、审批和提交要求",
     },
-    # ----- 病假相关 -----
-    "病假怎么扣": {
-        "relevant": ["HR制度.pdf"],
+    # ----- 环境与资源 -----
+    "RDMA实验前要检查什么": {
+        "relevant": ["RDMA与高性能网络实验规范.md"],
         "category": "normal",
-        "note": "HR制度.pdf 明确病假扣除规则（3天额度，80%发放）",
+        "note": "实验规范包含网络配置、驱动和基准测试前检查项",
     },
-    "病假制度": {
-        "relevant": ["HR制度.pdf"],
+    "怎么申请集群账号": {
+        "relevant": ["高性能计算集群使用说明.md"],
         "category": "normal",
-        "note": "HR制度.pdf 详细描述病假额度",
+        "note": "集群说明文档包含账号申请和作业提交要求",
     },
-    # ----- 请假流程 -----
-    "怎么请假": {
-        "relevant": ["OA操作指南.pdf", "员工手册.pdf"],
+    "设备怎么预约": {
+        "relevant": ["设备预约与共享资源使用流程.md"],
         "category": "normal",
-        "note": "OA操作指南.pdf 提供完整请假流程",
+        "note": "资源使用流程说明预约步骤和使用规范",
     },
-    "请假流程是什么": {
-        "relevant": ["OA操作指南.pdf"],
+    "实验室安全和值班有哪些要求": {
+        "relevant": ["实验室安全与值班制度.md"],
         "category": "normal",
-        "note": "OA操作指南.pdf 明确请假步骤",
+        "note": "安全和值班制度明确实验室安全检查、值班职责和异常上报要求",
     },
-    "如何申请年假": {
-        "relevant": ["员工手册.pdf", "OA操作指南.pdf"],
-        "category": "normal",
-        "note": "员工手册说明年假申请条件，OA指南说明流程",
-    },
-    "请假步骤是怎样的": {
-        "relevant": ["OA操作指南.pdf"],
-        "category": "normal",
-        "note": "OA操作指南.pdf",
-    },
-    # ----- 调休相关 -----
-    "调休规定": {
-        "relevant": ["加班管理.pdf"],
-        "category": "normal",
-        "note": "加班管理.pdf 说明调休折算规则（1:1，30天内）",
-    },
-    "加班怎么调休": {
-        "relevant": ["加班管理.pdf"],
-        "category": "normal",
-        "note": "加班管理.pdf 说明调休申请规则",
-    },
-    # ----- 福利相关 -----
-    "公司有哪些福利": {
-        "relevant": ["薪酬福利手册.pdf", "HR制度.pdf", "加班管理.pdf", "员工手册.pdf"],
+    # ----- 列举类 -----
+    "实验室有哪些公共资料": {
+        "relevant": [
+            "新生入组第一周任务清单.md",
+            "实验室组会制度与汇报要求.md",
+            "高性能计算集群使用说明.md",
+            "实验室常见问题FAQ.md",
+        ],
         "category": "enumerate",
-        "note": "列举类查询，多个文档各有部分答案",
+        "note": "列举类查询，多个文档共同覆盖实验室公共资料入口",
     },
-    "员工福利有什么": {
-        "relevant": ["薪酬福利手册.pdf", "HR制度.pdf", "加班管理.pdf", "员工手册.pdf"],
+    "实验室常见流程有哪些": {
+        "relevant": [
+            "实验室考勤与请假制度.md",
+            "报销与采购说明.md",
+            "设备预约与共享资源使用流程.md",
+        ],
         "category": "enumerate",
-        "note": "多文档联合覆盖",
-    },
-    "福利都包括什么": {
-        "relevant": ["薪酬福利手册.pdf", "HR制度.pdf"],
-        "category": "enumerate",
-        "note": "薪酬福利和HR制度各覆盖一部分",
+        "note": "流程类资料分布在多份 operations 文档中",
     },
     # ----- 对比查询 -----
-    "年假和病假的区别": {
-        "relevant": ["员工手册.pdf", "HR制度.pdf"],
+    "RDMA和TCP有什么区别": {
+        "relevant": ["RDMA与高性能网络实验规范.md"],
         "category": "contrast",
-        "note": "对比类：需同时检索年假和病假两个文档",
+        "note": "高性能网络实验规范涉及 RDMA 与传统网络协议的差异背景",
     },
-    "年假与病假的区别": {
-        "relevant": ["员工手册.pdf", "HR制度.pdf"],
+    "分布式NUMA和传统NUMA的区别": {
+        "relevant": ["实验室研究方向与课题地图.md", "分布式NUMA研究计划.docx"],
         "category": "contrast",
-        "note": "对比类：'与'连接词",
+        "note": "方向总览和研究计划分别提供背景与课题目标",
     },
-    "年假跟病假有什么不同": {
-        "relevant": ["员工手册.pdf", "HR制度.pdf"],
-        "category": "contrast",
-        "note": "对比类：'跟'连接词",
-    },
-    "请假类型包含哪些": {
-        "relevant": ["OA操作指南.pdf", "员工手册.pdf", "HR制度.pdf", "加班管理.pdf"],
-        "category": "enumerate",
-        "note": "OA指南列举了事假/病假/年假/调休四种",
-    },
-    # ----- 薪酬相关 -----
-    "五险一金": {
-        "relevant": ["薪酬福利手册.pdf"],
+    # ----- 论文与项目 -----
+    "最近分布式NUMA在做什么": {
+        "relevant": ["分布式NUMA研究计划.docx", "分布式NUMA课题组会模板.md"],
         "category": "normal",
-        "note": "薪酬福利手册.pdf 明确说明五险一金内容",
+        "note": "研究计划和课题模板能共同说明近期工作方向",
     },
-    "住房公积金缴存比例": {
-        "relevant": ["薪酬福利手册.pdf"],
+    "论文阅读记录怎么写": {
+        "relevant": ["论文阅读与实验记录要求.md"],
         "category": "normal",
-        "note": "薪酬福利手册.pdf 明确12%缴存比例",
+        "note": "该文档明确论文笔记和实验记录的结构要求",
     },
     # ----- 极短查询 -----
-    "年假": {
-        "relevant": ["员工手册.pdf"],
+    "组会": {
+        "relevant": ["实验室组会制度与汇报要求.md", "实验室例会纪要_2026-04-15.md"],
         "category": "short",
-        "note": "单关键词，命中员工手册",
+        "note": "短查询应命中制度文档或近期会议纪要",
     },
-    "请假": {
-        "relevant": ["OA操作指南.pdf", "员工手册.pdf"],
+    "集群": {
+        "relevant": ["高性能计算集群使用说明.md"],
         "category": "short",
-        "note": "单关键词，多文档相关",
+        "note": "短关键词查询应命中集群使用说明",
     },
     # ----- 复杂/注入类 -----
     "完全不存在的XYZABC内容": {
@@ -165,10 +137,10 @@ GROUND_TRUTH_DATASET: Dict[str, Dict[str, Any]] = {
         "category": "adversarial_nonexistent",
         "note": "无答案查询，预期 NO_RESULTS",
     },
-    "公司决定取消年假制度": {
+    "实验室决定取消所有组会": {
         "relevant": [],
         "category": "adversarial_contradict",
-        "note": "诱导性错误信息，正确系统不应检索到任何文档",
+        "note": "诱导性错误信息，正确系统不应检索到支持性文档",
     },
 }
 
@@ -595,7 +567,7 @@ class RetrievalMetricsEngine:
     用法:
         engine = RetrievalMetricsEngine()
         result = engine.evaluate_query(
-            query="公司年假政策是什么",
+            query="实验室组会怎么汇报",
             retrieved=[(doc, 0.95), ...],  # pipeline 返回格式
             top_k=10,
         )

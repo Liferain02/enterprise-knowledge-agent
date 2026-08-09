@@ -129,11 +129,11 @@ def build_user_identity_context(user_context) -> str:
     # 支持 UserContext 对象或 dict
     if hasattr(user_context, "username"):
         username = user_context.username
-        role = getattr(user_context, "role", "employee")
+        role = getattr(user_context, "role", "student")
         department_name = getattr(user_context, "department_name", "")
     elif isinstance(user_context, dict):
         username = user_context.get("username", "")
-        role = user_context.get("role", "employee")
+        role = user_context.get("role", "student")
         department_name = user_context.get("department_name", "")
     else:
         return ""
@@ -143,15 +143,21 @@ def build_user_identity_context(user_context) -> str:
 
     role_display = {
         "admin": "管理员",
-        "manager": "部门经理",
-        "hr": "HR专员",
-        "it_support": "IT支持",
-        "employee": "普通员工",
+        "pi": "导师/PI",
+        "teacher": "教师",
+        "lab_admin": "实验室管理员",
+        "senior_student": "高年级成员",
+        "student": "研究生",
+        "assistant": "助研/本科生",
+        "manager": "项目负责人",
+        "hr": "实验室管理员",
+        "it_support": "平台支持",
+        "employee": "研究组成员",
     }.get(role, role)
 
     parts = [f"当前用户：{username}（{role_display}）"]
     if department_name:
-        parts[0] += f"，所属部门：{department_name}"
+        parts[0] += f"，所属项目组：{department_name}"
 
     return "\n\n【当前用户身份】" + "\n".join(parts)
 

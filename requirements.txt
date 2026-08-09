@@ -72,6 +72,7 @@ beautifulsoup4==4.12.3
 lxml==5.3.0
 pypdf==5.1.0
 python-docx==1.1.2
+docx2txt>=0.8
 tiktoken==0.8.0           # 可选保留，如果还想用 OpenAI tokenizer 做 token 计数
 
 python-multipart==0.0.12
@@ -79,6 +80,7 @@ python-frontmatter==1.1.0
 
 # Auth（JWT）
 python-jose[cryptography]==3.4.0
+pwdlib[argon2]==0.3.0
 
 # ============================================================
 # Redis（评估缓存持久化 + 会话缓存）
@@ -102,4 +104,3 @@ pytesseract>=0.3.10   # OCR 文字识别（需要系统安装 tesseract）
 # ============================================================
 tenacity>=8.2.0          # 重试机制 + Circuit Breaker
 schedule>=1.2.0          # 定时任务（备份调度）
-gzip>=1.13               # 备份压缩

@@ -63,7 +63,7 @@ def knowledge_search(
     needs_expansion: bool = None,
 ) -> str:
     """
-    搜索企业知识库（同步封装，异步逻辑在内部处理）。
+    搜索实验室知识库（同步封装，异步逻辑在内部处理）。
 
     检索策略选择逻辑（统一由 Planner 复杂度判断）：
     1. needs_expansion=True（Planner 判复杂）→ Query Expansion
@@ -359,12 +359,12 @@ def create_knowledge_search_tool() -> BaseTool:
     return StructuredTool.from_function(
         func=knowledge_search,
         name="knowledge_search",
-        description="""搜索企业知识库，返回与查询相关的文档内容。
+        description="""搜索实验室知识库，返回与查询相关的文档内容。
 
 适用场景：
-- 回答公司规章制度、技术文档、FAQ等问题
-- 询问某个政策、流程、规范的具体内容
-- 需要从企业文档中查找信息时
+- 回答实验室制度、项目资料、论文笔记、技术文档、FAQ等问题
+- 询问某个流程、规范、组会要求或环境配置的具体内容
+- 需要从实验室文档中查找信息时
 
 输入：搜索查询字符串和返回数量。
 输出：相关文档内容列表。""",

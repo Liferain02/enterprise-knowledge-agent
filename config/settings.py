@@ -6,7 +6,25 @@ import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
+
+
+_INSECURE_ADMIN_PASSWORDS = frozenset({
+    "",
+    "admin",
+    "admin123",
+    "change-me",
+    "pass123",
+    "password",
+    "your-password",
+})
+_INSECURE_JWT_SECRETS = frozenset({
+    "",
+    "change-me-secret",
+    "please-change-this-to-a-long-random-string",
+    "secret",
+    "your-secret-key",
+})
 
 
 class Settings(BaseSettings):
@@ -17,7 +35,6 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
-        env_ignore=["DEBUG", "debug"],
     )
 
     # 阿里千问 API 配置
@@ -52,6 +69,16 @@ class Settings(BaseSettings):
     llm_provider: str = Field(
         default="qwen",
         description="LLM 提供商: qwen / openai"
+    )
+
+    # Embedding 与对话模型分开配置：部分 OpenAI 兼容接口不提供 embeddings。
+    embedding_provider: str = Field(
+        default="qwen",
+        description="Embedding 提供商: qwen / openai"
+    )
+    embedding_model: str = Field(
+        default="text-embedding-v2",
+        description="Embedding 模型名称"
     )
 
     # Vision 模型配置（用于图片理解）
@@ -111,13 +138,25 @@ class Settings(BaseSettings):
         description="API服务主机"
     )
     api_port: int = Field(
-        default=8000,
+        default=8010,
         description="API服务端口"
     )
-    debug: str | bool = Field(
-        default=True,
-        description="调试模式（接受 True/False/release 等字符串）"
+    debug: bool = Field(
+        default=False,
+        description="调试模式；生产环境应保持 false"
     )
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def normalize_debug_mode(cls, value):
+        """兼容旧环境名，同时保证进入运行态的一定是 bool。"""
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"dev", "development", "debug"}:
+                return True
+            if normalized in {"prod", "production", "release"}:
+                return False
+        return value
 
     # Auth 配置（单用户）
     auth_enabled: bool = Field(
@@ -140,6 +179,29 @@ class Settings(BaseSettings):
         default=720,
         description="JWT 过期时间（分钟）"
     )
+
+    @model_validator(mode="after")
+    def validate_auth_secrets(self):
+        """鉴权开启时拒绝仓库公开占位值，避免以可伪造凭据启动。"""
+        if not self.auth_enabled:
+            return self
+
+        problems = []
+        if self.admin_password.strip().lower() in _INSECURE_ADMIN_PASSWORDS:
+            problems.append("ADMIN_PASSWORD 必须替换为非公开口令")
+
+        jwt_secret = self.jwt_secret_key.strip()
+        if (
+            jwt_secret.lower() in _INSECURE_JWT_SECRETS
+            or len(jwt_secret) < 32
+        ):
+            problems.append(
+                "JWT_SECRET_KEY 必须是至少 32 字符的随机密钥"
+            )
+
+        if problems:
+            raise ValueError("鉴权配置不安全：" + "；".join(problems))
+        return self
 
     # Agent 配置
     max_iterations: int = Field(
@@ -463,4 +525,3 @@ def get_settings() -> Settings:
         _settings_instance = Settings()
     _settings_instance.ensure_directories()
     return _settings_instance
-

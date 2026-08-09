@@ -60,7 +60,8 @@ async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         # 传递消息历史，若存在摘要和 Mem0 记忆则在头部注入 SystemMessage
-        config = {"configurable": {"thread_id": f"general_{session_id}"}}
+        # 会话历史只由主图维护，子 Agent 不再创建第二套持久化状态。
+        config = {}
         messages_with_context = inject_user_identity_to_messages(
             messages,
             user_context=state.get("user_context"),
@@ -74,7 +75,7 @@ async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             timeout=GENERAL_TIMEOUT
         )
 
-        # 获取 Agent 返回的所有消息（包含工具调用和最终回复）
+        # 子 Agent 内部消息只用于本次工具循环，不写回主会话状态。
         agent_messages = result.get("messages", [])
         final_answer = agent_messages[-1].content
 
@@ -83,7 +84,7 @@ async def general_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "final_answer": final_answer,
             "used_agent": "general_agent",
-            "messages": agent_messages
+            "messages": [AIMessage(content=final_answer)],
         }
 
     except asyncio.TimeoutError:

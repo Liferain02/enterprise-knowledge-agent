@@ -1,48 +1,47 @@
-"""批量创建员工脚本 - 直接操作SQLite数据库（写入 users.db）"""
+"""批量创建实验室成员脚本 - 直接操作 SQLite 数据库（写入 users.db）"""
+import getpass
 import sqlite3
-import hashlib
-import secrets
+import sys
 import time
 from pathlib import Path
 
+from pwdlib import PasswordHash
+
 # users.db 路径
-DATA_DIR = Path("/share/home/lifr/workspace/code/data")
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "users.db"
-SALT_LENGTH = 32
+PASSWORD_HASH = PasswordHash.recommended()
 
-# 定义要创建的员工列表： (用户名, 邮箱, 密码, 角色)
-EMPLOYEES = [
-    ("alice", "alice@company.com", "pass123", "admin"),
-    ("bob", "bob@company.com", "pass123", "manager"),
-    ("carol", "carol@company.com", "pass123", "hr"),
-    ("david", "david@company.com", "pass123", "it_support"),
-    ("eve", "eve@company.com", "pass123", "employee"),
-    ("frank", "frank@company.com", "pass123", "employee"),
-    ("grace", "grace@company.com", "pass123", "employee"),
-    ("henry", "henry@company.com", "pass123", "employee"),
-    ("iris", "iris@company.com", "pass123", "employee"),
-    ("jack", "jack@company.com", "pass123", "employee"),
+# 定义要创建的实验室成员列表： (用户名, 邮箱, 角色)
+LAB_MEMBERS = [
+    ("prof_chen", "prof_chen@lab.local", "admin"),
+    ("wang", "wang@lab.local", "pi"),
+    ("liu", "liu@lab.local", "teacher"),
+    ("zhao", "zhao@lab.local", "lab_admin"),
+    ("sun", "sun@lab.local", "senior_student"),
+    ("lin", "lin@lab.local", "student"),
+    ("guo", "guo@lab.local", "student"),
+    ("he", "he@lab.local", "assistant"),
 ]
 
+MIN_BOOTSTRAP_PASSWORD_LENGTH = 12
+COMMON_PASSWORDS = {
+    "12345678",
+    "admin123",
+    "changeme",
+    "password",
+    "password123",
+}
 ROLE_NAMES_CN = {
     "admin": "管理员",
-    "manager": "部门经理",
-    "hr": "HR专员",
-    "it_support": "IT支持",
-    "employee": "普通员工",
+    "pi": "导师/PI",
+    "teacher": "教师",
+    "lab_admin": "实验室管理员",
+    "senior_student": "高年级成员",
+    "student": "研究生",
+    "assistant": "助研/本科生",
 }
-
-
-def _hash_password(password: str, salt: str) -> str:
-    combined = salt + password + salt
-    for _ in range(3):
-        combined = hashlib.sha256(combined.encode()).hexdigest()
-    return combined
-
-
-def _generate_salt() -> str:
-    return secrets.token_hex(SALT_LENGTH)
 
 
 def _get_connection():
@@ -171,15 +170,53 @@ def get_role_map():
     return role_map
 
 
+def user_exists(username: str) -> bool:
+    """检查账号是否存在，确保幂等重跑不会再次询问密码。"""
+    conn = _get_connection()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM users WHERE username = ?", (username,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return row is not None
+
+
+def prompt_password(username: str, used_passwords: set[str]) -> str:
+    """在交互终端隐藏读取并确认一个未与本批账号共享的密码。"""
+    if not sys.stdin.isatty():
+        raise RuntimeError("成员初始化必须在交互终端运行，密码不会从命令行读取")
+
+    while True:
+        password = getpass.getpass(f"为 {username} 设置密码（至少 12 字符）: ")
+        if len(password) < MIN_BOOTSTRAP_PASSWORD_LENGTH:
+            print(f"[RETRY] {username}: 密码至少需要 12 个字符")
+            continue
+        if password.lower() in COMMON_PASSWORDS:
+            print(f"[RETRY] {username}: 请勿使用常见弱口令")
+            continue
+        if password in used_passwords:
+            print(f"[RETRY] {username}: 每个账号必须使用不同密码")
+            continue
+
+        confirmation = getpass.getpass(f"再次输入 {username} 的密码: ")
+        if password != confirmation:
+            print(f"[RETRY] {username}: 两次输入不一致")
+            continue
+        return password
+
+
 def create_user(username, email, password, role):
     """创建单个用户（security_user 体系）"""
     # 映射 security_user 角色
     role_map = {
         "admin": "admin",
-        "manager": "editor",
-        "hr": "editor",
-        "it_support": "editor",
-        "employee": "viewer",
+        "pi": "editor",
+        "teacher": "editor",
+        "lab_admin": "editor",
+        "senior_student": "editor",
+        "student": "viewer",
+        "assistant": "viewer",
     }
     internal_role = role_map.get(role, "viewer")
 
@@ -194,12 +231,11 @@ def create_user(username, email, password, role):
 
     # 创建用户
     now = time.time()
-    salt = _generate_salt()
-    password_hash = _hash_password(password, salt)
+    password_hash = PASSWORD_HASH.hash(password)
 
     cur.execute(
         "INSERT INTO users (username, password_hash, salt, created_at) VALUES (?, ?, ?, ?)",
-        (username, password_hash, salt, now)
+        (username, password_hash, "", now)
     )
     user_id = cur.lastrowid
 
@@ -219,19 +255,38 @@ def create_user(username, email, password, role):
     return True, "创建成功", user_id
 
 
-def main():
+def main() -> int:
     print("=" * 60)
-    print("批量创建员工（写入 users.db）")
+    print("批量创建实验室成员（写入 users.db）")
     print("=" * 60)
 
-    role_map = init_db()
+    init_db()
     success_list = []
     fail_list = []
 
-    for username, email, password, role in EMPLOYEES:
+    pending_members = []
+    for username, email, role in LAB_MEMBERS:
+        if user_exists(username):
+            fail_list.append((username, role, "用户名已存在"))
+        else:
+            pending_members.append((username, email, role))
+
+    passwords = {}
+    used_passwords: set[str] = set()
+    try:
+        for username, _, _ in pending_members:
+            password = prompt_password(username, used_passwords)
+            passwords[username] = password
+            used_passwords.add(password)
+    except (EOFError, KeyboardInterrupt, RuntimeError) as exc:
+        print(f"\n[ERROR] 初始化已取消，尚未创建任何新账号：{exc}")
+        return 1
+
+    for username, email, role in pending_members:
+        password = passwords.pop(username)
         success, msg, user_id = create_user(username, email, password, role)
         if success:
-            success_list.append((username, password, role))
+            success_list.append((username, role))
             print(f"[OK] {username} ({ROLE_NAMES_CN.get(role, role)}) - ID: {user_id}")
         else:
             fail_list.append((username, role, msg))
@@ -247,12 +302,12 @@ def main():
     if success_list:
         print()
         print("-" * 60)
-        print("员工账号清单")
+        print("实验室成员账号清单")
         print("-" * 60)
-        print(f"{'用户名':<12} {'密码':<10} {'角色':<12} {'角色说明'}")
+        print(f"{'用户名':<12} {'角色':<12} {'角色说明'}")
         print("-" * 60)
-        for username, password, role in success_list:
-            print(f"{username:<12} {password:<10} {role:<12} {ROLE_NAMES_CN.get(role, role)}")
+        for username, role in success_list:
+            print(f"{username:<12} {role:<12} {ROLE_NAMES_CN.get(role, role)}")
         print("-" * 60)
 
     if fail_list:
@@ -263,6 +318,8 @@ def main():
         for username, role, msg in fail_list:
             print(f"  {username} ({ROLE_NAMES_CN.get(role, role)})")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

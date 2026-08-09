@@ -5,13 +5,25 @@ session_id 全部通过 session_service 统一加上 username 前缀，实现用
 import logging
 import re
 import time
+import asyncio
 from typing import Dict, Any, AsyncGenerator, Optional, List
-from src.agent.graph import run_agent, arun_agent, get_agent_graph, get_agent_graph_async
+from langchain_core.documents import Document
+from src.agent.graph import (
+    run_agent,
+    arun_agent,
+    get_agent_graph,
+    get_agent_graph_async,
+    save_to_mem0_node,
+)
 from config.settings import get_settings
 from .session_service import session_service
 from ..repositories import message_dao
+from .knowledge_service import knowledge_service
+from .research_service import research_service
 
 logger = logging.getLogger(__name__)
+
+_background_chat_tasks: set[asyncio.Task] = set()
 
 # 问候语正则（用于跳过 Mem0 检索和标题生成）
 _GREETING_PATTERNS = re.compile(
@@ -19,14 +31,49 @@ _GREETING_PATTERNS = re.compile(
     re.IGNORECASE
 )
 
-# 角色权限提示（与前端 ACL_DESIGN.md 保持同步）
+_ONBOARDING_PATTERNS = re.compile(
+    r"(刚加入实验室|刚进实验室|新加入实验室|新生入组|新人入组|我刚加入|入组先看什么|先看什么|如何开始)",
+    re.IGNORECASE
+)
+
+# 角色权限提示（与前端角色约定保持同步）
 _ACL_PERMISSION_HINTS = {
-    "admin": "您拥有系统全部权限，可以管理所有文档和用户。",
-    "manager": "您可以访问机密级文档，管理本部门知识内容。",
-    "hr": "您可以访问机密级 HR 文档，管理人事相关制度。",
-    "it_support": "您可以访问机密级 IT 文档，处理技术支持。",
-    "employee": "您可以访问内部公开文档，检索企业知识库。",
+    "admin": "您可管理全部实验室资料与权限配置。",
+    "pi": "您可查看公共、项目组内和负责人可见资料。",
+    "teacher": "您可查看公共与项目组内资料。",
+    "lab_admin": "您可维护公共流程、通知与资料入口。",
+    "senior_student": "您可查看公共与项目组内资料，并维护部分项目资料。",
+    "student": "您可查看实验室公共资料。",
+    "assistant": "您可查看公共资料与新人导览内容。",
+    "manager": "您可查看公共与项目组内资料。",
+    "hr": "您可查看公共与项目组内资料。",
+    "it_support": "您可查看公共与项目组内资料。",
+    "employee": "您可查看实验室公共资料。",
 }
+
+_ROLE_DISPLAY = {
+    "admin": "管理员",
+    "pi": "导师/PI",
+    "teacher": "教师",
+    "lab_admin": "实验室管理员",
+    "senior_student": "高年级成员",
+    "student": "研究生",
+    "assistant": "助研/本科生",
+    "manager": "项目负责人",
+    "hr": "实验室管理员",
+    "it_support": "平台支持",
+    "employee": "研究组成员",
+}
+
+_USER_VISIBLE_ANSWER_TAG = "user_visible_answer"
+
+
+def _is_user_visible_llm_event(event: Dict[str, Any]) -> bool:
+    """只允许显式标记的最终回答进入面向用户的 token 流。"""
+    tags = set(event.get("tags") or [])
+    metadata = event.get("metadata") or {}
+    tags.update(metadata.get("tags") or [])
+    return _USER_VISIBLE_ANSWER_TAG in tags
 
 
 def _user_context_to_dict(user_context) -> Optional[Dict[str, Any]]:
@@ -107,14 +154,23 @@ class ChatService:
         message: str,
         answer: str,
         used_agent: str,
+        sources: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         """保存用户和助手的聊天消息"""
         try:
             session_service.save_message(user_id, session_id, "user", message)
-            metadata = {"agent": used_agent} if used_agent else None
+            metadata = {"agent": used_agent} if used_agent else {}
+            if sources:
+                metadata["sources"] = sources
             session_service.save_message(user_id, session_id, "assistant", answer, metadata)
         except Exception as e:
             logger.warning(f"保存消息失败: {e}")
+
+    def _schedule_memory_save(self, state: Dict[str, Any]) -> None:
+        """响应完成后调度长期记忆，不让 Mem0/遥测网络阻塞 SSE。"""
+        task = asyncio.create_task(save_to_mem0_node(state))
+        _background_chat_tasks.add(task)
+        task.add_done_callback(_background_chat_tasks.discard)
 
     def _sse_event(self, event_type: str, data) -> str:
         """格式化为 SSE 事件"""
@@ -122,10 +178,88 @@ class ChatService:
         content = json.dumps({"type": event_type, "data": data}, ensure_ascii=False)
         return f"data: {content}\n\n"
 
-    def _format_sources(self, sources: Any) -> List[Dict[str, Any]]:
-        if sources and isinstance(sources, str):
-            return [{"content": sources[:200], "metadata": {}}]
+    def _format_sources(self, source_cards: Any) -> List[Dict[str, Any]]:
+        if not source_cards:
+            return []
+        if isinstance(source_cards, list):
+            return source_cards
+        if isinstance(source_cards, str):
+            return [{"title": "知识库来源", "snippet": source_cards[:220], "doc_type": "general"}]
         return []
+
+    def _build_source_cards(self, retrieved_docs: Any, limit: int = 5) -> List[Dict[str, Any]]:
+        if not retrieved_docs:
+            return []
+        results = []
+        for item in retrieved_docs[:limit]:
+            if isinstance(item, tuple):
+                results.append(item)
+            elif isinstance(item, Document):
+                results.append((item, None))
+        return knowledge_service.build_source_cards(results, limit=limit)
+
+    def _maybe_build_onboarding_response(
+        self,
+        message: str,
+        user_context=None,
+    ) -> Optional[Dict[str, Any]]:
+        if not _ONBOARDING_PATTERNS.search(message or ""):
+            return None
+
+        search_result = knowledge_service.search(
+            query="实验室新人入组指南 环境配置 组会制度 常见任务 FAQ",
+            top_k=4,
+            filters={},
+            user_context=user_context,
+        )
+        source_cards = search_result.get("sources", [])
+        if not source_cards:
+            return None
+        research_projects = research_service.list_projects(
+            _user_context_to_dict(user_context) or {"username": "anonymous", "role": "student"}
+        )[:3]
+
+        guidance_lines = [
+            "你可以按下面顺序开始：",
+            "1. 先看实验室简介、研究方向和新人入组说明，建立整体认知。",
+            "2. 再看环境配置、代码仓 README 和服务器使用规范，完成开发环境准备。",
+            "3. 然后看组会制度、周报要求和常见流程说明，了解协作方式。",
+            "4. 最后进入你所在项目的资料、论文笔记和实验记录。",
+            "",
+            "推荐优先资料：",
+        ]
+        for idx, card in enumerate(source_cards, 1):
+            meta = [card.get("doc_type")]
+            if card.get("project_name"):
+                meta.append(card["project_name"])
+            if card.get("author"):
+                meta.append(card["author"])
+            meta_text = " / ".join([m for m in meta if m])
+            guidance_lines.append(f"{idx}. {card.get('title', '未命名资料')}  {meta_text}".rstrip())
+
+        if research_projects:
+            guidance_lines.extend(["", "建议进入的项目空间："])
+            for idx, project in enumerate(research_projects, 1):
+                direction = project.get("research_direction") or "待补充方向"
+                guidance_lines.append(
+                    f"{idx}. {project['title']}  {direction} / 负责人 {project['lead']} / "
+                    f"{project['open_task_count']} 条待办"
+                )
+
+        guidance_lines.extend([
+            "",
+            "常见起步任务：",
+            "- 配置开发环境与账号",
+            "- 熟悉课题方向与项目资料",
+            "- 阅读最近的组会纪要和 FAQ",
+        ])
+        return {
+            "answer": "\n".join(guidance_lines),
+            "sources": source_cards,
+            "used_agent": "knowledge_agent",
+            "image_understood": False,
+            "version_source": "",
+        }
 
     # ==================== 对外接口 ====================
 
@@ -152,6 +286,21 @@ class ChatService:
 
         session_service.ensure_session_exists(user_id, session_id)
 
+        onboarding_result = self._maybe_build_onboarding_response(message, user_context=user_context)
+        if onboarding_result:
+            title = self._generate_title(user_id, message, session_id)
+            self._save_chat_message(
+                user_id,
+                session_id,
+                message,
+                onboarding_result["answer"],
+                onboarding_result["used_agent"],
+                onboarding_result["sources"],
+            )
+            if title:
+                session_service.update_session_title(user_id, session_id, title)
+            return onboarding_result
+
         # 图片理解
         processed_message = await self._prepare_message(message, images)
 
@@ -163,14 +312,19 @@ class ChatService:
         )
 
         answer = result.get("final_answer", "抱歉，无法生成答案。")
-        sources = result.get("sources", "")
+        source_cards = self._build_source_cards(result.get("retrieved_docs"))
         used_agent = result.get("used_agent", "unknown")
+        self._schedule_memory_save({
+            "messages": result.get("messages", []),
+            "session_id": session_id,
+            "user_id": user_id,
+        })
 
         # 生成标题（需在保存消息前判断，此时 message_count 仍为 0）
         title = self._generate_title(user_id, message, session_id)
 
         # 保存消息
-        self._save_chat_message(user_id, session_id, message, answer, used_agent)
+        self._save_chat_message(user_id, session_id, message, answer, used_agent, source_cards)
 
         # 更新标题
         if title:
@@ -187,7 +341,7 @@ class ChatService:
 
         return {
             "answer": answer,
-            "sources": self._format_sources(sources),
+            "sources": self._format_sources(source_cards),
             "used_agent": used_agent,
             "image_understood": bool(images),
         }
@@ -206,15 +360,41 @@ class ChatService:
         user_id = username
         session_service.ensure_session_exists(user_id, session_id)
 
+        onboarding_result = self._maybe_build_onboarding_response(message, user_context=user_context)
+        if onboarding_result:
+            title = self._generate_title(user_id, message, session_id)
+            session_service.save_message(user_id, session_id, "user", message)
+            session_service.save_message(
+                user_id,
+                session_id,
+                "assistant",
+                onboarding_result["answer"],
+                {
+                    "agent": onboarding_result["used_agent"],
+                    "sources": onboarding_result["sources"],
+                }
+            )
+            if title:
+                session_service.update_session_title(user_id, session_id, title)
+            yield self._sse_event("user_profile", {
+                "username": getattr(user_context, "username", username),
+                "role": getattr(user_context, "role", "student"),
+                "role_display": _ROLE_DISPLAY.get(getattr(user_context, "role", "student"), getattr(user_context, "role", "student")),
+                "department": getattr(user_context, "department", ""),
+                "department_name": getattr(user_context, "department_name", ""),
+                "department_path": getattr(user_context, "department_path", ""),
+                "permission_hint": _ACL_PERMISSION_HINTS.get(getattr(user_context, "role", "student"), ""),
+            })
+            yield self._sse_event("used_agent", onboarding_result["used_agent"])
+            for token in onboarding_result["answer"]:
+                yield self._sse_event("llm_token", token)
+            yield self._sse_event("sources", onboarding_result["sources"])
+            yield self._sse_event("done", onboarding_result["answer"][:100])
+            return
+
         # ── SSE 事件 1：立即发送当前用户权限信息 ──────────────────
         if user_context:
-            role_display = {
-                "admin": "管理员",
-                "manager": "部门经理",
-                "hr": "HR专员",
-                "it_support": "IT支持",
-                "employee": "普通员工",
-            }.get(user_context.role, user_context.role)
+            role_display = _ROLE_DISPLAY.get(user_context.role, user_context.role)
             yield self._sse_event("user_profile", {
                 "username": user_context.username,
                 "role": user_context.role,
@@ -227,12 +407,12 @@ class ChatService:
         else:
             yield self._sse_event("user_profile", {
                 "username": username,
-                "role": "employee",
-                "role_display": "普通员工",
+                "role": "student",
+                "role_display": "研究生",
                 "department": "",
                 "department_name": "",
                 "department_path": "",
-                "permission_hint": "您可以访问内部公开文档，检索企业知识库。",
+                "permission_hint": "您可查看实验室公共资料与新人导览内容。",
             })
 
         # 图片理解
@@ -268,9 +448,11 @@ class ChatService:
                 event_type = event.get("event", "")
 
                 if event_type == "on_chat_model_stream":
+                    if not _is_user_visible_llm_event(event):
+                        continue
                     chunk = event.get("data", {}).get("chunk", {})
                     token = getattr(chunk, "content", "") or ""
-                    if token:
+                    if isinstance(token, str) and token:
                         collected_tokens.append(token)
                         yield self._sse_event("llm_token", token)
 
@@ -288,26 +470,41 @@ class ChatService:
 
                 elif event_type == "on_chain_start":
                     name = event.get("name", "")
-                    if name and name not in ("LangGraph",):
-                        yield self._sse_event("agent_step", name)
-
-                elif event_type == "on_chain_end":
-                    name = event.get("name", "")
-                    if name == "maybe_summarize":
-                        yield self._sse_event("thinking", "对话摘要已完成")
+                    status_text = {
+                        "retrieval_agent": "正在检索实验室资料...",
+                        "generation_agent": "正在根据资料组织回答...",
+                    }.get(name)
+                    if status_text:
+                        yield self._sse_event("thinking", status_text)
 
             final_answer = "".join(collected_tokens)
 
-            # 从 checkpointer 提取 sources、used_agent、version_source
+            # 从编译图的公开状态接口提取最终答案与来源。
+            # checkpointer.aget() 返回的是包含 channel_values 的底层快照，
+            # 不能直接按业务字段读取。
             config2 = {"configurable": {"thread_id": f"{user_id}_{session_id}"}}
-            checkpoint = await graph.checkpointer.aget(config2)
-            sources_raw = ""
+            state_snapshot = await graph.aget_state(config2)
+            checkpoint = state_snapshot.values if state_snapshot else {}
+            source_cards = []
             used_agent = "unknown"
             version_source = ""
             if checkpoint:
-                sources_raw = checkpoint.get("sources", "")
+                source_cards = self._build_source_cards(checkpoint.get("retrieved_docs", []))
                 used_agent = checkpoint.get("used_agent", "unknown")
                 version_source = checkpoint.get("version_source", "")
+                checkpoint_answer = checkpoint.get("final_answer", "")
+                if checkpoint_answer:
+                    final_answer = checkpoint_answer
+
+                self._schedule_memory_save({
+                    "messages": checkpoint.get("messages", []),
+                    "session_id": session_id,
+                    "user_id": user_id,
+                })
+
+            # 不经过可见生成节点的降级/工具回答，在图结束后一次性补发。
+            if final_answer and not collected_tokens:
+                yield self._sse_event("llm_token", final_answer)
 
             # 获取 message_count（判断是否首条消息，用于标题生成）
             session_info = session_service.get_session(user_id, session_id)
@@ -315,14 +512,20 @@ class ChatService:
 
             # 流式处理完成后，保存消息
             session_service.save_message(user_id, session_id, "user", message)
-            session_service.save_message(user_id, session_id, "assistant", final_answer, {"agent": used_agent})
+            session_service.save_message(
+                user_id,
+                session_id,
+                "assistant",
+                final_answer,
+                {"agent": used_agent, "sources": source_cards},
+            )
 
             if is_first_message:
                 title = session_service.generate_title(message)
                 if title:
                     session_service.update_session_title(user_id, session_id, title)
 
-            yield self._sse_event("sources", sources_raw[:500] if sources_raw else "")
+            yield self._sse_event("sources", source_cards)
             yield self._sse_event("used_agent", used_agent)
             # 发送版本溯源信息（供前端结构化展示）
             yield self._sse_event("version_source", version_source)

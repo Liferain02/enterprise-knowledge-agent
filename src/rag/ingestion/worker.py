@@ -35,6 +35,9 @@ class IngestionWorker:
         """同步运行 worker（在独立线程中）"""
         self._worker_id = worker_id
         self._running = True
+        recovered = self.queue.recover_stale_jobs()
+        if recovered:
+            logger.warning(f"[{worker_id}] 恢复 {recovered} 个中断的入库任务")
         logger.info(f"[{worker_id}] 启动，轮询间隔 {poll_interval}s")
 
         while self._running and not self._shutdown.is_set():
@@ -103,15 +106,22 @@ class IngestionWorker:
                     raise RuntimeError(f"版本冲突严重，拒绝入库: {ve}") from ve
 
             # ── 3. 嵌入 + 入库 ─────────────────────────────
-            self._embed_and_store(docs, job.metadata)
+            stored_chunks = self._embed_and_store(docs, job.metadata)
 
             # ── 4. 标记完成 ──────────────────────────────────
-            self.queue.complete(job.job_id)
-
             elapsed = time.time() - start
+            self.queue.complete(
+                job.job_id,
+                result={
+                    "stored_chunks": stored_chunks,
+                    "elapsed_seconds": round(elapsed, 2),
+                    "source": job.metadata.get("source"),
+                },
+            )
+
             logger.info(
                 f"[{self._worker_id}] 任务 {job.job_id} 完成，"
-                f"{len(docs)} chunks，耗时 {elapsed:.1f}s"
+                f"{stored_chunks} chunks，耗时 {elapsed:.1f}s"
             )
 
         except Exception as e:
@@ -154,12 +164,12 @@ class IngestionWorker:
 
         return chunks
 
-    def _embed_and_store(self, docs: list, metadata: dict):
+    def _embed_and_store(self, docs: list, metadata: dict) -> int:
         """嵌入并写入向量库"""
         from src.rag.storage.vectorstore import get_vectorstore_manager
 
         if not docs:
-            return
+            return 0
 
         # 补充元数据
         for doc in docs:
@@ -167,20 +177,42 @@ class IngestionWorker:
                 doc.metadata = {}
             for key, value in metadata.items():
                 if key not in doc.metadata:
-                    doc.metadata[key] = value
+                    doc.metadata[key] = self._metadata_scalar(value)
 
         # 生成 chunk ID
         import hashlib
-        for doc in docs:
+        chunk_ids = []
+        file_hash = str(metadata.get("file_hash", ""))
+        for index, doc in enumerate(docs):
             content_hash = hashlib.md5(
-                (doc.page_content + str(metadata.get("doc_id", ""))).encode()
+                (doc.page_content + file_hash + str(index)).encode()
             ).hexdigest()[:12]
             doc.metadata["chunk_hash"] = content_hash
+            doc.metadata["chunk_index"] = index
+            chunk_ids.append(f"{file_hash[:20]}-{index}-{content_hash}")
 
-        # 写入向量库
+        # 先写新 chunks，再删除同来源旧版本。新向量写入失败时，已有
+        # 资料仍然可用，避免更新操作造成知识库数据丢失。
         vsm = get_vectorstore_manager()
-        ids = vsm.add_documents(docs)
+        source = metadata.get("source")
+        old_ids = vsm.get_document_ids_by_source(str(source)) if source else []
+        ids = vsm.add_documents(docs, ids=chunk_ids)
+        obsolete_ids = [item for item in old_ids if item not in set(ids)]
+        if obsolete_ids:
+            vsm.delete_documents_by_ids(obsolete_ids)
         logger.debug(f"写入 {len(ids)} 个 chunks 到向量库")
+        return len(ids)
+
+    @staticmethod
+    def _metadata_scalar(value):
+        """Convert structured upload metadata to Chroma-compatible values."""
+        if value is None:
+            return ""
+        if isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, (list, tuple, set)):
+            return ",".join(str(item) for item in value)
+        return str(value)
 
     def stop(self):
         """优雅关闭"""

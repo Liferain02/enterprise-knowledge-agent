@@ -1,13 +1,12 @@
 """
-企业知识库智能助手 - 主入口
+实验室课题组智能助手 - 主入口
 
-定位：企业内部制度问答与流程检索系统
-优先服务 HR / 行政 / IT 支持三大高频场景
+定位：服务计算机专业研究生实验室课题组的科研知识管理与协作检索
 核心能力：
 - Corrective RAG：检索结果 LLM 评估 + 自我纠错
-- 多租户权限隔离（部门/角色/密级）
-- 文档版本管理与时效性
-- 冲突检测与拒答策略
+- 资料分类检索（论文/项目/组会/实验记录/FAQ）
+- 结构化来源展示与版本追踪
+- 简化权限控制（公共 / 项目组内 / 负责人可见）
 - 异步入库 Pipeline（启动不阻塞）
 - 流式 SSE 输出
 """
@@ -60,7 +59,7 @@ reset_llm()
 
 # 导入路由
 from src.api.controllers import (
-    chat_router, knowledge_router, auth_router, vision_router, _a2a_router
+    chat_router, knowledge_router, research_router, auth_router, feedback_router, vision_router, _a2a_router
 )
 from src.api.routes.websocket_routes import ws_router
 
@@ -97,9 +96,9 @@ def _start_ingestion_worker():
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     print("=" * 60)
-    print("启动企业知识库智能助手...")
-    print("定位：企业内部制度问答与流程检索系统")
-    print("场景：HR / 行政 / IT 支持")
+    print("启动实验室课题组智能助手...")
+    print("定位：科研知识管理与协作检索系统")
+    print("场景：论文 / 项目 / 组会 / 环境配置 / 实验记录")
     print("=" * 60)
 
     # ── 1. 初始化 MCP ─────────────────────────────────────────
@@ -172,13 +171,14 @@ async def lifespan(app: FastAPI):
 
 # 创建FastAPI应用
 app = FastAPI(
-    title="企业知识库智能助手",
+    title="实验室课题组智能助手",
     description=(
-        "企业内部制度问答与流程检索系统\n\n"
-        "**定位**：服务 HR / 行政 / IT 支持三大高频场景\n\n"
+        "面向计算机专业研究生实验室课题组的知识管理与协作检索系统\n\n"
+        "**定位**：服务论文、项目、组会、实验记录、环境配置等场景\n\n"
         "**核心能力**：\n"
         "- Corrective RAG：检索结果 LLM 评估 + 自我纠错\n"
-        "- 多租户权限隔离（部门/角色/密级）\n"
+        "- 资料分层检索与结构化来源展示\n"
+        "- 简化权限隔离（公共 / 项目组内 / 负责人可见）\n"
         "- 文档版本管理与时效性\n"
         "- 冲突检测与拒答策略\n"
         "- 异步入库 Pipeline\n"
@@ -226,7 +226,9 @@ if os.path.exists(FRONTEND_DIST):
 # 注册路由
 app.include_router(chat_router)
 app.include_router(knowledge_router)
+app.include_router(research_router)
 app.include_router(auth_router)
+app.include_router(feedback_router)
 app.include_router(vision_router)
 app.include_router(_a2a_router)  # A2A Agent Card 暴露
 app.include_router(ws_router)  # WebSocket 实时对话
@@ -255,18 +257,26 @@ async def health_check():
         components["vectorstore"] = {"status": "unhealthy", "error": str(e)}
         overall_status = "degraded"
 
-    # ── 2. Redis（评估缓存）──────────
-    try:
-        from src.rag.evaluation import grade_cache
-        redis_ok = await grade_cache.health_check()
+    # ── 2. Redis（可选的评估缓存）──────────
+    # 未配置 Redis 时系统明确使用进程内缓存，这不是服务降级。
+    redis_host = (settings.redis_host or "").strip().lower()
+    if redis_host in ("", "disabled"):
         components["redis"] = {
-            "status": "healthy" if redis_ok else "unavailable",
+            "status": "disabled",
+            "fallback": "memory",
         }
-        if not redis_ok:
+    else:
+        try:
+            from src.rag.evaluation import grade_cache
+            redis_ok = await grade_cache.health_check()
+            components["redis"] = {
+                "status": "healthy" if redis_ok else "unavailable",
+            }
+            if not redis_ok:
+                overall_status = "degraded"
+        except Exception as e:
+            components["redis"] = {"status": "unavailable", "error": str(e)}
             overall_status = "degraded"
-    except Exception as e:
-        components["redis"] = {"status": "unavailable", "error": str(e)}
-        overall_status = "degraded"
 
     # ── 3. MCP 工具可用性 ──────────
     try:
@@ -294,7 +304,7 @@ async def health_check():
 
     response = {
         "status": overall_status,
-        "service": "enterprise-knowledge-assistant",
+        "service": "lab-knowledge-assistant",
         "version": "1.0.0",
         "uptime_ms": round((time.time() - start) * 1000, 1),
         "components": components,

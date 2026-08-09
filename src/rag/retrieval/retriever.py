@@ -8,7 +8,7 @@ import logging
 from typing import List, Optional, Dict, Any
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
-from ..storage.vectorstore import get_vectorstore, VectorStoreManager
+from ..storage.vectorstore import DEFAULT_COLLECTION_NAME, get_vectorstore, VectorStoreManager
 from .reranker import get_reranker_manager
 from config.settings import get_settings
 from .acl_filter import build_acl_filter, UserContext, check_doc_access
@@ -21,7 +21,7 @@ class RetrieverManager:
 
     def __init__(
         self,
-        collection_name: str = "enterprise_knowledge",
+        collection_name: str = DEFAULT_COLLECTION_NAME,
         top_k: int = 5,
         similarity_threshold: float = None,
         use_reranker: bool = True,
@@ -112,7 +112,7 @@ class RetrieverManager:
         
         # 如果启用混合检索
         if self.use_hybrid and self.hybrid_manager:
-            results = self.hybrid_manager.search_with_scores(query, k=k, user=user)
+            results = self.hybrid_manager.search_with_scores(query, k=k)
             # 转换为 (doc, score) 格式
             return [(doc, score) for doc, score, _ in results]
         
@@ -165,33 +165,35 @@ class RetrieverManager:
                     return all(_matches(doc, sub) for sub in cond)
                 if key == "$or":
                     return any(_matches(doc, sub) for sub in cond)
-                if key == "$eq":
-                    return doc.metadata.get(key) == cond
-                if key == "$ne":
-                    return doc.metadata.get(key) != cond
-                if key == "$in":
-                    return doc.metadata.get(key) in cond
-                if key == "$nin":
-                    return doc.metadata.get(key) not in cond
-                if key == "$exists":
-                    return (key in doc.metadata) == cond
-                if key == "$contains":
-                    val = doc.metadata.get(key)
-                    if isinstance(val, list):
-                        return cond in val
-                    if isinstance(val, str):
-                        return cond in val
-                    return False
-                if key == "$gte":
-                    return doc.metadata.get(key, "") >= cond
-                if key == "$lte":
-                    return doc.metadata.get(key, "") <= cond
-                if key == "$gt":
-                    return doc.metadata.get(key, "") > cond
-                if key == "$lt":
-                    return doc.metadata.get(key, "") < cond
-                # 默认：字段存在即匹配
-                return key in doc.metadata
+                value = doc.metadata.get(key)
+                if not isinstance(cond, dict):
+                    if value != cond:
+                        return False
+                    continue
+                for operator, expected in cond.items():
+                    if operator == "$eq" and value != expected:
+                        return False
+                    if operator == "$ne" and value == expected:
+                        return False
+                    if operator == "$in" and value not in expected:
+                        return False
+                    if operator == "$nin" and value in expected:
+                        return False
+                    if operator == "$exists" and ((key in doc.metadata) != expected):
+                        return False
+                    if operator == "$contains":
+                        if not isinstance(value, (list, str)) or expected not in value:
+                            return False
+                    if operator == "$gte" and (value is None or value < expected):
+                        return False
+                    if operator == "$lte" and (value is None or value > expected):
+                        return False
+                    if operator == "$gt" and (value is None or value <= expected):
+                        return False
+                    if operator == "$lt" and (value is None or value >= expected):
+                        return False
+                continue
+            return True
 
         return [(doc, score) for doc, score, *_rest in results if _matches(doc, base_filter)]
 
@@ -456,4 +458,3 @@ def format_retrieved_context_with_rerank(
     manager = get_retriever_manager()
     results = manager.search_with_rerank(query, k=k)
     return manager.format_results_with_score(results)
-

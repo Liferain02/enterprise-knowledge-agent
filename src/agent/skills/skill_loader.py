@@ -13,7 +13,6 @@ from langchain_core.tools import BaseTool
 from src.models.llm import get_llm
 from config.settings import get_settings
 import frontmatter
-from ..checkpointer import get_sync_checkpointer as get_checkpointer
 
 
 class Skill:
@@ -179,14 +178,10 @@ class SkillLoader:
         
         llm = get_llm()
         
-        # 使用单例 checkpointer
-        checkpointer = get_checkpointer()
-        
         agent = create_react_agent(
             llm,
             skill.tools,
             prompt=skill.prompt,
-            checkpointer=checkpointer
         )
         
         self._agents[skill_name] = agent
@@ -253,4 +248,3 @@ __all__ = [
     "create_agent",
     "run_skill"
 ]
-

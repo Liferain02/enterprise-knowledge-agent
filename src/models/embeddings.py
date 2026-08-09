@@ -2,6 +2,7 @@
 向量化嵌入模块
 支持 OpenAI Embeddings 和 阿里千问 Embeddings
 """
+import os
 from typing import Optional, List, Union
 from langchain_core.embeddings import Embeddings
 from config.settings import get_settings
@@ -81,7 +82,7 @@ def get_embeddings(
     Args:
         model: 嵌入模型名称
         dimensions: 嵌入向量维度 (Qwen 不支持)
-        provider: LLM 提供商 "qwen" 或 "openai"
+        provider: Embedding 提供商 "qwen" 或 "openai"
         **kwargs: 其他参数
     
     Returns:
@@ -91,25 +92,25 @@ def get_embeddings(
     
     settings = get_settings()
     
-    # 确定使用哪个 LLM 提供商
-    llm_provider = provider or settings.llm_provider
+    # Embedding 不跟随对话 LLM 切换，避免 DeepSeek 等无 embedding
+    # 端点的 OpenAI 兼容服务导致知识检索整体失效。
+    embedding_provider = provider or settings.embedding_provider
     
     # 如果已有实例，直接返回
     if _embeddings_instance is not None:
         return _embeddings_instance
     
     # 根据提供商创建不同的 Embeddings 实例
-    if llm_provider == "qwen":
+    if embedding_provider == "qwen":
         # 使用 Qwen 的 dashscope SDK
         # 设置代理（dashscope 使用 HTTPX，需要设置环境变量）
-        import os
         http_proxy = os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY")
         if http_proxy:
             os.environ['DASHSCOPE_SDK_HTTP_PROXY'] = http_proxy
             os.environ['DASHSCOPE_SDK_HTTPS_PROXY'] = http_proxy
 
         _embeddings_instance = DashScopeEmbeddings(
-            model=model or "text-embedding-v2",
+            model=model or settings.embedding_model,
             api_key=settings.dashscope_api_key
         )
     else:
@@ -126,7 +127,7 @@ def get_embeddings(
             model_kwargs["https_proxy"] = https_proxy
 
         _embeddings_instance = OpenAIEmbeddings(
-            model=model or "text-embedding-3-small",
+            model=model or settings.embedding_model,
             dimensions=dimensions,
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
@@ -169,4 +170,3 @@ class EmbeddingManager:
         """获取嵌入向量维度"""
         test_embedding = self.embed_query("test")
         return len(test_embedding)
-

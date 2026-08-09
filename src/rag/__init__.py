@@ -1,59 +1,46 @@
+"""RAG 模块公共入口。
+
+保持入口轻量：具体组件按需加载，避免启动 API 或读取资料目录时提前导入
+评估、多模态、Redis 和模型相关依赖。
 """
-RAG 模块 - 检索增强生成
-"""
-from .storage.vectorstore import get_vectorstore_manager, VectorStoreManager
-from .retrieval.retriever import get_retriever_manager
-from .processing.document_loader import (
-    get_document_loader_manager,
-    TokenRecursiveTextSplitter,
-    estimate_tokens,
-    split_sentences,
-)
-from .processing.chunker import SemanticChunker, HybridChunker
+from importlib import import_module
 
-# 评估模块
-try:
-    from .evaluation import RAGEvaluator, EvalResult, EvalSummary, get_evaluator
-    _EVAL_AVAILABLE = True
-except ImportError:
-    _EVAL_AVAILABLE = False
 
-# 多模态处理模块
-try:
-    from .processing.multimodal import MultimodalDocumentProcessor, get_multimodal_processor
-    _MULTIMODAL_AVAILABLE = True
-except ImportError:
-    _MULTIMODAL_AVAILABLE = False
+_EXPORTS = {
+    "get_vectorstore_manager": ("src.rag.storage.vectorstore", "get_vectorstore_manager"),
+    "VectorStoreManager": ("src.rag.storage.vectorstore", "VectorStoreManager"),
+    "get_retriever_manager": ("src.rag.retrieval.retriever", "get_retriever_manager"),
+    "get_document_loader_manager": ("src.rag.processing.document_loader", "get_document_loader_manager"),
+    "TokenRecursiveTextSplitter": ("src.rag.processing.document_loader", "TokenRecursiveTextSplitter"),
+    "estimate_tokens": ("src.rag.processing.document_loader", "estimate_tokens"),
+    "split_sentences": ("src.rag.processing.document_loader", "split_sentences"),
+    "SemanticChunker": ("src.rag.processing.chunker", "SemanticChunker"),
+    "HybridChunker": ("src.rag.processing.chunker", "HybridChunker"),
+    "llm_cache_get": ("src.rag.cache", "llm_cache_get"),
+    "llm_cache_set": ("src.rag.cache", "llm_cache_set"),
+    "retrieval_cache_get": ("src.rag.cache", "retrieval_cache_get"),
+    "retrieval_cache_set": ("src.rag.cache", "retrieval_cache_set"),
+    "retrieval_cache_invalidate": ("src.rag.cache", "retrieval_cache_invalidate"),
+    "cache_get": ("src.rag.cache", "cache_get"),
+    "cache_set": ("src.rag.cache", "cache_set"),
+    "cache_get_or_set": ("src.rag.cache", "cache_get_or_set"),
+    "cache_stats": ("src.rag.cache", "cache_stats"),
+    "cache_health_check": ("src.rag.cache", "health_check"),
+    "RAGEvaluator": ("src.rag.evaluation", "RAGEvaluator"),
+    "EvalResult": ("src.rag.evaluation", "EvalResult"),
+    "EvalSummary": ("src.rag.evaluation", "EvalSummary"),
+    "get_evaluator": ("src.rag.evaluation", "get_evaluator"),
+    "MultimodalDocumentProcessor": ("src.rag.processing.multimodal", "MultimodalDocumentProcessor"),
+    "get_multimodal_processor": ("src.rag.processing.multimodal", "get_multimodal_processor"),
+}
 
-# 缓存模块
-from .cache import (
-    llm_cache_get, llm_cache_set,
-    retrieval_cache_get, retrieval_cache_set, retrieval_cache_invalidate,
-    cache_get, cache_set, cache_get_or_set,
-    cache_stats, health_check as cache_health_check,
-)
+__all__ = list(_EXPORTS)
 
-__all__ = [
-    "get_vectorstore_manager",
-    "VectorStoreManager",
-    "get_retriever_manager",
-    "get_document_loader_manager",
-    "TokenRecursiveTextSplitter",
-    "estimate_tokens",
-    "split_sentences",
-    "SemanticChunker",
-    "HybridChunker",
-    # 缓存
-    "llm_cache_get", "llm_cache_set",
-    "retrieval_cache_get", "retrieval_cache_set", "retrieval_cache_invalidate",
-    "cache_get", "cache_set", "cache_get_or_set",
-    "cache_stats", "cache_health_check",
-]
 
-# 条件性导出评估模块
-if _EVAL_AVAILABLE:
-    __all__.extend(["RAGEvaluator", "EvalResult", "EvalSummary", "get_evaluator"])
-
-# 条件性导出多模态模块
-if _MULTIMODAL_AVAILABLE:
-    __all__.extend(["MultimodalDocumentProcessor", "get_multimodal_processor"])
+def __getattr__(name: str):
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module_name, attribute = _EXPORTS[name]
+    value = getattr(import_module(module_name), attribute)
+    globals()[name] = value
+    return value

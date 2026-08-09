@@ -36,7 +36,7 @@ def reimport_knowledge_base():
     # 初始化向量存储
     print("\n步骤 2: 初始化向量存储...")
     vectorstore = Chroma(
-        collection_name='enterprise_knowledge',
+        collection_name='lab_knowledge',
         embedding_function=embeddings,
         persist_directory='./chroma_db',
         client_settings=ChromaSettings(
@@ -109,7 +109,7 @@ def reimport_knowledge_base():
         path='./chroma_db',
         settings=ChromaSettings(anonymized_telemetry=False)
     )
-    collection = client.get_collection('enterprise_knowledge')
+    collection = client.get_collection('lab_knowledge')
     count = collection.count()
     print(f"  集合文档数: {count}")
 

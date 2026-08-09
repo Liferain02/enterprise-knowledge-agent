@@ -58,12 +58,19 @@ def get_llm(
     if https_proxy and not _os.environ.get("HTTPS_PROXY"):
         _os.environ["HTTPS_PROXY"] = https_proxy
 
+    client_options = {}
+    if llm_provider == "qwen":
+        # qwen3.5-flash 默认开启思考，长 RAG 提示可能在达到
+        # max_tokens 时只产生 reasoning_content 而没有正文。产品问答直接关闭。
+        client_options["extra_body"] = {"enable_thinking": False}
+
     return ChatOpenAI(
         model=model,
         temperature=temperature if temperature is not None else settings.agent_temperature,
         max_tokens=max_tokens or settings.max_token_response,
         api_key=api_key,
         base_url=base_url,
+        **client_options,
     )
 
 

@@ -13,9 +13,9 @@ session_id 统一加上 username_ 前缀，实现用户间完全隔离。
 
 import uuid
 import sqlite3
+import re
 from typing import Dict, Any, List, Optional
 from ..repositories import session_dao, message_dao
-from src.models.llm import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
@@ -153,35 +153,15 @@ class SessionService:
 
     def generate_title(self, first_message: str) -> str:
         """根据第一条消息生成会话标题"""
-        return _generate_title_with_llm(first_message)
+        return _generate_title(first_message)
 
 
-def _generate_title_with_llm(first_message: str) -> str:
-    """使用 LLM 生成会话标题"""
-    llm = get_llm()
-
-    prompt = f"""请为以下用户问题生成一个简洁的会话标题（不超过20个中文字符）。
-
-用户问题：{first_message}
-
-请直接输出标题，不要任何解释或格式。"""
-
-    try:
-        llm_with_max = llm.bind(max_tokens=50)
-        response = llm_with_max.invoke(prompt)
-        title = response.content.strip().replace('\n', '')
-
-        if title and len(title) > 0:
-            if len(title) > 20:
-                title = title[:20]
-            return title
-    except Exception as e:
-        logger.warning(f"LLM 生成标题失败: {e}")
-
-    title = first_message[:20]
-    if len(first_message) > 20:
-        title += "..."
-    return title
+def _generate_title(first_message: str) -> str:
+    """从首条问题生成确定性标题；标题不值得增加一次阻塞式 LLM 调用。"""
+    title = re.sub(r"\s+", " ", first_message or "").strip()
+    if not title:
+        return "新会话"
+    return title[:20] + ("..." if len(title) > 20 else "")
 
 
 # 服务实例

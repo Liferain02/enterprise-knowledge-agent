@@ -6,26 +6,23 @@ import asyncio
 import time as _time
 import logging
 import traceback
-from typing import Dict, Any, List
+from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 from langgraph.graph import MessagesState
-from langgraph.types import Send
-from langchain_core.messages import HumanMessage, RemoveMessage
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
 
 
 logger = logging.getLogger(__name__)
 
-from .agents.supervisor import supervisor_node, route_to_agent
-from .agents.knowledge import knowledge_agent_node, retrieval_agent_node, generation_agent_node
+_background_memory_tasks: set[asyncio.Task] = set()
+
+from .agents.knowledge import retrieval_agent_node, generation_agent_node
 from src.rag.retrieval.acl_filter import UserContext
 from .agents.operation import operation_agent_node
 from .agents.general import general_agent_node
 from .agents.planner import (
     planner_node, route_from_planner,
-    execute_plan_node, route_execute_plan,
-    execute_plan_continue_node,
-    knowledge_step_node, operation_step_node, general_step_node,
 )
 from .checkpointer import get_sync_checkpointer, get_async_checkpointer
 
@@ -65,6 +62,7 @@ class AgentState(MessagesState):
     current_step: int      # 当前执行的步骤索引
     completed_steps: list  # 已完成的步骤
     plan_results: list     # 各步骤的执行结果
+    _quick_agent: str      # Planner 的单一路由结果
 
     # ==================== Supervisor 决策 ====================
     needs_expansion: bool          # 是否需要 Query Expansion
@@ -106,13 +104,22 @@ async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
     messages = state["messages"]
     existing_summary = state.get("summary", "") or ""
 
+    # 只按用户可见的 user/assistant 消息计算阈值；工具调用和内部消息
+    # 不应让摘要提前触发，也不应进入面向后续回答的对话摘要。
+    visible_indices = []
+    for index, msg in enumerate(messages):
+        msg_type = getattr(msg, "type", None) or type(msg).__name__
+        if msg_type in ("human", "HumanMessage", "ai", "AIMessage"):
+            visible_indices.append(index)
+
     # 未超过阈值，直接透传
-    if len(messages) <= threshold:
+    if len(visible_indices) <= threshold:
         return {}
 
     t0 = _time.time()
 
-    old_messages = messages[:-keep_recent]
+    first_kept_index = visible_indices[-keep_recent]
+    old_messages = messages[:first_kept_index]
     # 若旧消息过少则不值得总结
     if len(old_messages) < 2:
         return {}
@@ -124,8 +131,8 @@ async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
         msg_type = getattr(msg, "type", None) or type(msg).__name__
         if msg_type in ("ai", "AIMessage"):
             role = "助手"
-        elif msg_type in ("tool", "ToolMessage"):
-            role = "工具"
+        elif msg_type not in ("human", "HumanMessage"):
+            continue
         content = getattr(msg, "content", "")
         if content:
             lines.append(f"{role}：{content[:300]}")  # 单条最多取 300 字
@@ -225,35 +232,15 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
         session_id = state.get("session_id", "default")
         user_id = state.get("user_id", "default_user")
 
-        # 检索 Mem0 记忆 - 同时检索当前会话和跨会话记忆
+        # 只做一次用户级检索。session_id 已作为记忆元数据保存，跨会话
+        # 查询会自然覆盖当前会话，没必要为同一个问题重复向量检索两次。
         mem0_manager = get_mem0_manager()
-
-        # 1. 优先检索当前会话记忆
-        t1 = _time.time()
-        current_session_memories = await mem0_manager.search(
+        memories = await mem0_manager.search(
             query=current_query,
             user_id=user_id,
-            session_id=session_id,
-            limit=2
+            session_id=None,
+            limit=5,
         )
-        logger.debug("Mem0 检索当前会话: %d 条，耗时 %.2fs", len(current_session_memories), _time.time()-t1)
-
-        # 2. 检索跨会话记忆（不限制会话）
-        t2 = _time.time()
-        cross_session_memories = await mem0_manager.search(
-            query=current_query,
-            user_id=user_id,
-            session_id=None,  # 跨会话检索
-            limit=3
-        )
-        logger.debug("Mem0 检索跨会话: %d 条，耗时 %.2fs", len(cross_session_memories), _time.time()-t2)
-
-        # 合并记忆，去重
-        all_memories = {m["id"]: m for m in current_session_memories}
-        for m in cross_session_memories:
-            if m["id"] not in all_memories:
-                all_memories[m["id"]] = m
-        memories = list(all_memories.values())[:5]
 
         if not memories:
             logger.debug("Mem0 无相关记忆，耗时 %.2fs", _time.time()-t0)
@@ -283,9 +270,11 @@ def create_multi_agent_graph() -> StateGraph:
 
     工作流程：
     1. 接收用户消息
-    2. Planner 判断任务复杂度
-       - 简单任务 → Supervisor 路由 → Worker Agent → END
-       - 复杂任务 → Execute Plan（逐步执行各子步骤）→ END
+    2. Planner 作为唯一入口路由器
+       - 知识任务（含复杂对比/列举）→ ACL 感知的 Retrieval → Generation
+       - 工具任务 → Operation Agent
+       - 通用对话 → General Agent
+    3. 所有分支通过统一终态节点结束；长期记忆由 ChatService 在响应后调度
     """
     workflow = StateGraph(AgentState)
 
@@ -295,82 +284,61 @@ def create_multi_agent_graph() -> StateGraph:
     # Mem0 记忆检索节点
     workflow.add_node("retrieve_mem0_memories", retrieve_mem0_memories_node)
 
-    # Mem0 记忆保存节点
-    workflow.add_node("save_to_mem0", save_to_mem0_node)
-
     # Worker Agent 节点
-    workflow.add_node("supervisor", supervisor_node)
-    workflow.add_node("knowledge_agent", knowledge_agent_node)  # 保留（向后兼容）
     workflow.add_node("retrieval_agent", retrieval_agent_node)   # 新增：检索阶段
     workflow.add_node("generation_agent", generation_agent_node) # 新增：生成阶段
     workflow.add_node("operation_agent", operation_agent_node)
     workflow.add_node("general_agent", general_agent_node)
+    workflow.add_node("finalize_response", finalize_response_node)
 
     # Planner 节点（任务规划）
     workflow.add_node("planner", planner_node)
-
-    # Execute Plan 节点（复杂任务逐步执行）
-    workflow.add_node("execute_plan", execute_plan_node)
-
-    # Send Worker 节点（通过 Send 原语调用的专用 Worker）
-    # 这些节点接收 Send 分派的独立步骤，执行后返回 StepResult
-    workflow.add_node("knowledge_step_node", knowledge_step_node)
-    workflow.add_node("operation_step_node", operation_step_node)
-    workflow.add_node("general_step_node", general_step_node)
-
-    # Execute Plan → 继续分发下一批次 或 汇总
-    workflow.add_conditional_edges(
-        "execute_plan",
-        route_execute_plan,
-        {
-            "continue": "execute_plan",  # 继续分发下一批次
-            "execute_plan": "execute_plan",
-            "save_to_mem0": "save_to_mem0",
-        }
-    )
 
     # 入口：maybe_summarize → retrieve_mem0_memories → planner
     workflow.set_entry_point("maybe_summarize")
     workflow.add_edge("maybe_summarize", "retrieve_mem0_memories")
     workflow.add_edge("retrieve_mem0_memories", "planner")
 
-    # Planner → Supervisor / Worker Agent（简单）或 Execute Plan（复杂）
-    # route_from_planner 可能返回：supervisor / general_agent / operation_agent / knowledge_agent / execute_plan
+    # Planner 是唯一入口路由器，不再叠加 Supervisor 或多 Agent Send 分支。
     workflow.add_conditional_edges(
         "planner",
         route_from_planner,
         {
-            "supervisor": "supervisor",
-            "execute_plan": "execute_plan",
+            "retrieval_agent": "retrieval_agent",
             "general_agent": "general_agent",
             "operation_agent": "operation_agent",
-            "knowledge_agent": "supervisor",  # knowledge → supervisor 再路由到 retrieval_agent
-        }
-    )
-
-    # Supervisor → Worker Agent
-    # route_to_agent: knowledge_agent → retrieval_agent（两阶段）
-    workflow.add_conditional_edges(
-        "supervisor",
-        route_to_agent,
-        {
-            "retrieval_agent": "retrieval_agent",  # 检索阶段
-            "operation_agent": "operation_agent",
-            "general_agent": "general_agent",
         }
     )
 
     # retrieval_agent → generation_agent（检索完成后生成）
     workflow.add_edge("retrieval_agent", "generation_agent")
 
-    # Worker Agent → save_mem0 → END
-    workflow.add_edge("generation_agent", "save_to_mem0")   # 新流程
-    workflow.add_edge("knowledge_agent", "save_to_mem0")    # 保留旧版
-    workflow.add_edge("operation_agent", "save_to_mem0")
-    workflow.add_edge("general_agent", "save_to_mem0")
-    workflow.add_edge("save_to_mem0", END)
+    # Worker Agent → 统一终态 → END。Mem0 不属于用户响应关键路径。
+    workflow.add_edge("generation_agent", "finalize_response")
+    workflow.add_edge("operation_agent", "finalize_response")
+    workflow.add_edge("general_agent", "finalize_response")
+    workflow.add_edge("finalize_response", END)
 
     return workflow
+
+
+async def finalize_response_node(state: AgentState) -> Dict[str, Any]:
+    """统一所有 Worker 的最终消息契约，供持久化、摘要和 Mem0 复用。"""
+    final_answer = (state.get("final_answer") or "").strip()
+    if not final_answer:
+        final_answer = "抱歉，无法生成答案。"
+
+    messages = state.get("messages", [])
+    if messages:
+        last = messages[-1]
+        last_type = getattr(last, "type", None) or type(last).__name__
+        if last_type in ("ai", "AIMessage") and getattr(last, "content", "") == final_answer:
+            return {"final_answer": final_answer}
+
+    return {
+        "final_answer": final_answer,
+        "messages": [AIMessage(content=final_answer)],
+    }
 
 
 # ==================== Mem0 记忆保存节点 ====================
@@ -422,11 +390,17 @@ async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
         session_id = state.get("session_id", "default")
         user_id = state.get("user_id", "default_user")
 
-        # 转换消息格式
+        # 转换消息格式。只保存用户可见的 user/assistant 对话，工具消息
+        # 和内部步骤不能被误标为 assistant 长期记忆。
         msg_list = []
         for msg in messages[-4:]:  # 只保存最近4条消息
             msg_type = getattr(msg, "type", None) or type(msg).__name__
-            role = "user" if msg_type in ("human", "HumanMessage") else "assistant"
+            if msg_type in ("human", "HumanMessage"):
+                role = "user"
+            elif msg_type in ("ai", "AIMessage"):
+                role = "assistant"
+            else:
+                continue
             content = getattr(msg, "content", "")
             if content:
                 msg_list.append({"role": role, "content": content})
@@ -434,32 +408,21 @@ async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
         if not msg_list:
             return {}
 
-        # 保存到 Mem0 - 同时保存当前会话和跨会话记忆
+        # 一次写入即可；跨会话检索按 user_id 查询同一批记忆。
+        # 记忆提取可能包含额外 LLM 调用，不能阻塞最终 SSE sources/done。
         mem0_manager = get_mem0_manager()
-
-        # 1. 保存当前会话记忆
-        t1 = _time.time()
-        result = await mem0_manager.add_conversation(
-            messages=msg_list,
-            user_id=user_id,
-            session_id=session_id
+        task = asyncio.create_task(
+            _persist_mem0_conversation(
+                mem0_manager=mem0_manager,
+                messages=msg_list,
+                user_id=user_id,
+                session_id=session_id,
+            )
         )
-        logger.debug("Mem0 保存当前会话，耗时 %.2fs", _time.time()-t1)
+        _background_memory_tasks.add(task)
+        task.add_done_callback(_background_memory_tasks.discard)
 
-        # 2. 保存跨会话记忆（不带 session_id 限制，用于跨会话检索）
-        cross_session_msg_list = [
-            {"role": m["role"], "content": m["content"]}
-            for m in msg_list
-        ]
-        t2 = _time.time()
-        await mem0_manager.add_conversation(
-            messages=cross_session_msg_list,
-            user_id=user_id,
-            session_id=None  # 跨会话记忆
-        )
-        logger.debug("Mem0 保存跨会话，耗时 %.2fs", _time.time()-t2)
-
-        logger.debug("Mem0 保存完成，耗时 %.2fs", _time.time()-t0)
+        logger.debug("Mem0 已提交后台保存，调度耗时 %.2fs", _time.time()-t0)
 
         return {}
 
@@ -467,6 +430,23 @@ async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
         import logging
         logging.getLogger(__name__).warning(f"Mem0 保存记忆失败: {e}")
         return {}
+
+
+async def _persist_mem0_conversation(
+    mem0_manager,
+    messages: list[dict[str, str]],
+    user_id: str,
+    session_id: str,
+) -> None:
+    """后台持久化长期记忆，失败只记录日志，不影响用户回答。"""
+    try:
+        await mem0_manager.add_conversation(
+            messages=messages,
+            user_id=user_id,
+            session_id=session_id,
+        )
+    except Exception as exc:
+        logger.warning("Mem0 后台保存失败: %s", exc)
 
 
 # ==================== 图编译与缓存 ====================
@@ -526,6 +506,7 @@ def _extract_result(result: Dict[str, Any]) -> Dict[str, Any]:
         "sources": result.get("sources", ""),
         "used_agent": result.get("used_agent", "unknown"),
         "version_source": result.get("version_source", ""),
+        "retrieved_docs": result.get("retrieved_docs", []),
         "messages": result.get("messages", [])
     }
 

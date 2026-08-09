@@ -3,7 +3,7 @@
 """
 import pytest
 from src.api.middleware.input_security import (
-    InputSanitizer, PIIFilter,
+    InputSanitizer, InputSecurityMiddleware, PIIFilter,
     check_input, sanitize_input, detect_pii, mask_pii,
 )
 
@@ -96,3 +96,18 @@ class TestConvenienceFunctions:
         clean = sanitize_input(text)
         assert "\u200b" not in clean
         assert "\u200f" not in clean
+
+
+def test_feedback_checks_user_text_but_not_assistant_markdown():
+    middleware = InputSecurityMiddleware(app=lambda scope, receive, send: None)
+    text = middleware._extract_text_from_json({
+        "session_id": "session-1",
+        "question": "组会多久开一次？",
+        "answer": "# 结论\n```sql\nSELECT * FROM records;\n```",
+        "used_agent": "knowledge",
+        "feedback_type": "helpful",
+        "comment": "引用很清楚",
+    })
+
+    assert text == "组会多久开一次？ 引用很清楚" or text == "引用很清楚 组会多久开一次？"
+    assert InputSanitizer.check(text).safe is True

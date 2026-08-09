@@ -25,7 +25,7 @@ class DocumentVersion:
     expiry_date: Optional[str]  # None = 永久有效
     status: str  # draft / active / archived / superseded
     superseded_by: Optional[str]
-    source_system: str  # HRMS / KMS / 手动上传
+    source_system: str  # 实验室资料库 / 项目文档 / 手动上传
     changelog: Optional[str]
     uploaded_by: str
     created_at: float
@@ -398,17 +398,31 @@ class DocumentVersionManager:
 
         for doc in docs:
             meta = getattr(doc, "metadata", None) or {}
+            raw_name = (
+                meta.get("title")
+                or meta.get("document_title")
+                or meta.get("file_name")
+                or meta.get("source")
+                or "未知文件"
+            )
+            # source 可能是服务器绝对路径；溯源只展示用户可理解的资料名。
+            display_name = Path(str(raw_name)).name
+            if display_name != "未知文件" and Path(display_name).suffix.lower() in {
+                ".md", ".txt", ".pdf", ".doc", ".docx", ".html", ".csv", ".json"
+            }:
+                display_name = Path(display_name).stem
             key = (
+                display_name,
                 meta.get("version", "未知"),
                 meta.get("effective_date", "未知"),
                 meta.get("source_system", "手动上传"),
             )
             if key not in sources:
                 sources[key] = {
-                    "filename": meta.get("source", "未知文件"),
-                    "version": key[0],
-                    "effective_date": key[1],
-                    "source_system": key[2],
+                    "filename": display_name,
+                    "version": key[1],
+                    "effective_date": key[2],
+                    "source_system": key[3],
                     "count": 1,
                 }
             else:
@@ -431,7 +445,7 @@ class DocumentVersionManager:
             "\n\n---\n\n"
             "**依据来源**：\n"
             + "\n".join(lines)
-            + "\n\n> 本回答依据当前有效版本生成。如有疑问，请联系 HR 或制度管理员确认最新规定。"
+            + "\n\n> 本回答依据当前有效版本生成。如有疑问，请联系导师、项目负责人或实验室管理员确认最新要求。"
         )
 
 

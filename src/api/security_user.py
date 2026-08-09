@@ -2,7 +2,7 @@
 用户管理模块 - SQLite 数据库 + 密码哈希 + RBAC
 
 支持：
-- 用户注册（用户名 + 密码，加盐 SHA-256 哈希）
+- 用户注册（用户名 + 密码，Argon2 哈希）
 - 用户登录（验证密码）
 - JWT Token 认证
 - RBAC 角色权限控制
@@ -14,24 +14,21 @@
   role_permissions(id, role_id, resource, action)
 """
 import sqlite3
-import hashlib
-import secrets
 import time
 import logging
 from pathlib import Path
 from typing import Optional, List
 from contextlib import contextmanager
 
+from .passwords import hash_password, verify_password_and_upgrade
+
 logger = logging.getLogger(__name__)
 
 # 数据目录
-DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"
+DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "users.db"
-
-# SALT 长度
-SALT_LENGTH = 32
-
+LEGACY_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "users.db"
 
 def _get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
@@ -95,6 +92,7 @@ def init_user_db():
         """)
         # 初始化默认角色
         _init_default_roles(cur)
+        _merge_legacy_users(cur)
         logger.info(f"用户数据库已初始化: {DB_PATH}")
 
 
@@ -113,8 +111,8 @@ def _init_default_roles(cur):
 
     for name, description in [
         (ADMIN_ROLE, "管理员 - 全部权限"),
-        (EDITOR_ROLE, "编辑 - 可读写知识库"),
-        (VIEWER_ROLE, "访客 - 仅可读"),
+        (EDITOR_ROLE, "资料维护者 - 可读写实验室知识库"),
+        (VIEWER_ROLE, "普通成员 - 仅可读"),
     ]:
         cur.execute("SELECT id FROM roles WHERE name = ?", (name,))
         row = cur.fetchone()
@@ -159,16 +157,26 @@ def _init_default_roles(cur):
             )
 
 
-def _hash_password(password: str, salt: str) -> str:
-    """SHA-256 加盐哈希"""
-    combined = salt + password + salt
-    for _ in range(3):
-        combined = hashlib.sha256(combined.encode()).hexdigest()
-    return combined
+def _merge_legacy_users(cur):
+    """增量合并旧路径账号，避免修正数据目录后丢失已有登录用户。"""
+    if not LEGACY_DB_PATH.exists() or LEGACY_DB_PATH.resolve() == DB_PATH.resolve():
+        return
 
-
-def _generate_salt() -> str:
-    return secrets.token_hex(SALT_LENGTH)
+    cur.execute("ATTACH DATABASE ? AS legacy_users", (str(LEGACY_DB_PATH),))
+    cur.execute(
+        """INSERT OR IGNORE INTO users (username, password_hash, salt, created_at)
+           SELECT username, password_hash, salt, created_at
+           FROM legacy_users.users"""
+    )
+    cur.execute(
+        """INSERT OR IGNORE INTO user_roles (user_id, role_id, assigned_at)
+           SELECT local_user.id, local_role.id, legacy_link.assigned_at
+           FROM legacy_users.user_roles AS legacy_link
+           JOIN legacy_users.users AS legacy_user ON legacy_user.id = legacy_link.user_id
+           JOIN legacy_users.roles AS legacy_role ON legacy_role.id = legacy_link.role_id
+           JOIN users AS local_user ON local_user.username = legacy_user.username
+           JOIN roles AS local_role ON local_role.name = legacy_role.name"""
+    )
 
 
 def register_user(username: str, password: str) -> tuple[bool, str]:
@@ -200,13 +208,12 @@ def register_user(username: str, password: str) -> tuple[bool, str]:
             return False, "用户名已存在"
 
         # 创建用户
-        salt = _generate_salt()
-        password_hash = _hash_password(password, salt)
+        password_hash = hash_password(password)
         created_at = time.time()
 
         cur.execute(
             "INSERT INTO users (username, password_hash, salt, created_at) VALUES (?, ?, ?, ?)",
-            (username, password_hash, salt, created_at)
+            (username, password_hash, "", created_at)
         )
 
     logger.info(f"用户注册成功: {username}")
@@ -230,14 +237,22 @@ def verify_user(username: str, password: str) -> Optional[dict]:
     if not row:
         return None
 
-    # 验证密码
-    computed_hash = _hash_password(password, row["salt"])
-    if not secrets.compare_digest(computed_hash, row["password_hash"]):
+    # 验证密码；旧 SHA-256 账号在首次成功登录后原位升级为 Argon2
+    valid, upgraded_hash = verify_password_and_upgrade(
+        password, row["password_hash"], row["salt"]
+    )
+    if not valid:
         return None
+    if upgraded_hash:
+        with _db_cursor() as cur:
+            cur.execute(
+                "UPDATE users SET password_hash = ?, salt = '' WHERE id = ?",
+                (upgraded_hash, row["id"]),
+            )
 
     # 获取用户角色（取第一个角色）
     roles = get_user_roles(username)
-    role = roles[0] if roles else "employee"
+    role = roles[0] if roles else VIEWER_ROLE
 
     # 获取用户部门信息（从 user_roles 关联获取，默认为空）
     department = ""
@@ -256,7 +271,7 @@ def verify_user(username: str, password: str) -> Optional[dict]:
 
 
 def get_user_by_username(username: str) -> Optional[dict]:
-    """根据用户名查找用户"""
+    """根据用户名读取当前账号和授权上下文。"""
     with _db_cursor() as cur:
         cur.execute(
             "SELECT id, username, created_at FROM users WHERE username = ?",
@@ -267,10 +282,16 @@ def get_user_by_username(username: str) -> Optional[dict]:
     if not row:
         return None
 
+    roles = get_user_roles(username)
+
     return {
         "id": row["id"],
         "username": row["username"],
         "created_at": row["created_at"],
+        "role": roles[0] if roles else VIEWER_ROLE,
+        "department": "",
+        "department_name": "",
+        "department_path": "",
     }
 
 
@@ -285,11 +306,10 @@ def change_password(username: str, old_password: str, new_password: str) -> tupl
         return False, "原密码错误"
 
     with _db_cursor() as cur:
-        salt = _generate_salt()
-        password_hash = _hash_password(new_password, salt)
+        password_hash = hash_password(new_password)
         cur.execute(
             "UPDATE users SET password_hash = ?, salt = ? WHERE username = ?",
-            (password_hash, salt, username)
+            (password_hash, "", username)
         )
 
     logger.info(f"密码修改成功: {username}")
@@ -308,6 +328,12 @@ def get_user_roles(username: str) -> List[str]:
             JOIN user_roles ur ON r.id = ur.role_id
             JOIN users u ON u.id = ur.user_id
             WHERE u.username = ?
+            ORDER BY CASE r.name
+                WHEN 'admin' THEN 0
+                WHEN 'editor' THEN 1
+                WHEN 'viewer' THEN 2
+                ELSE 3
+            END, r.name
         """, (username,))
         return [row["name"] for row in cur.fetchall()]
 

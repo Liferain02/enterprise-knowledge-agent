@@ -399,15 +399,21 @@ class InputSecurityMiddleware(BaseHTTPMiddleware):
             return None
 
         texts = []
-        for key in ["message", "text", "content", "query", "question", "prompt"]:
+        user_input_keys = {
+            "message", "text", "content", "query", "question", "prompt",
+            "comment", "resolution_note",
+        }
+        for key in user_input_keys:
             if key in data and isinstance(data[key], str):
                 texts.append(data[key])
 
         for value in data.values():
             if isinstance(value, dict):
                 texts.append(self._extract_text_from_json(value, _depth + 1) or "")
-            elif isinstance(value, str) and value:
-                texts.append(value)
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        texts.append(self._extract_text_from_json(item, _depth + 1) or "")
 
         return " ".join(texts) if texts else None
 

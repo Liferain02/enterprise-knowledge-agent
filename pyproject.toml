@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "enterprise-knowledge-agent"
+name = "lab-knowledge-assistant"
 version = "1.0.0"
-description = "Enterprise Knowledge Assistant with RAG and Multi-Agent System"
+description = "Research Lab Knowledge Assistant with RAG and Multi-Agent Workflows"
 requires-python = ">=3.10"
 # 运行时依赖统一由 requirements.txt 管理，此处不重复声明
 
@@ -31,3 +31,4 @@ ignore = ["E501"]           # 行长由 line-length 控制，不重复报
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
