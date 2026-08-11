@@ -1,0 +1,3492 @@
+{
+  "dataset": "full",
+  "case_count": 36,
+  "variants": [
+    "A",
+    "B",
+    "C"
+  ],
+  "methodology_note": "token usage 不完整包含 CRAG 内部 grader；logical API calls 为可比较估计而非账单。",
+  "aggregate": {
+    "A": {
+      "label": "Hybrid RAG + 单 Agent",
+      "cases": 36,
+      "success_cases": 36,
+      "error_cases": 0,
+      "acl_leak_count": 0,
+      "avg_input_tokens": 1437.5,
+      "avg_output_tokens": 399.1388888888889,
+      "avg_logical_api_calls_estimate": 1.9722222222222223,
+      "latency_p50_ms": 6230.0,
+      "latency_p95_ms": 9524.0,
+      "avg_keyword_correctness": 0.9490740740740742,
+      "avg_citation_coverage": 0.1814657473971199,
+      "avg_citation_support_rate": 0.3333333333333333,
+      "avg_false_premise_accuracy": 1.0,
+      "avg_conflict_accuracy": 0.9722222222222222,
+      "avg_retrieved_doc_recall": 0.5555555555555557
+    },
+    "B": {
+      "label": "Query Expansion + 单 Agent",
+      "cases": 36,
+      "success_cases": 36,
+      "error_cases": 0,
+      "acl_leak_count": 0,
+      "avg_input_tokens": 2121.9166666666665,
+      "avg_output_tokens": 408.22222222222223,
+      "avg_logical_api_calls_estimate": 1.9722222222222223,
+      "latency_p50_ms": 7298.0,
+      "latency_p95_ms": 10593.0,
+      "avg_keyword_correctness": 0.9351851851851853,
+      "avg_citation_coverage": 0.18154422737756074,
+      "avg_citation_support_rate": 0.3333333333333333,
+      "avg_false_premise_accuracy": 1.0,
+      "avg_conflict_accuracy": 0.9722222222222222,
+      "avg_retrieved_doc_recall": 0.5949074074074074
+    },
+    "C": {
+      "label": "Researcher + Analyst + Reviewer",
+      "cases": 36,
+      "success_cases": 36,
+      "error_cases": 0,
+      "acl_leak_count": 0,
+      "avg_input_tokens": 8322.277777777777,
+      "avg_output_tokens": 827.5,
+      "avg_logical_api_calls_estimate": 6.916666666666667,
+      "latency_p50_ms": 16576.0,
+      "latency_p95_ms": 20912.0,
+      "avg_keyword_correctness": 0.9120370370370369,
+      "avg_citation_coverage": 0.4747574955908289,
+      "avg_citation_support_rate": 0.8055555555555556,
+      "avg_false_premise_accuracy": 1.0,
+      "avg_conflict_accuracy": 0.9722222222222222,
+      "avg_retrieved_doc_recall": 0.6296296296296297
+    }
+  },
+  "results": [
+    {
+      "case": {
+        "case_id": "C01",
+        "query": "跨研究方向比较 RDMA 和分布式 NUMA 的研究目标、实验依赖和主要风险，并基于证据给出选题建议",
+        "category": "cross_scope",
+        "relevant_doc_ids": [
+          "实验室研究方向与课题地图",
+          "RDMA与高性能网络实验规范",
+          "分布式NUMA研究计划"
+        ],
+        "expected_keywords": [
+          "RDMA",
+          "NUMA",
+          "建议"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室资料，RDMA 与分布式 NUMA 的研究目标、依赖及风险对比如下：\n\n**1. 研究目标**\n*   **RDMA 方向**：聚焦低延迟 RPC 与远程内存访问模式，优化无内核绕过路径下的网络栈，解决高带宽、低时延场景下的系统设计空间问题 [文档 1]。\n*   **分布式 NUMA 方向**：核心在于构建“远端资源访问抽象”，重点解决线程/数据放置策略协同、远端访问对本地性的破坏以及资源池化下的性能退化问题 [文档 2][文档 3]。\n*   **关联**：在分布式 NUMA 研究中，RDMA 实验被视为“远端资源访问路径实验”而非单纯的网络测试，需关注其作为底层传输机制的稳定性与可预测性 [文档 2]。\n\n**2. 实验依赖**\n*   **硬件与拓扑**：高度依赖节点 CPU 绑定（CPU affinity）、网卡 NUMA 位置及多路 CPU 架构下的缓存一致性开销 [文档 1][文档 2]。\n*   **软件环境**：必须严格统一驱动版本、固件版本及 Commit ID，混用不同版本会导致不可解释的差异 [文档 2]。\n*   **记录规范**：所有实验必须记录拓扑、绑定策略及环境配置，否则结果不可复现 [文档 2][文档 3]。\n\n**3. 主要风险**\n*   **性能波动**：长时间压力测试下，若线程绑定与网卡 NUMA 位置不一致，极易引发性能抖动 [文档 3]。\n*   **抽象失效**：远端访问抽象若不稳定或破坏应用本地性，将导致系统整体性能退化 [文档 2]。\n*   **复现困难**：缺乏详细的 Commit ID 和环境参数记录，无法验证实验结论 [文档 2]。\n\n**选题建议**\n建议优先选择\"**基于 RDMA 的分布式 NUMA 线程/数据协同放置策略**\"课题。\n*   **理由**：该方向直接回应了组会中关于“为什么这是 NUMA 问题而不是一般远程内存问题”的核心疑问 [文档 3]。\n*   **可行性**：实验室已具备 RDMA 平台原型验证基础，且强调“系统设计 + 原型实现 + 定量评测”的路径 [文档 1]。\n*   **注意**：选题实施前，务必先完成 RDMA 节点拓扑梳理与驱动版本标准化，以规避实验波动风险 [文档 3]。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 8561,
+          "input_tokens": 1372,
+          "output_tokens": 547,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室现有资料，对 RDMA 与分布式 NUMA 两个方向的比较及选题建议如下：\n\n### 1. 研究目标对比\n*   **RDMA 方向**：聚焦于高性能网络栈优化、低延迟 RPC 及无内核绕过路径下的系统开销降低。核心在于利用 RDMA 实现远程内存访问的极致性能，并解决高带宽下的尾延迟问题 [文档2]。\n*   **分布式 NUMA 方向**：旨在构建一个面向逻辑进程和线程的统一共享内存运行时。其目标是在现有 GAM 基础上引入全局虚拟地址层（GVAddr）和变量级透明访问机制，使程序员无需感知物理位置即可享受类似单机 NUMA 的非一致性访问体验 [文档3]。该方向强调从“显式地址”向“语义化对象”的抽象升级 [文档1]。\n\n### 2. 实验依赖对比\n*   **RDMA 方向**：高度依赖精确的硬件拓扑记录。实验前必须确认网卡型号、驱动版本、CPU/NUMA 绑定策略及 PCIe 根拓扑。若线程与 NIC 不在同一 NUMA 节点，将显著影响延迟与带宽测试结果，因此需严格记录绑定关系 [文档4]。\n*   **分布式 NUMA 方向**：目前处于原型验证阶段，优先依赖现有的 RDMA 平台进行远端内存访问测试。实验重点在于验证“远端 NUMA 节点抽象”的有效性以及线程/数据放置策略的合理性，尚未形成独立的复杂硬件依赖清单 [文档5]。\n\n### 3. 主要风险\n*   **RDMA 方向**：长期压力测试下易出现性能波动，主要风险源于环境配置不一致（如线程绑定错误、驱动版本差异）导致的不可复现性 [文档5]。\n*   **分布式 NUMA 方向**：技术路线复杂，需在最小化修改现有代码的前提下，同时解决地址映射、缓存一致性与迁移机制。若过早引入复杂的逻辑进程调度，可能导致系统可用性下降 [文档3]。此外，需明确区分其与一般远程内存系统的本质差异，避免研究边界模糊 [文档5]。\n\n### 4. 选题建议\n*   **若追求工程落地与底层优化**：建议选择 **RDMA 方向**。该方向有明确的实验规范（如《RDMA 与高性能网络实验规范》[文档4]），适合通过定量评测解决具体的延迟与吞吐瓶颈，且实验室已有稳定的硬件平台支持。\n*   **若追求系统架构创新与编程模型突破**：建议选择 **分布式 NUMA 方向**。该方向处于从“底层通信”向“上层抽象”跨越的关键期，若能成功构建 GVAddr 映射与变量级透明访问机制，将显著提升系统易用性。但需注意先完成基础语义层的验证，再考虑动态扩展能力 [文档3]。\n\n**局限性说明**：现有资料未提供两个方向在特定应用场景（如 AI 训练或数据库）下的直接性能对比数据，具体选题需结合个人兴趣与当前实验室算力资源进一步评估。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 12032,
+          "input_tokens": 2484,
+          "output_tokens": 646,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.4,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "\n**证据局限**：证据中未提供具体的RDMA与分布式NUMA性能基准数据对比。；缺乏关于现有GAM代码具体修改难度的量化评估。；未包含其他替代技术路线（如CXL等）的对比分析。；部分文档存在描述冲突警告，可能影响结论确定性。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "RDMA与高性能网络实验规范",
+            "分布式NUMA研究计划",
+            "分布式NUMA课题组会模板",
+            "实验室研究方向与课题地图",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 18469,
+          "input_tokens": 14089,
+          "output_tokens": 983,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 0.6666666666666666,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C02",
+        "query": "综合比较多个项目中 AIFM 与 RDMA 分布式共享内存方案的机制和适用场景，并给出下一步研究建议",
+        "category": "cross_scope",
+        "relevant_doc_ids": [
+          "AIFM",
+          "Scaling out NUMA-Aware Applications"
+        ],
+        "expected_keywords": [
+          "AIFM",
+          "RDMA",
+          "建议"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于现有实验室资料，针对 AIFM 与 RDMA 分布式共享内存方案的比较及研究建议如下：\n\n**1. 机制与适用场景比较**\n*   **AIFM (Application-Integrated Far Memory)**：其核心机制在于运行时不仅理解页和裸地址，更需理解对象、指针与数据结构语义，以支持细粒度、高性能的远程访问 [文档 1]。然而，该原型目前主要侧重于“非共享远端内存（unshared far memory）”，尚未将“共享可写 DSM\"作为中心问题 [文档 1]。\n*   **RDMA 分布式共享内存**：实验室当前重点在于构建基于 RDMA 的原型，旨在实现远程页迁移、缓存或内存映射，并解决多租户下的性能稳定性问题 [文档 3]。现有的 GAM 系统已具备基于全局物理地址的显式读写接口及目录一致性机制，是构建此类系统的底层基础 [文档 2]。\n\n**2. 下一步研究建议**\n*   **路线选择**：不建议从零重写，而应在现有 GAM 的全局物理地址与一致性机制之上，优先增加“全局虚拟地址”和“变量级透明访问层”，将其升级为分布式 NUMA 运行时 [文档 2]。\n*   **核心主线**：\n    1.  **第一主线**：实现全局虚拟地址、全局变量及其透明读写、赋值与表达式求值语义 [文档 2]。\n    2.  **第二主线**：构建逻辑进程与逻辑线程抽象，支撑动态扩展与迁移 [文档 2]。\n    3.  **第三主线**：优化远程内存访问路径，特别是面向微秒级服务的延迟优化 [文档 3]。\n*   **实验方向**：需定义“远端 NUMA 节点”的统一抽象，并设计实验对比本地与远端访问代价，指导应用主动优化数据布局 [文档 3]。\n\n**局限性说明**：现有资料未提供 AIFM 与 RDMA 方案在具体性能指标上的直接对比数据，也未详述 RDMA 在 GAM 中的具体集成代码细节，上述建议基于实验室当前的规划路线推导得出。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 6411,
+          "input_tokens": 1424,
+          "output_tokens": 468,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室现有资料，AIFM 与 RDMA 分布式共享内存方案的比较及研究建议如下：\n\n**1. 机制与适用场景比较**\n*   **AIFM (Application-Integrated Far Memory)**：核心机制在于运行时理解对象、指针与数据结构语义，而非仅处理页或裸地址 [文档 1]。其原型侧重于“非共享远存”（unshared far memory），旨在通过应用感知实现细粒度、高性能的远程访问，但尚未将“共享可写 DSM\"作为中心问题 [文档 1][文档 5]。\n*   **RDMA 分布式共享内存**：实验室当前重点在于构建基于 RDMA 的原型，利用低时延网络实现远程页迁移、缓存或内存映射，强调系统层对“远端 NUMA 节点”的统一抽象 [文档 2]。该方案更关注多租户下的性能稳定性及物理位置的透明性。\n\n**2. 下一步研究建议**\n结合实验室在 GAM 基础上的演进路线，建议采取以下策略：\n*   **技术路线**：不重写底层，而是在现有 GAM 全局物理地址和显式读写接口之上，优先增加“全局虚拟地址 + 变量级透明访问层”，逐步过渡到分布式 NUMA 运行时 [文档 3]。\n*   **实施阶段**：\n    1.  **第一阶段**：采用句柄式 GVAddr 和静态注册机制，实现主节点初始化及跨节点变量识别 [文档 5]。\n    2.  **第二阶段**：引入运算符重载支持 `a=sa`、`sa++` 等表达式，建立最小可用的变量级编程模型，避免过早引入编译器改写 [文档 5]。\n    3.  **第三阶段**：推广至复杂类型（如结构体、数组），解决引用、别名及生命周期问题，向 AIFM 的对象语义靠拢但强化共享可写特性 [文档 5]。\n*   **实验重点**：对比不同系统在接口抽象与资源管理上的取舍，针对“本地 vs 远端”访问代价设计实验，并记录完整配置与结果归档 [文档 2]。\n\n*注：以上建议基于实验室内部研究计划推导，具体实现需结合 GAM 代码现状验证。*",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "新生入组第一周任务清单",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 7639,
+          "input_tokens": 2250,
+          "output_tokens": 488,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：AIFM机制强调运行时理解对象与数据结构语义，支持细粒度远程访问，但其原型以unshared far memory为主，未将共享可写DSM作为中心问题[S2]。\n- **资料事实**：RDMA分布式共享内存基于全局物理地址（GAddr）和显式读写接口，底层通过TO_GLOB编码本地指针与Worker身份，当前系统本质为基于全局物理地址的运行时[S2][S3]。\n- **模型推断**：推断：现有GAM方案需引入句柄式全局虚拟地址（GVAddr）层，以解耦逻辑地址与物理位置，从而支持透明变量访问及后续迁移能力[S3][S6]。\n- **资料比较**：比较：AIFM侧重应用感知的对象语义抽象，而当前RDMA/GAM方案侧重底层物理地址与目录一致性；前者缺乏原生共享写支持，后者缺乏透明变量级抽象[S2][S4]。\n- **研究建议**：建议：下一步研究应优先构建“全局虚拟地址+全局变量+透明访问”主线，复用GAM底层协议，逐步实现从显式接口到变量级分布式NUMA运行时的演进[S4][S6]。\n- **研究建议**：建议：RDMA实验必须严格记录CPU/内存绑定、commit id及驱动版本，并关注远端访问抽象稳定性与数据布局协同，以支撑分布式NUMA验证[S5][S7]。\n\n**证据局限**：证据中未提供AIFM与RDMA在微秒级延迟下的具体性能对比数据。；关于Nu系统的逻辑进程迁移细节仅在计划中提及，缺乏具体实现参数。；现有GAM代码仅支持静态启动，动态扩展能力的具体设计尚未在证据中展开。；缺乏不同节点拓扑结构下RDMA性能波动的量化分析数据。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "RDMA与高性能网络实验规范",
+            "分布式NUMA研究计划",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 14695,
+          "input_tokens": 7766,
+          "output_tokens": 631,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "PASS",
+          "revision_count": 0,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C03",
+        "query": "跨论文比较 Caladan 与 Shenango 如何处理延迟敏感工作负载的 CPU 调度，并指出可借鉴的实验设计",
+        "category": "cross_scope",
+        "relevant_doc_ids": [
+          "Caladan",
+          "Shenango"
+        ],
+        "expected_keywords": [
+          "Caladan",
+          "Shenango",
+          "实验"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "根据提供的实验室资料，无法回答关于 Caladan 与 Shenango 在延迟敏感工作负载下 CPU 调度机制的具体比较细节。检索资料中未包含这两篇论文的技术实现、调度策略或具体实验数据 [文档1]。\n\n不过，基于该实验室对 RDMA 与高性能网络实验的规范要求，针对此类涉及“远端资源访问路径”的研究，可借鉴以下实验设计原则以确保结论的可复现性和准确性：\n\n1.  **严格记录环境配置**：必须记录代码的 commit id，否则结果不可视为可复现实验 [文档1]。\n2.  **统一软硬件版本**：严禁混用不同驱动和固件版本，以免导致节点间出现不可解释的差异 [文档1]。\n3.  **明确绑定策略**：在 NUMA 与 RDMA 组合实验中，必须详细记录 CPU 绑定与内存绑定策略，因为这将直接决定实验结论 [文档1]。\n4.  **关注协同性**：实验设计需同时考察数据布局与线程布局的协同关系，以及远端访问是否破坏了应用的本地性 [文档1]。\n5.  **规范输出结构**：建议按 `experiments/年份/项目名/` 的结构组织输出，包含 `config.md`（配置）、`env.txt`（环境）、`commit.txt`（版本）及原始数据与图表 [文档1]。\n\n若需获取 Caladan 与 Shenango 的具体调度对比分析，请补充相关论文原文或提供其他检索来源。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 7761,
+          "input_tokens": 522,
+          "output_tokens": 324,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6666666666666666,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的实验室检索资料，**无法回答**关于\"Caladan 与 Shenango 具体如何处理延迟敏感工作负载的 CPU 调度”的比较问题，因为检索文档中未包含这两篇论文的具体技术细节或对比数据。\n\n不过，资料提供了针对此类比较研究的**实验设计原则**和**记录规范**，可作为您开展该课题的可借鉴框架：\n\n1.  **核心关注点**：在分析延迟敏感（latency-sensitive）工作负载时，应重点关注“多核/多路 CPU 下的并行扩展性”、“内存层次与缓存一致性开销”以及\"NUMA 架构下的线程放置与负载均衡”[文档 1]。\n2.  **评测方法要求**：在比较两者调度策略时，必须明确 baseline（基线系统）、关键指标（如尾延迟 tail latency）以及实验环境的公平性，避免选择性展示结果 [文档 2][文档 3]。\n3.  **实验记录规范**：为确保结论可复现，每次对比实验需独立记录实验目标、环境配置、代码版本、参数设置及异常现象，特别是要说明结论是否依赖特定硬件条件 [文档 2]。\n4.  **局限性说明**：现有资料仅提供了实验室通用的研究方向（如高性能计算、分布式系统）和科研流程规范，缺乏 Caladan 和 Shenango 的具体实现机制描述，因此无法直接提取两者的调度算法差异。建议查阅原始论文并依据上述模板撰写详细笔记 [文档 2]。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "论文阅读与实验记录要求",
+            "论文投稿与对外汇报流程",
+            "全局变量实现2",
+            "知识目录索引"
+          ],
+          "latency_ms": 6144,
+          "input_tokens": 2277,
+          "output_tokens": 316,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：现有证据仅包含RDMA实验规范，未提供Caladan系统处理延迟敏感负载的CPU调度机制细节[S1][S2]。\n- **资料事实**：现有证据仅包含RDMA实验规范，未提供Shenango系统处理延迟敏感负载的CPU调度机制细节[S1][S2]。\n- **模型推断**：推断：由于缺乏原始论文或技术文档，无法直接比较两者在CPU调度层面的具体实现差异。\n- **研究建议**：建议：需补充Caladan和Shenango系统的原始论文以获取具体的调度算法与实验设计细节。\n\n**证据局限**：EvidencePackage中缺失Caladan系统关于延迟敏感工作负载CPU调度的具体技术文档。；EvidencePackage中缺失Shenango系统关于延迟敏感工作负载CPU调度的具体技术文档。；现有证据仅为通用RDMA实验规范，不包含特定系统的内部调度逻辑描述。；无法基于当前证据对两个系统的实验设计进行实质性的异同对比分析。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 20830,
+          "input_tokens": 4169,
+          "output_tokens": 824,
+          "logical_api_calls_estimate": 9,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.25,
+          "citation_support_rate": 0.5,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "NEED_MORE_EVIDENCE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C04",
+        "query": "综合比较多个研究方向中 Nu 和 Quicksand 的资源抽象、调度粒度及潜在局限，并形成研究建议",
+        "category": "cross_scope",
+        "relevant_doc_ids": [
+          "Nu Achieving",
+          "Quicksand"
+        ],
+        "expected_keywords": [
+          "Nu",
+          "Quicksand",
+          "建议"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于提供的实验室检索资料，**无法**完成关于\"Nu 和 Quicksand\"的综合比较及研究建议。\n\n原因如下：\n1. **资料缺失**：检索到的三篇文档中，仅【文档 2】提及了\"Nu 的经验”及其在逻辑进程、迁移机制上的设计思想 [文档 2]，但全文未出现\"Quicksand\"系统的相关描述、资源抽象或调度策略信息。\n2. **范围限制**：现有资料主要聚焦于实验室自身的分布式 NUMA 研究计划（如变量级透明访问、句柄式全局虚拟地址等）[文档 2]，并未包含对 Nu 与 Quicksand 这两个外部系统的对比分析。\n\n因此，依据“优先基于以上实验室资料回答”的原则，我无法提供两者在资源抽象、调度粒度及局限性的对比结论，也无法据此形成针对两者的具体研究建议。建议补充相关文献资料后再次提问。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "分布式NUMA课题组会模板"
+          ],
+          "latency_ms": 4464,
+          "input_tokens": 1597,
+          "output_tokens": 198,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的实验室资料，仅能详细阐述 **Nu** 的相关研究观点，**Quicksand** 在检索资料中未出现，无法进行比较。\n\n**1. Nu 的资源抽象与调度粒度**\n*   **资源抽象**：Nu 强调“逻辑进程（Logical Process）”作为核心抽象，认为其价值在于将分布在不同节点上的执行流视为共享 DSM（分布式共享内存）的一部分 [文档3]。它主张系统应理解对象、指针与数据结构语义，而非仅处理页和裸地址 [文档1]。\n*   **调度粒度**：Nu 的调度建立在稳定的地址空间与对象身份之上，其线程被定义为“分布在不同节点上的共享 DSM 执行流”，旨在实现从“变量级”向“进程级”分布式 NUMA 环境的演进 [文档3]。\n*   **潜在局限**：Nu 的原型主要侧重于 unshared far memory，并未将“共享可写 DSM\"作为中心问题解决 [文档1]；且其迁移机制若未成为系统内生能力，难以支撑真正的动态扩展 [文档3]。\n\n**2. 研究建议**\n结合实验室“系统设计 + 原型实现 + 定量评测”的路径 [文档2]，建议：\n*   **接口层优化**：采用句柄式全局虚拟地址方案，复用现有 GAM 协议，建立变量级透明访问规范 [文档3]。\n*   **内核能力构建**：将迁移设计为系统基本能力而非异常路径，重点研究 GVAddr 重定向及 owner/home 转移策略 [文档3]。\n*   **实验验证**：针对“本地 vs 远端”访问代价差异设计实验，评估数据放置与线程绑定的性能表现 [文档4]。\n\n**局限性说明**：由于检索资料中缺乏 Quicksand 的相关信息，本回答无法完成两者的综合对比分析。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 7307,
+          "input_tokens": 1865,
+          "output_tokens": 399,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6923076923076923,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：现有GAM系统基于全局物理地址，Worker维护Directory与Cache状态，实现显式读写与锁机制[S1]。\n- **模型推断**：推断Nu系统旨在将GAM升级为分布式NUMA运行时，强调理解对象语义而非仅页级地址[S1]。\n- **资料事实**：Nu的调度粒度涉及逻辑进程与逻辑线程，要求地址空间稳定且迁移成为系统内生能力[S2]。\n- **模型推断**：推断当前GAM作为静态集群底座存在局限，需引入变量/对象迁移机制以支持动态扩展[S2]。\n- **研究建议**：建议采用句柄式全局虚拟地址（GVAddr）方案，以最小化对底层GAM的改动并支持透明迁移[S3]。\n- **资料事实**：研究重点包括定义远端NUMA节点抽象、感知访问代价及实现远程页迁移等子题[S4]。\n\n**证据局限**：证据包中缺失关于Quicksand系统的任何描述，无法进行Nu与Quicksand的比较分析。；所有结论均基于单一文档《分布式NUMA研究计划》，缺乏多源交叉验证。；未提供具体的性能评测数据或实验结果来量化资源抽象与调度的实际表现。；部分关于Nu的论述为未来规划（如第六阶段），非已实现的系统事实。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 19878,
+          "input_tokens": 6885,
+          "output_tokens": 1056,
+          "logical_api_calls_estimate": 8,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "NEED_MORE_EVIDENCE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C05",
+        "query": "跨项目比较 Argo 与分布式 NUMA 研究计划的远程内存目标、评测重点和工程风险",
+        "category": "cross_scope",
+        "relevant_doc_ids": [
+          "Argo",
+          "分布式NUMA研究计划"
+        ],
+        "expected_keywords": [
+          "远程",
+          "评测",
+          "风险"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "根据提供的实验室检索资料，**无法完成**关于\"Argo 项目”与“分布式 NUMA 研究计划”的跨项目比较。\n\n原因如下：\n1. **资料缺失**：检索到的三篇文档（[文档1]、[文档2]、[文档3]）中仅详细阐述了“分布式 NUMA 研究计划”的背景、目标及实验规范，**全文未提及名为\"Argo\"的项目**，也未包含该项目的任何远程内存目标、评测重点或工程风险信息。\n2. **现有信息局限**：\n   - **分布式 NUMA 计划的目标**：旨在将现有 GAM 代码提升为分布式 NUMA 运行时，核心是让多个节点承载同一逻辑进程，共享全局地址空间，并处理非一致性访问代价 [文档1]。\n   - **评测重点**：需对比本地与远端访问代价、不同布局策略下的性能、负载强度下的延迟吞吐及扩展性 [文档3]。\n   - **工程风险/挑战**：涉及 RDMA 平台在压力测试下的稳定性波动、线程绑定与网卡 NUMA 位置的一致性配置问题 [文档2]。\n\n由于缺乏 Argo 项目的相关数据，无法进行对比分析。建议补充 Argo 项目的内部文档或技术报告后再次提问。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA课题组会模板"
+          ],
+          "latency_ms": 5024,
+          "input_tokens": 1648,
+          "output_tokens": 274,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的检索资料，**无法完成**关于\"Argo 项目”的跨项目比较。\n\n现有资料仅详细阐述了“分布式 NUMA 研究计划”的目标与路线，未包含任何关于\"Argo\"项目的信息（如远程内存目标、评测重点或工程风险）。根据回答要求，若资料中没有相关信息，需直接告知用户。\n\n针对“分布式 NUMA 研究计划”，资料中明确的核心内容如下：\n1.  **远程内存目标**：旨在不重写底层 GAM 的基础上，增加全局虚拟地址层和变量级透明访问层，将系统从“显式地址 + 显式读写”提升为支持逻辑进程/线程共享的分布式 NUMA 运行时 [文档 2]。其核心是建立 GVAddr 到 GAddr 的映射，实现 `sa++` 等表达式自动翻译为底层读写请求 [文档 3]。\n2.  **技术路线**：遵循“先地址与变量，后执行与迁移”的顺序，优先解决全局变量声明、初始化及透明访问机制，再构建逻辑进程抽象与动态扩展能力 [文档 2][文档 3]。\n3.  **工程风险与局限**：资料未明确列出具体风险，但指出该路线受限于“最小修改复用 GAM\"的现实约束，且依赖底层目录与缓存一致性机制的稳固性 [文档 2]。\n\n如需对比 Argo 项目，请补充相关背景资料。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 6160,
+          "input_tokens": 1536,
+          "output_tokens": 307,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：分布式NUMA计划旨在将现有GAM从显式远程内存接口升级为变量级分布式NUMA运行时，核心主线为全局虚拟地址与透明访问[S1][S3]。\n- **模型推断**：推断：该计划的评测重点在于验证远端NUMA节点抽象、线程/数据放置策略及RDMA平台在压力测试下的稳定性[S2]。\n- **研究建议**：建议：工程风险管控需优先解决RDMA实验环境配置不一致导致的性能波动，并严格执行统一的实验记录规范[S2]。\n- **资料事实**：Argo项目在提供的证据包中未被提及，无法获取其具体的远程内存目标、评测重点或工程风险信息。\n\n**证据局限**：缺乏关于Argo项目的任何内部文档或会议纪要，无法进行跨项目比较分析。；分布式NUMA计划的具体量化评测指标（如延迟、吞吐量数值）未在证据中提供。；工程风险仅基于会议推测，缺乏历史故障日志或风险评估报告的详细数据支持。；证据主要反映2026年4月的规划状态，未包含后续实施阶段的实际进展或变更。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 15215,
+          "input_tokens": 8726,
+          "output_tokens": 1006,
+          "logical_api_calls_estimate": 6,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.375,
+          "citation_support_rate": 0.75,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "NEED_MORE_EVIDENCE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C06",
+        "query": "综合比较多个项目的 RDMA 实验规范和高性能计算集群规范，说明共同要求、额外约束并给出执行建议",
+        "category": "cross_scope",
+        "relevant_doc_ids": [
+          "RDMA与高性能网络实验规范",
+          "高性能计算集群使用说明"
+        ],
+        "expected_keywords": [
+          "记录",
+          "RDMA",
+          "建议"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室检索资料，RDMA 实验规范与高性能计算（HPC）集群规范在资源管理、可复现性及环境记录方面存在显著的共同要求，同时 RDMA 方向对拓扑细节提出了额外约束。\n\n### 一、共同要求\n1. **作业可追踪与登记**：所有长时运行任务（如训练、压测）必须提前登记并说明用途，严禁未经通知占用 GPU、大内存或特殊网络资源 [文档 1]。\n2. **环境信息记录**：必须详细记录实验日期、负责人、节点列表及系统配置（如内核版本、驱动版本），确保实验可复现 [文档 2]。\n3. **资源清理**：实验结束后需及时清理僵尸进程、无用 Checkpoint 及临时缓存文件，避免占满存储 [文档 1]。\n4. **禁止行为**：严禁随意修改系统级配置、混用不同驱动/固件版本，以及未同步情况下重启服务 [文档 1][文档 2]。\n\n### 二、RDMA 方向的额外约束\n相较于通用 HPC 规范，RDMA 实验对**拓扑绑定**和**代码版本**有极高要求：\n1. **NUMA 与网卡绑定**：必须明确记录网卡所在的 NUMA Node、线程绑定的核心/NUMA Node 以及内存 Buffer 的分配位置。若线程与 NIC 跨 NUMA 节点，必须单独标注，因其直接影响延迟与带宽 [文档 2]。\n2. **代码版本锁定**：实验结果必须关联具体的代码 Commit ID，无 Commit ID 的结果视为不可复现 [文档 3]。\n3. **深度参数记录**：除常规信息外，还需记录 CPU 绑定、HugePages 配置、交换机链路状态及 IOMMU/SR-IOV 开关状态 [文档 1][文档 2]。\n\n### 三、执行建议\n1. **标准化目录结构**：建议按 `experiments/<日期>/<实验名>/` 组织输出，包含 `config.md`（配置）、`env.txt`（环境）、`commit.txt`（版本）及原始数据 [文档 3]。\n2. **实施检查清单**：实验前对照“网卡型号、驱动版本、NUMA 拓扑”等清单逐项确认，避免配置不一致导致结果差异 [文档 2]。\n3. **脚本化记录**：利用脚本自动捕获并固化实验参数（如 CPU 绑定策略、内核参数），减少人工记录误差 [文档 1]。\n\n*注：以上结论严格基于提供的实验室规范文档整理。*",
+          "document_titles": [
+            "高性能计算集群使用说明",
+            "RDMA与高性能网络实验规范",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 7939,
+          "input_tokens": 1471,
+          "output_tokens": 558,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室现有规范，RDMA 实验与高性能计算（HPC）集群管理的共同要求、额外约束及执行建议如下：\n\n### 1. 共同要求\n*   **可追踪性与登记**：所有作业必须可追踪，长时间运行任务需提前登记并说明用途 [文档 1][文档 3]。\n*   **环境信息记录**：必须完整记录实验日期、负责人、节点列表、代码版本（commit id）及数据集/请求模式 [文档 2][文档 4]。\n*   **资源清理**：实验结束后需清理僵尸进程、无用 Checkpoint 及临时缓存文件 [文档 1]。\n*   **禁止行为**：严禁未经通知修改公共配置、重启服务或长期占用特殊资源（如 GPU、大内存节点）[文档 1]。\n\n### 2. RDMA 实验的额外约束\n相较于通用 HPC 规范，RDMA 实验对**拓扑细节**和**底层配置**有极高要求：\n*   **拓扑绑定强制记录**：必须明确记录网卡所在的 NUMA Node、CPU Socket 位置，以及发送/接收线程的具体核心绑定策略。若线程与 NIC 不在同一 NUMA 域，必须单独标注，因其显著影响延迟与带宽 [文档 2]。\n*   **硬件与驱动版本**：需精确记录网卡型号、固件版本、OFED/rdma-core 版本及内核参数（如 HugePages、IOMMU 状态）[文档 2]。\n*   **基准测试项扩展**：除常规吞吐外，必须包含不同消息大小下的延迟/吞吐曲线、多连接扩展性测试及长时间运行的尾延迟测试 [文档 2]。\n\n### 3. 执行建议\n*   **统一模板化记录**：严格执行组内统一的实验记录模板，确保“设计动机、核心机制、评测方法”三位一体，拒绝仅有摘要的笔记 [文档 3][文档 4]。\n*   **脚本化参数管理**：使用脚本自动记录实验参数（CPU 绑定、NUMA 策略、内核参数），避免人工记录遗漏导致复现失败 [文档 1][文档 2]。\n*   **拓扑优先验证**：在启动长时压力测试前，优先核对节点拓扑一致性（特别是 NUMA 绑定与网卡位置），以消除因配置不一致导致的性能波动 [文档 3]。\n*   **定期审计**：配合组会检查实验记录的完整性，确保所有高相关度实验均符合“系统设计 + 原型实现 + 定量评测”的标准 [文档 5]。",
+          "document_titles": [
+            "高性能计算集群使用说明",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15",
+            "实验室研究方向与课题地图",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 8285,
+          "input_tokens": 2397,
+          "output_tokens": 557,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：RDMA与HPC规范共同要求记录网卡型号、驱动版本、内核参数及节点NUMA拓扑，确保实验可复现[S1][S2]。\n- **资料事实**：两者均强制要求所有作业可追踪，长任务需提前登记，且禁止未经说明修改系统级配置或长期占用资源[S2][S5]。\n- **模型推断**：推断：RDMA实验对CPU/内存绑定策略的敏感度远高于普通HPC任务，因NUMA位置直接决定延迟与带宽结论[S1][S4]。\n- **研究建议**：建议：执行RDMA实验时必须显式记录commit id与线程绑定策略，否则结果不可视为可复现[S3][S4]。\n- **研究建议**：建议：共享资源使用需严格遵循预约流程，并在实验记录中注明是否独占及具体使用的网络/存储资源[S5][S2]。\n\n**证据局限**：缺乏不同实验室间外部规范的横向对比数据。；未提供具体的RDMA测试脚本或基准工具推荐。；关于分布式NUMA的具体抽象差异仅提及方向，无详细技术实现。；未包含针对特定硬件故障（如交换机丢包）的详细排查流程。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "高性能计算集群使用说明",
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "设备预约与共享资源使用流程",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 15002,
+          "input_tokens": 6966,
+          "output_tokens": 551,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.625,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "PASS",
+          "revision_count": 0,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C07",
+        "query": "跨研究方向比较资源管理调度与高性能网络课题对尾延迟、吞吐和 CPU 利用率的关注差异",
+        "category": "cross_scope",
+        "relevant_doc_ids": [
+          "实验室研究方向与课题地图",
+          "RDMA与高性能网络实验规范",
+          "Caladan",
+          "Shenango"
+        ],
+        "expected_keywords": [
+          "尾延迟",
+          "吞吐",
+          "CPU"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室资料，资源管理调度与高性能网络课题在关键指标上的关注差异如下：\n\n**1. 尾延迟 (Tail Latency)**\n*   **资源管理调度**：重点关注多租户环境下的性能干扰及微服务 RPC 的系统开销，旨在解决云原生基础设施中的长尾延迟问题 [文档 1]。\n*   **高性能网络**：极度关注 RDMA 低延迟 RPC 及远程内存访问的无内核绕过路径优化，强调高带宽、低时延网络上的系统设计空间 [文档 1]。实验规范明确要求必须包含“长时间运行下的尾延迟测试”以验证系统稳定性 [文档 2]。\n\n**2. 吞吐 (Throughput)**\n*   **资源管理调度**：核心关注数据中心资源的碎片化利用与弹性伸缩能力，侧重于大规模节点的资源池化效率 [文档 1]。\n*   **高性能网络**：直接聚焦于高带宽网络的极限吞吐能力，需进行不同消息大小下的吞吐曲线测试及多连接吞吐测试 [文档 2]。\n\n**3. CPU 利用率**\n*   **资源管理调度**：主要研究多核/多路 CPU 下的并行扩展性，以及 NUMA 架构下的线程放置与负载均衡，以最大化计算资源利用率 [文档 1]。\n*   **高性能网络**：虽未直接提及 CPU 利用率，但强调发送/接收线程与网卡必须在同一 NUMA Node 绑定，以避免跨 NUMA 访问导致的显著性能下降（间接影响 CPU 效率）[文档 2]。同时，RDMA 实验要求记录 CPU 型号、核心数及绑定策略 [文档 2]。\n\n**总结**：资源管理调度更侧重宏观层面的**任务分布与隔离**对整体性能的影响，而高性能网络则深入微观层面的**硬件拓扑与数据通路**对延迟和带宽的决定性作用。两者均需落实“系统设计 + 原型实现 + 定量评测”的研究路径 [文档 1]。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "RDMA与高性能网络实验规范",
+            "高性能计算集群使用说明"
+          ],
+          "latency_ms": 6438,
+          "input_tokens": 1599,
+          "output_tokens": 419,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室资料，资源管理调度与高性能网络（RDMA）课题在关键指标上的关注差异如下：\n\n**1. 尾延迟 (Tail Latency)**\n*   **资源管理调度**：重点关注多租户环境下的性能干扰及微服务中的长尾延迟问题，旨在解决云原生基础设施中的抖动 [文档 1]。\n*   **高性能网络**：将 RDMA 视为“远端资源访问路径”，核心在于优化低延迟 RPC 和远程内存访问的确定性，要求对远端访问代价进行可预测性评估 [文档 4][文档 5]。\n\n**2. 吞吐 (Throughput)**\n*   **资源管理调度**：侧重于解决数据中心资源碎片化与弹性伸缩带来的吞吐量瓶颈，关注大规模节点的资源利用率 [文档 1]。\n*   **高性能网络**：直接测试不同消息大小下的带宽上限及多连接并发下的扩展性，强调高带宽网络上的系统空间探索 [文档 2]。\n\n**3. CPU 利用率**\n*   **资源管理调度**：关注多核/多路 CPU 下的并行扩展性及负载均衡，通过 NUMA 感知调度减少缓存一致性开销，从而提升整体计算效率 [文档 1]。\n*   **高性能网络**：极度依赖 CPU 绑定策略（Affinity）。实验规范要求必须记录线程与 NIC 是否在同一 NUMA 节点，因为错误的绑定会显著增加延迟并降低有效吞吐，是决定实验结论的关键变量 [文档 2][文档 5]。\n\n**总结**：资源管理更宏观地关注集群层面的隔离与扩展性，而高性能网络课题则微观聚焦于硬件拓扑（NUMA/RDMA）对具体数据路径性能的直接影响 [文档 1][文档 4]。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "RDMA与高性能网络实验规范",
+            "实验室常见问题FAQ",
+            "实验室研究方向与课题地图",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 7831,
+          "input_tokens": 2210,
+          "output_tokens": 373,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：高性能网络课题关注RDMA在低延迟RPC和远程内存访问中的使用模式，以及无内核绕过路径下的网络栈优化[S2]。\n- **资料事实**：资源管理调度课题（如分布式NUMA）核心关注点在于多租户隔离、资源碎片化及微服务系统开销对尾延迟的影响[S2]。\n- **模型推断**：推断：高性能网络课题更侧重底层硬件拓扑（如NUMA绑定）对延迟和带宽的直接影响，而资源管理课题更侧重系统级资源分配策略[S1][S3]。\n- **资料事实**：两个方向均要求实验必须记录CPU型号、NUMA拓扑、网卡型号及驱动版本，以确保结果可复现[S1][S4]。\n- **资料比较**：比较：两者均将尾延迟作为关键指标，但高性能网络强调单连接与多连接下的延迟/吞吐曲线，资源管理强调不同负载强度下的对比[S1][S3]。\n- **研究建议**：建议：在进行跨方向比较时，应统一测试平台配置（如HugePages、内核参数），以消除环境差异对尾延迟和吞吐量评估的干扰[S1][S4]。\n\n**证据局限**：证据未提供具体的量化数据（如具体毫秒数或Gbps数值）来直接对比两者的性能差异。；证据主要描述实验规范和方向定义，缺乏针对“资源管理”与“高性能网络”在CPU利用率上的直接对比分析。；部分关于尾延迟的具体关注点仅提及概念，未说明在不同课题中容忍度的具体阈值差异。；无法从现有证据判断两个课题在实际生产环境中的CPU利用率基准水平。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "实验室研究方向与课题地图",
+            "分布式NUMA课题组会模板",
+            "高性能计算集群使用说明",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 16679,
+          "input_tokens": 9053,
+          "output_tokens": 1114,
+          "logical_api_calls_estimate": 6,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C08",
+        "query": "综合比较多个论文和项目资料中的逻辑进程、远程内存与资源池化思路，并提出可验证的下一步假设",
+        "category": "cross_scope",
+        "relevant_doc_ids": [
+          "Nu Achieving",
+          "AIFM",
+          "Quicksand",
+          "分布式NUMA研究计划"
+        ],
+        "expected_keywords": [
+          "逻辑",
+          "远程内存",
+          "假设"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室现有资料，针对逻辑进程、远程内存与资源池化的思路比较及下一步假设如下：\n\n### 1. 思路综合比较\n*   **抽象层次差异**：当前研究重点在于定义“远端 NUMA 节点”的统一抽象，旨在让应用感知远端访问代价并主动优化数据布局 [文档 1]。这与传统远程内存不同，更强调将分布式资源映射为类似单机 NUMA 的逻辑视图，而非简单的 RPC 调用 [文档 3]。\n*   **资源管理策略**：在资源池化方面，核心挑战是在多租户和资源动态变化条件下维持性能稳定性 [文档 1]。现有思路倾向于通过逻辑进程或资源池化抽象来支持分布式 NUMA，以解决资源碎片化和弹性伸缩问题 [文档 2][文档 3]。\n*   **实现路径**：主要依赖 RDMA 构建分布式共享内存原型，并优化微秒级服务的远程内存访问路径 [文档 1]。关键在于区分本地与远端路径的切换机制，以及控制路径上的资源调度与竞争处理 [文档 2]。\n\n### 2. 可验证的下一步假设\n基于上述分析，提出以下可验证假设：\n*   **假设一（感知有效性）**：若系统能向应用显式暴露“远端 NUMA 节点”属性，应用层的数据放置策略（如页迁移）将比黑盒远程内存方案显著降低微秒级服务的尾延迟 [文档 1]。\n    *   *验证方法*：对比“显式感知远端”与“透明远程内存”两种模式下，特定负载的 P99 延迟与吞吐量 [文档 2]。\n*   **假设二（调度收益）**：在动态变化的多租户环境中，基于逻辑进程的资源池化抽象，能通过更细粒度的线程绑定（CPU affinity）和缓存一致性优化，提升大规模节点下的扩展性 [文档 3]。\n    *   *验证方法*：在不同节点规模下，测试引入逻辑进程抽象前后的系统吞吐稳定性及资源利用率 [文档 2]。\n*   **假设三（路径优化）**：结合 RDMA 的远程内存访问路径优化，若能减少内核绕过路径的开销，将在高带宽网络下实现优于传统 TCP/IP 栈的性能表现 [文档 3]。\n    *   *验证方法*：测量本地访问与远端访问的代价差异，评估不同 RDMA 配置下的延迟分布 [文档 2]。\n\n**局限性说明**：以上结论基于实验室当前的研究方向与课题地图，具体论文中的设计细节（如特定接口定义或算法实现）未在检索资料中展开，需结合具体文献进一步细化实验参数 [文档 1][文档 2]。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "分布式NUMA课题组会模板",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 10175,
+          "input_tokens": 1496,
+          "output_tokens": 585,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室现有资料，对逻辑进程、远程内存与资源池化的思路比较及下一步假设如下：\n\n### 1. 思路综合比较\n*   **逻辑进程（Logical Processes）**：以 *Nu* [文档2] 为代表，主张通过“逻辑进程/线程”抽象屏蔽底层物理位置差异，实现微秒级资源互换性。其核心在于将计算单元从物理绑定中解耦，为动态扩展提供基础 [文档2][文档3]。\n*   **远程内存（Remote Memory）**：当前研究路线倾向于在现有 GAM 系统基础上，从“显式读写 API\"向“全局虚拟地址 + 变量级透明访问”演进，而非重写底层共享内存 [文档2]。重点在于让应用感知远端访问代价并优化数据布局，同时支持远程页迁移与缓存 [文档1]。\n*   **资源池化（Resource Pooling）**：强调在数据中心多租户环境下，利用 RDMA 低时延网络构建统一的资源池，解决碎片化问题，维持性能稳定性 [文档1][文档3]。\n\n**对比结论**：逻辑进程是高层抽象目标，远程内存是实现该目标的底层机制，而资源池化是支撑两者的基础设施环境。三者需协同：透明访问层（远程内存）需适配逻辑进程的动态迁移需求，并依托 RDMA 网络实现高效池化 [文档2][文档3]。\n\n### 2. 可验证的下一步假设\n基于上述分析，提出以下可验证假设：\n*   **假设一（语义映射）**：在全局虚拟地址空间下，引入“变量级透明访问”比“显式远程调用”能显著降低逻辑进程迁移时的状态同步开销，且对微秒级服务延迟影响小于 5%。\n    *   *验证方法*：对比显式接口与透明访问接口在逻辑进程动态迁移场景下的端到端延迟与吞吐量 [文档1][文档2]。\n*   **假设二（感知优化）**：若应用能主动感知“本地 vs 远端”访问代价差异并调整数据布局，其在非均匀 NUMA 架构下的性能波动可降低 30% 以上。\n    *   *验证方法*：设计实验对比“无感知”与“感知优化”两种策略在多节点集群上的性能稳定性 [文档1]。\n*   **假设三（一致性协议）**：在逻辑进程频繁迁移场景下，基于目录的一致性协议需增加“预取远端页”机制，否则缓存失效率将随迁移频率呈指数上升。\n    *   *验证方法*：模拟高频迁移负载，统计不同一致性策略下的缓存命中率与网络流量 [文档2]。\n\n*注：具体实验需遵循组内“保留完整配置、版本及结果归档”的记录规范 [文档1][文档5]。*",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "知识目录索引",
+            "论文阅读与实验记录要求"
+          ],
+          "latency_ms": 10275,
+          "input_tokens": 2158,
+          "output_tokens": 602,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5555555555555556,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.25,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：逻辑进程演进路径遵循“先地址与变量，后执行与迁移”路线：首建全局虚拟地址(GVAddr)与变量级透明访问，稳定后再引入逻辑进程/线程抽象[S4][S1]。\n- **模型推断**：推断：系统需经历从静态共享内存底座向具备动态迁移能力的分布式NUMA运行时演进的五个阶段，核心在于将变量级模型扩展至进程级[S1][S5]。\n- **资料事实**：远程内存实现机制基于现有GAM的全局物理地址与目录一致性协议，通过增加GVAddr层和变量包装类型（如gint）实现透明访问[S6][S5]。\n- **研究建议**：建议采用句柄式全局虚拟地址方案以最小化对GAM的修改，并优先使用宏注册机制实现全局变量声明，以快速验证原型思路[S1][S7]。\n- **资料事实**：资源池化核心思路是将远端节点抽象为NUMA节点，利用RDMA优化低延迟访问，并通过数据放置与线程调度维持多租户下的性能稳定性[S2][S3]。\n- **模型推断**：推断：当前GAM仅支持显式读写，必须引入对象语义理解（如AIFM/Nu启发）才能支撑真正的分布式NUMA共享可写语义[S6][S7]。\n\n**证据局限**：缺乏具体实验数据或基准测试结果来验证所提假设的性能表现。；未提供不同远程内存实现方案（如页级vs对象级）的详细对比数据。；关于迁移机制的具体算法设计仅在规划层面提及，无技术细节。；未包含针对特定硬件配置（如RDMA网络拓扑）的实测环境信息。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 12482,
+          "input_tokens": 7883,
+          "output_tokens": 555,
+          "logical_api_calls_estimate": 6,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6666666666666666,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.25,
+          "review_decision": "PASS",
+          "revision_count": 0,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C09",
+        "query": "结合论文、实验记录要求和组会制度，综合分析一个可复现科研结果从阅读到汇报需要保留哪些证据",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "论文阅读与实验记录要求",
+          "实验室组会制度与汇报要求",
+          "论文投稿与对外汇报流程"
+        ],
+        "expected_keywords": [
+          "论文",
+          "实验",
+          "汇报"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室制度与规范，构建可复现的科研结果需保留以下关键证据链：\n\n**1. 论文阅读阶段：建立可追溯的知识锚点**\n*   **结构化笔记**：必须包含设计动机、核心机制、评测方法及局限性，严禁仅做摘要翻译 [文档2]。\n*   **关联性分析**：明确记录该论文与本组课题的具体关系及可迁移思路 [文档2]。\n*   **来源标注**：所有引用内容需明确出处，确保知识溯源清晰 [文档1]。\n\n**2. 实验执行阶段：固化环境与过程状态**\n*   **环境拓扑**：详细记录测试环境参数（如 CPU 绑定、网卡 NUMA 位置、驱动版本），这是高性能计算复现的关键 [文档3]。\n*   **代码与配置**：固定代码版本、实验参数配置及脚本逻辑，防止因环境漂移导致结果不可复现 [文档2]。\n*   **原始数据与日志**：保留完整的实验日志目录、异常现象记录及初步结论，特别是长时间任务的数据 [文档3]。\n\n**3. 组会汇报阶段：呈现完整证据闭环**\n*   **变化对比**：汇报前需整理“与上周相比的变化点”，包括代码演进和实验差异 [文档1]。\n*   **图表规范**：所有数据图表必须标明具体的测试环境和参数，若结论不稳定需主动说明 [文档1]。\n*   **问题定位**：清晰展示系统设计困难、结果偏差原因及未定位问题，而非仅陈述结果 [文档1]。\n\n综上，从阅读到汇报，核心在于将“隐性经验”转化为“显性记录”，确保任何成员均可依据上述证据复现实验路径 [文档2][文档3]。",
+          "document_titles": [
+            "实验室组会制度与汇报要求",
+            "论文阅读与实验记录要求",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 6267,
+          "input_tokens": 1595,
+          "output_tokens": 379,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.7142857142857143,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室资料，一个可复现的科研结果从阅读到汇报需保留以下关键证据：\n\n**1. 论文阅读阶段：深度分析而非摘要**\n*   **核心机制与局限**：笔记必须包含论文解决的问题、设计目标、核心机制、关键优化点及局限性，严禁仅做摘要翻译 [文档1]。\n*   **关联性分析**：需明确论文与本组课题的具体关系，以及其思路的可迁移性 [文档1]。\n*   **评测细节**：记录 Baseline 是谁、评测指标是否公平、图表所揭示的核心问题 [文档2]。\n\n**2. 实验执行阶段：全环境参数记录**\n*   **基础配置**：每次实验必须独立记录代码版本、参数配置、实验环境（含驱动、固件、内核参数）及数据集版本 [文档1][文档5]。\n*   **硬件拓扑**：针对高性能网络实验，必须详细记录 CPU/NUMA 绑定策略、网卡位置及测试脚本配置，以排除环境差异导致的性能波动 [文档4][文档5]。\n*   **异常与日志**：记录异常现象、长时间任务的日志目录及结果摘要，确保后续能定位差异来源 [文档1][文档4]。\n\n**3. 组会汇报阶段：结构化进展展示**\n*   **数据溯源**：汇报中的图表必须标明具体的测试环境和参数，引用内容需明确来源 [文档2]。\n*   **变化对比**：清晰列出当前代码版本、实验参数及与上周相比的变化点，避免“做了没记录”的情况 [文档2]。\n*   **问题透明化**：如实汇报未定位的原因、预期与结果的偏差，并说明下一步计划及所需支持 [文档2][文档5]。\n\n综上，可复现性依赖于从文献理解的深度、实验环境的颗粒度记录到汇报时的数据溯源完整性 [文档1][文档4]。若缺乏上述任一环节的详细记录，将导致无法复现实验或难以判断结果差异原因 [文档1]。",
+          "document_titles": [
+            "论文阅读与实验记录要求",
+            "实验室组会制度与汇报要求",
+            "实验室成员与分工说明",
+            "实验室例会纪要_2026-04-15",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 8050,
+          "input_tokens": 2568,
+          "output_tokens": 435,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.7333333333333333,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：论文笔记需包含问题、设计目标、核心机制、评测方法及局限性等结构化内容，而非仅摘要翻译[S1]。\n- **资料事实**：实验记录必须独立保存，涵盖目标、环境、代码版本、参数配置、结果及异常现象等关键要素[S1][S3]。\n- **模型推断**：推断：RDMA类实验需详细记录网卡型号、驱动版本、NUMA拓扑及线程绑定策略，否则无法复现性能差异[S3][S4]。\n- **资料事实**：组会汇报需展示本周进展、当前问题、下周计划及风险阻塞，且图表必须标明测试环境与参数来源[S2][S7]。\n- **模型推断**：推断：对外投稿前必须确认脚本、参数和commit id已保留，以确保实验结果的可复现性与完整性[S5][S8]。\n- **研究建议**：建议：在汇报前准备当前代码版本、实验参数及变化点清单，以应对“做了但未记录清楚”的常见问题[S2][S4]。\n\n**证据局限**：未提供具体实验室使用的特定软件工具或自动化记录模板细节。；缺乏关于数据隐私分级处理的具体操作指南。；未涉及跨实验室协作时的证据共享协议。；未说明历史实验记录的归档与检索系统具体实现方式。",
+          "document_titles": [
+            "论文阅读与实验记录要求",
+            "实验室组会制度与汇报要求",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15",
+            "论文投稿与对外汇报流程",
+            "实验室成员与分工说明",
+            "分布式NUMA课题组会模板",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 13131,
+          "input_tokens": 9837,
+          "output_tokens": 641,
+          "logical_api_calls_estimate": 6,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6666666666666666,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "PASS",
+          "revision_count": 0,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C10",
+        "query": "结合 RDMA 实验规范、最近组会纪要和集群说明，分析压力测试波动的可能原因并给出排查顺序",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "RDMA与高性能网络实验规范",
+          "实验室例会纪要_2026-04-15",
+          "高性能计算集群使用说明"
+        ],
+        "expected_keywords": [
+          "NUMA",
+          "绑定",
+          "排查"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "根据实验室近期资料，RDMA 压力测试出现性能波动的可能原因及排查顺序如下：\n\n### 一、可能原因分析\n1. **拓扑与绑定不一致**：线程绑定、网卡 NUMA 位置或内存分配策略未统一，导致跨 NUMA 访问增加延迟 [文档 1][文档 2]。\n2. **环境配置缺失**：驱动版本、内核参数、HugePages 或 SR-IOV 等关键配置未记录或未开启，影响底层性能 [文档 2][文档 3]。\n3. **资源竞争**：长时间任务占用共享节点资源（如大内存、GPU），未提前登记或清理，引发系统级干扰 [文档 3]。\n4. **网络链路异常**：网线、交换机端口状态或时钟同步问题未被监控 [文档 2]。\n\n### 二、推荐排查顺序\n1. **核对实验环境记录**：确认是否完整记录了网卡型号、驱动/固件版本、内核参数及 CPU/NIC NUMA 拓扑 [文档 2]。\n2. **验证绑定策略**：检查发送/接收线程、内存 buffer 是否严格绑定至对应 NUMA node，避免跨节点访问 [文档 2]。\n3. **审查资源占用**：确认长时任务是否已提前登记，是否存在僵尸进程或未清理的临时文件占用资源 [文档 3]。\n4. **复现并对比**：在相同拓扑下重跑基准测试（单连接延迟、多连接吞吐等），对比不同 NUMA 策略下的表现 [文档 2]。\n5. **检查物理层**：确认网线、交换机端口速率及链路状态是否正常，时钟是否同步 [文档 2]。\n\n> 注：若上述步骤无法定位问题，需补充详细日志目录与参数记录以便进一步分析 [文档 1]。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "高性能计算集群使用说明"
+          ],
+          "latency_ms": 5981,
+          "input_tokens": 1665,
+          "output_tokens": 398,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室近期会议纪要、RDMA 实验规范及集群使用说明，针对 RDMA 节点在长时间压力测试下出现的性能波动，分析如下：\n\n### 一、可能原因分析\n1. **拓扑与绑定不一致**：线程绑定（CPU）、网卡位置（NUMA node）与内存分配策略不匹配，导致跨 NUMA 访问增加延迟 [文档 2]。\n2. **环境配置漂移**：驱动版本、内核参数或 HugePages 配置未统一记录，导致不同节点或时段状态不一致 [文档 1][文档 3]。\n3. **资源竞争与干扰**：共享环境中存在未登记的长时任务或僵尸进程，占用了 CPU 或网络带宽资源 [文档 3]。\n4. **链路状态异常**：网线、交换机端口或链路速率在长时间运行中发生物理层波动 [文档 2]。\n\n### 二、排查顺序建议\n1. **核对环境一致性**：检查实验节点的网卡型号、驱动/固件版本、内核参数及 HugePages 配置是否与基准一致 [文档 2]。\n2. **验证 NUMA 拓扑绑定**：确认发送/接收线程绑定的核心、NIC 所在的 PCIe 根及内存分配是否处于同一 NUMA 节点；若跨节点需标注并评估影响 [文档 2]。\n3. **检查资源占用情况**：排查是否存在未登记的长时任务、僵尸进程或异常占用的 GPU/RDMA 资源 [文档 3]。\n4. **审查物理链路**：确认网线、交换机端口状态及链路速率是否正常，排除物理层故障 [文档 2]。\n5. **复现日志分析**：对比实验日志目录中的参数记录与当前系统状态，定位具体波动时间点 [文档 1]。\n\n*注：以上分析基于实验室现有规范与纪要，若问题仍未解决，建议补充详细的环境快照数据进一步诊断。*",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "高性能计算集群使用说明",
+            "实验室组会制度与汇报要求",
+            "实验室成员与分工说明"
+          ],
+          "latency_ms": 7891,
+          "input_tokens": 2603,
+          "output_tokens": 409,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：组会纪要指出近期部分节点在长时间压力测试下出现性能波动，初步怀疑与线程绑定、网卡 NUMA 位置及测试脚本配置不一致有关[S1]。\n- **资料事实**：RDMA 实验规范要求必须记录网卡型号、驱动版本、NUMA 拓扑及线程/内存绑定策略，若线程与 NIC 不在同一 NUMA 节点需单独标注[S2]。\n- **模型推断**：推断压力测试波动的核心原因是实验环境信息（如 CPU 绑定、NUMA 位置）未按要求完整记录或执行，导致拓扑配置与规范不符[S1][S2]。\n- **研究建议**：建议排查顺序：首先核对当前实验的 NUMA 拓扑与线程绑定是否一致；其次检查驱动、固件及内核参数版本记录；最后验证长时间运行下的日志完整性[S1][S2][S3]。\n\n**证据局限**：缺乏具体的集群实时状态监控数据，无法确认当前是否存在资源争用。；未提供具体的异常波动数值曲线，难以量化波动幅度与具体故障点的关联。；证据中未包含特定节点的硬件故障诊断报告，无法排除物理硬件损坏可能。；仅基于文档规范分析，未涉及实际代码逻辑层面的潜在 Bug 排查。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "高性能计算集群使用说明",
+            "新生入组第一周任务清单",
+            "实验室组会制度与汇报要求",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 19263,
+          "input_tokens": 11075,
+          "output_tokens": 953,
+          "logical_api_calls_estimate": 8,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.4,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C11",
+        "query": "综合多份资料分析新生参与分布式 NUMA 项目前两周应完成的阅读、环境和汇报产出",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "新生入组第一周任务清单",
+          "分布式NUMA研究计划",
+          "论文阅读与实验记录要求",
+          "实验室组会制度与汇报要求"
+        ],
+        "expected_keywords": [
+          "环境",
+          "阅读",
+          "汇报"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室现有资料，新生参与分布式 NUMA 项目前两周的产出建议如下：\n\n**1. 阅读与理论准备**\n*   **核心任务**：聚焦“远程内存、资源池化与逻辑进程”相关系统，重点分析其设计动机、核心机制及局限，严禁仅记录摘要 [文档 1]。\n*   **关键思考**：需明确回答“为何这是 NUMA 问题而非一般远程内存问题”，并梳理已有系统在抽象层次、资源管理方式上的差异 [文档 2][文档 3]。\n*   **参考方向**：结合 AIFM 等启发，理解运行时对对象语义的理解，区分显式地址访问与统一共享内存的差异 [文档 3]。\n\n**2. 环境搭建与规范**\n*   **平台验证**：在 RDMA 实验平台上进行原型验证，重点关注长时间压力测试下的性能波动，排查线程绑定、网卡 NUMA 位置与脚本配置的一致性 [文档 1]。\n*   **信息记录**：所有实验必须补齐环境拓扑、驱动版本和 CPU 绑定信息，建立日志目录与参数记录 [文档 1]。\n\n**3. 汇报产出要求**\n*   **格式规范**：使用课题组标准模板，包含背景（2-3 页）、相关工作对比、系统设计（接口/数据/控制路径）及实验设计 [文档 2]。\n*   **内容深度**：汇报需明确 baseline 系统、测试平台硬件信息及工作负载；若涉及分布式 NUMA，必须答辩式地论证其与通用远程内存的区别 [文档 2]。\n*   **进度展示**：清晰列出已完成工作、进行中任务、主要阻塞点及下周计划 [文档 2]。\n\n**局限性说明**：\n现有资料未提供具体的论文清单或详细的代码库操作手册，新生需根据组会纪要自行补充具体文献调研细节 [文档 1]。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA课题组会模板",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 6230,
+          "input_tokens": 1646,
+          "output_tokens": 411,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.25,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室资料，新生参与分布式 NUMA 项目前两周应完成的任务如下：\n\n**一、环境配置与基础能力（第一周）**\n1. **账号与资源**：开通服务器、代码仓及共享存储账号，确认直接指导老师 [文档 1]。\n2. **环境搭建**：配置本地与服务器开发环境，跑通项目 README 中的最小示例，熟悉 RDMA 节点拓扑及驱动版本要求 [文档 1][文档 2]。\n3. **规范掌握**：学习如何记录实验结果、查看实验脚本及日志归档方式，明确高性能网络实验必须补齐硬件信息（如 CPU 绑定、NUMA 位置）[文档 1][文档 2]。\n\n**二、阅读任务（第一周至第二周）**\n1. **方向调研**：阅读研究方向与课题地图，重点聚焦远程内存、资源池化与逻辑进程相关的系统论文 [文档 1][文档 2]。\n2. **深度笔记**：阅读 2-3 篇相关论文，笔记需包含设计动机、核心机制、评测方法及局限，严禁仅写摘要翻译 [文档 1][文档 2]。\n3. **背景理解**：研读现有 GAM 代码架构及分布式 NUMA 研究计划，理解从“显式地址”向“统一共享内存”演进的目标 [文档 4]。\n\n**三、汇报与产出（第一周结束前及第二周）**\n1. **书面产出**：完成一份环境配置记录、一份论文阅读笔记、一份项目理解笔记及后续两周计划 [文档 1]。\n2. **组会汇报**：使用课题组模板进行汇报，清晰阐述问题背景、相关工作对比、系统设计（接口/数据/控制路径）及当前进展 [文档 3]。\n3. **答辩准备**：若涉及分布式 NUMA，必须明确回答“为何是 NUMA 问题而非一般远程内存问题”，并展示对比表或原型验证思路 [文档 3][文档 2]。\n\n*注：以上建议基于实验室通用规范及特定课题计划整理，具体细节需结合导师最新指导调整。*",
+          "document_titles": [
+            "新生入组第一周任务清单",
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA课题组会模板",
+            "分布式NUMA研究计划",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 7011,
+          "input_tokens": 2498,
+          "output_tokens": 458,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "\n**证据局限**：证据未明确列出具体必读论文名称或书单。；未提供具体的环境搭建步骤或软件版本要求。；缺乏针对“前两周”时间节点的详细任务分解表。；未说明汇报产出的具体提交格式或截止日期。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "分布式NUMA课题组会模板",
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 17414,
+          "input_tokens": 6397,
+          "output_tokens": 1047,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 0.6666666666666666,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.25,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C12",
+        "query": "结合设备预约、集群规范和 RDMA 实验要求，形成一次共享节点性能实验的完整准备清单",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "设备预约与共享资源使用流程",
+          "高性能计算集群使用说明",
+          "RDMA与高性能网络实验规范"
+        ],
+        "expected_keywords": [
+          "预约",
+          "拓扑",
+          "日志"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室设备预约、集群规范及 RDMA 实验要求，一次共享节点性能实验的完整准备清单如下：\n\n### 一、资源预约与协调\n1. **提交预约申请**：明确使用人、起止时间、资源名称（如 GPU 节点、RDMA 测试节点）、使用目的及是否需独占 [文档 1]。\n2. **冲突协商**：若遇时间冲突，优先协商调整；无法协调时由管理员裁决 [文档 1]。\n3. **长任务报备**：若涉及长时间运行任务，必须提前说明并登记 [文档 2]。\n\n### 二、环境与配置检查\n1. **硬件拓扑记录**：确认网卡型号、驱动/固件版本、CPU 型号、NUMA 拓扑及 PCIe 根位置 [文档 3]。\n2. **系统参数确认**：记录内核版本、OFED/rdma-core 版本、HugePages 开启状态、IOMMU/SR-IOV 设置 [文档 3]。\n3. **网络环境验证**：确认交换机端口、链路速率、网线状态及所有节点时钟同步 [文档 3]。\n4. **目录规划**：建立独立账号下的 `code`、`datasets`、`experiments`、`logs` 等目录结构 [文档 2]。\n\n### 三、实验执行规范\n1. **绑定策略设定**：明确线程与 NIC 绑定的核心/NUMA node，若跨 NUMA 需单独标注 [文档 3]。\n2. **基准测试覆盖**：至少包含单连接延迟、多连接吞吐、不同消息大小曲线、扩展性测试及尾延迟测试 [文档 3]。\n3. **短任务控制**：调试类任务建议控制在 30 分钟内，优先在开发节点运行 [文档 2]。\n4. **禁止行为**：严禁擅自修改系统级配置、重启服务或占满存储不清理 [文档 2]。\n\n### 四、收尾与清理\n1. **异常处理**：若遇资源异常，立即停止破坏性操作并同步组内 [文档 1]。\n2. **数据清理**：实验后清理僵尸进程、无用 checkpoint、临时缓存及无人查看的日志 [文档 2]。\n3. **实验记录归档**：在记录中写明节点信息、资源占用情况及拓扑细节，确保可复现 [文档 1][文档 3]。",
+          "document_titles": [
+            "设备预约与共享资源使用流程",
+            "高性能计算集群使用说明",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 6707,
+          "input_tokens": 1614,
+          "output_tokens": 531,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室现有规范，一次共享节点性能实验的完整准备清单如下：\n\n### 一、资源预约与合规确认\n1. **提交预约申请**：明确使用人、起止时间、目标节点（如 RDMA 测试节点）、具体用途及是否需独占环境 [文档4]。\n2. **冲突检查**：确认无其他已登记任务冲突，若涉及长时压测需提前同步组内 [文档3][文档4]。\n3. **权限确认**：如需修改系统级配置（如内核参数），必须说明用途并登记，严禁随意修改公共环境变量 [文档3]。\n\n### 二、环境与拓扑信息记录\n1. **硬件与驱动记录**：确认并记录网卡型号、驱动/固件版本、CPU 型号、核心数及内核版本 [文档1]。\n2. **NUMA 与绑定策略**：\n   - 明确网卡所在的 NUMA Node。\n   - 规划发送/接收线程绑定的 CPU 核心及 NUMA Node。\n   - 确认内存 Buffer 分配在哪个 NUMA Node（若跨 NUMA 需单独标注）[文档1][文档3]。\n3. **网络链路确认**：确认网线、交换机端口、链路速率及状态，确保时钟已同步 [文档1]。\n\n### 三、实验执行与数据管理\n1. **目录规范**：在 `/data/<username>/experiments` 下建立独立实验目录，包含代码、数据集、日志及 Checkpoint [文档3]。\n2. **基准测试项**：至少包含单连接延迟、多连接吞吐、不同消息大小曲线、线程扩展性及长时间尾延迟测试 [文档1]。\n3. **参数固化**：记录编译选项、HugePages 配置、内核参数及代码 Commit ID [文档1][文档3]。\n\n### 四、实验后清理\n1. **资源释放**：实验结束后及时释放节点，停止僵尸进程 [文档3]。\n2. **数据整理**：清理无用缓存、临时文件及大体积日志，保留关键结果与日志目录 [文档3]。\n\n*注：本清单综合了设备预约流程、集群使用规范及 RDMA 实验专项要求，若涉及特殊硬件或新协议，需补充具体技术细节。*",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15",
+            "高性能计算集群使用说明",
+            "设备预约与共享资源使用流程",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 7578,
+          "input_tokens": 2550,
+          "output_tokens": 494,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.55,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：共享节点预约需提交使用人、时间、资源名、目的及独占需求，冲突时优先协商或管理员裁决[S1]。\n- **资料事实**：RDMA实验前必须记录网卡型号、驱动版本、内核参数、NUMA拓扑及时钟同步状态等环境信息[S2]。\n- **模型推断**：推断：为确保实验可复现，必须在实验记录中明确绑定CPU、NUMA及网卡的具体配置细节[S2][S3]。\n- **研究建议**：建议：长任务需提前登记并同步组内，避免占用GPU/RDMA节点影响他人，且需清理僵尸进程[S3]。\n- **资料事实**：RDMA基准测试应包含单连接延迟、多连接吞吐、不同消息大小曲线及长时间尾延迟测试[S2]。\n\n**证据局限**：未提供具体的预约系统操作界面截图或链接。；缺少实验室特定节点的详细硬件规格列表。；未包含RDMA测试脚本的具体代码示例。；无关于异常处理流程的联系人具体名单。",
+          "document_titles": [
+            "设备预约与共享资源使用流程",
+            "RDMA与高性能网络实验规范",
+            "高性能计算集群使用说明",
+            "实验室研究方向与课题地图",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 10311,
+          "input_tokens": 6098,
+          "output_tokens": 492,
+          "logical_api_calls_estimate": 5,
+          "keyword_correctness": 0.6666666666666666,
+          "citation_coverage": 0.625,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "PASS",
+          "revision_count": 0,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C13",
+        "query": "结合论文笔记、实验记录和投稿流程，综合分析哪些材料能支撑论文结果可复现",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "论文阅读与实验记录要求",
+          "论文投稿与对外汇报流程",
+          "RDMA与高性能网络实验规范"
+        ],
+        "expected_keywords": [
+          "版本",
+          "实验",
+          "复现"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "支撑论文结果可复现的材料主要涵盖以下三个维度：\n\n1.  **实验记录与原始数据**\n    *   **详细环境配置**：必须记录实验环境、代码版本（含 commit id）、参数配置及异常现象，这是复现的基础 [文档2]。\n    *   **脚本与数据**：需保留完整的实验脚本、数据集版本及具体的测试节点信息，确保系统名、模块名统一 [文档1][文档3]。\n    *   **过程留痕**：每次实验均需独立记录目标、结论及下一步计划，避免依赖模糊记忆 [文档2]。\n\n2.  **论文投稿前的核查材料**\n    *   **完整性确认**：投稿前需确认文中所有图表均有明确来源与实验条件说明，且实验结果具备可复现性 [文档1]。\n    *   **基线对比**：需检查 Baseline 是否充分，确保无选择性展示结果的问题，保证评测公平 [文档1]。\n\n3.  **论文阅读笔记中的机制解析**\n    *   **核心逻辑**：笔记需包含核心机制、设计目标及关键优化点，帮助他人理解算法原理而非仅看摘要 [文档2]。\n    *   **局限性分析**：明确论文在哪些场景下失效或依赖特定硬件，有助于复现者规避潜在的环境陷阱 [文档2]。\n\n综上，只有将**结构化的实验记录**、**严谨的投稿核查清单**以及**深度的论文机制笔记**结合，才能构建完整的可复现证据链 [文档1][文档2]。若缺乏上述任一环节的详细记录，后续将无法判断结果差异源于系统设计还是环境变化 [文档2]。",
+          "document_titles": [
+            "论文投稿与对外汇报流程",
+            "论文阅读与实验记录要求",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 5741,
+          "input_tokens": 1527,
+          "output_tokens": 361,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6923076923076923,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "支撑论文结果可复现的材料主要涵盖以下三个维度：\n\n**1. 实验记录（核心依据）**\n实验记录是复现的基础，必须包含独立且完整的上下文信息。每次实验需记录实验目标、环境配置、代码版本、参数配置及结果摘要 [文档1]。特别是对于高性能网络或分布式系统，必须补充拓扑结构、驱动版本和 CPU 绑定等环境细节，以排除环境差异导致的结论偏差 [文档3]。此外，所有长时间任务需保留日志目录与参数记录，确保后续无法复现实验时能追溯原因 [文档3]。\n\n**2. 论文笔记（逻辑验证）**\n论文笔记不应仅是摘要翻译，而应结构化地记录设计动机、核心机制及评测方法 [文档1]。笔记中需明确 Baseline 选择、指标定义及图表所说明的关键问题，并分析论文的局限性 [文档1][文档3]。这有助于理解实验设计的边界条件，判断结果是否受特定场景限制，从而辅助复现时的变量控制。\n\n**3. 投稿流程中的核查材料（最终保障）**\n在投稿前，必须确认实验结果可复现，并保留脚本、参数及 Commit ID 作为证据 [文档2]。同时，所有图表需附带明确的来源与实验条件说明，确保文中使用的系统名、模块名及缩写统一 [文档2]。若涉及对外汇报，还需准备独立的演示环境和关键图表清单，以验证结果的稳定性 [文档2]。\n\n综上，只有将详细的实验环境记录、结构化的论文分析笔记以及投稿前的完整脚本与参数归档相结合，才能有效支撑论文结果的可复现性。",
+          "document_titles": [
+            "论文阅读与实验记录要求",
+            "论文投稿与对外汇报流程",
+            "实验室例会纪要_2026-04-15",
+            "新生入组第一周任务清单",
+            "实验室成员与分工说明"
+          ],
+          "latency_ms": 6882,
+          "input_tokens": 2360,
+          "output_tokens": 347,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5333333333333333,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：论文笔记需包含核心机制、评测方法及局限性，确保研究可检索与复用[S1]。\n- **资料事实**：实验记录必须包含环境配置（如驱动版本、NUMA拓扑）、代码Commit ID及参数详情[S2]。\n- **模型推断**：推断：RDMA实验对硬件拓扑敏感，详细记录NUMA绑定与线程策略是复现结果差异的关键[S2]。\n- **资料事实**：投稿前检查要求保留脚本、参数和commit id，并确认图表来源与实验条件说明完整[S3]。\n- **研究建议**：建议：在对外汇报或投稿时，应明确区分当前版本状态，避免未定稿数据误导复现[S3]。\n- **资料事实**：FAQ指出系统方向实验结论强依赖环境，缺失参数与平台信息将导致无法复现[S4]。\n\n**证据局限**：证据仅涵盖实验室内部规范，未提供具体某篇论文的复现实验数据。；缺乏关于自动化复现工具或容器化方案的具体实施细节。；未涉及跨实验室协作时的外部复现验证流程。；部分文档为通用模板，未针对特定算法或系统架构给出定制化复现指标。",
+          "document_titles": [
+            "论文阅读与实验记录要求",
+            "RDMA与高性能网络实验规范",
+            "论文投稿与对外汇报流程",
+            "实验室常见问题FAQ",
+            "新生入组第一周任务清单",
+            "实验室成员与分工说明"
+          ],
+          "latency_ms": 11522,
+          "input_tokens": 7248,
+          "output_tokens": 446,
+          "logical_api_calls_estimate": 6,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6666666666666666,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "PASS",
+          "revision_count": 0,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C14",
+        "query": "综合组会纪要、项目模板和实验记录要求，设计分布式 NUMA 项目的周度进展证据结构",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "实验室例会纪要_2026-04-15",
+          "分布式NUMA课题组会模板",
+          "论文阅读与实验记录要求"
+        ],
+        "expected_keywords": [
+          "进展",
+          "问题",
+          "计划"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室现有资料，分布式 NUMA 项目的周度进展证据结构应包含以下核心模块：\n\n**1. 问题与背景确认**\n需明确当前解决的核心系统问题（性能、抽象或资源管理），并阐述其与一般远程内存问题的区别 [文档 1]。此部分需结合近期“远端 NUMA 节点抽象”和“线程/数据放置策略”的讨论重点进行更新 [文档 2]。\n\n**2. 实验环境与复现性记录**\n所有高性能网络实验必须补齐环境信息，包括测试平台拓扑、驱动版本、CPU 绑定及网卡 NUMA 位置，以排除因配置不一致导致的性能波动 [文档 2][文档 3]。若结果与他人不同，需优先核对代码版本、数据集及内核参数一致性 [文档 3]。\n\n**3. 对比分析与设计验证**\n汇报需包含与 Baseline 系统及已有工作的对比，重点分析不同布局策略下的延迟、吞吐及扩展性 [文档 1]。同时，需展示对相关工作在硬件假设、瓶颈及新增贡献方面的深度分析，而非仅罗列论文名称 [文档 1]。\n\n**4. 进度与阻塞说明**\n按标准格式汇报已完成工作、进行中任务、主要阻塞点及下周计划 [文档 1]。若无明显进展，必须详细说明卡点、已排查路径及所需协助 [文档 3]。\n\n**5. 答辩式自证**\n针对分布式 NUMA 课题，必须能清晰回答“为何这是 NUMA 问题”这一核心质疑，并展示逻辑进程相关的系统抽象差异 [文档 1][文档 2]。\n\n*注：以上结构综合了组会模板、例会纪要及 FAQ 中的规范要求。*",
+          "document_titles": [
+            "分布式NUMA课题组会模板",
+            "实验室例会纪要_2026-04-15",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 5855,
+          "input_tokens": 1696,
+          "output_tokens": 371,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室现有资料，分布式 NUMA 项目的周度进展证据结构应包含以下核心模块，以确保研究的可复现性与逻辑闭环：\n\n### 1. 实验环境与配置快照\n针对 RDMA 与 NUMA 组合的敏感性，必须记录拓扑、驱动版本及绑定策略。\n*   **内容**：节点拓扑图、网卡/驱动版本、CPU 与内存绑定策略（`numactl` 参数）、Commit ID。\n*   **依据**：RDMA 实验需统一记录拓扑与绑定，否则结论不可信 [文档 1]；无 Commit ID 视为不可复现 [文档 3]。\n*   **格式**：`experiments/[日期]/rdma-numa/env.txt` 或 `config.md` [文档 3]。\n\n### 2. 论文阅读与机制分析\n拒绝仅摘录摘要，需深度解析设计动机与局限。\n*   **内容**：远程内存抽象对比表、核心机制图解、评测方法复现性评估、与本组“远端 NUMA 抽象”目标的映射关系。\n*   **依据**：笔记需明确设计动机、核心机制及局限性 [文档 1]；新成员需完成结构化论文笔记 [文档 4]。\n\n### 3. 原型验证与数据产出\n聚焦“远端访问代价”与“数据布局”协同。\n*   **内容**：延迟/吞吐量原始数据、性能波动日志、线程/数据放置策略的对比结果。\n*   **依据**：重点回答“为何是 NUMA 问题而非一般远程内存问题”，并关注数据布局与线程布局的协同 [文档 1][文档 2]。\n*   **格式**：`raw/` 目录存放原始数据，`plots/` 存放图表，`summary.md` 汇总结论 [文档 3]。\n\n### 4. 组会汇报结构化清单\n用于同步进度与暴露风险。\n*   **内容**：本周完成项（代码/实验/结论）、当前阻塞点（如性能波动原因）、下周计划、资源需求。\n*   **依据**：汇报需包含四部分结构，且系统方向课题强调“做了但没记录清楚”是常见问题 [文档 5]。\n\n**局限性说明**：上述结构基于现有通用规范设计，具体到“远端页迁移”等特定子题的实验细节，需结合最新组会纪要动态调整 [文档 2]。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "实验室研究方向与课题地图",
+            "RDMA与高性能网络实验规范",
+            "新生入组第一周任务清单",
+            "实验室组会制度与汇报要求"
+          ],
+          "latency_ms": 8681,
+          "input_tokens": 2125,
+          "output_tokens": 529,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：分布式 NUMA 周组会模板要求汇报包含问题背景、相关工作、系统设计（接口/数据路径/控制路径）、实验设计及当前进展五部分[S1]。\n- **模型推断**：推断：周度进展证据结构应强制包含“已完成/进行中/阻塞/下周计划”的标准化进度字段，以符合模板对当前进展的格式要求[S1]。\n- **资料事实**：实验室制度规定汇报需包含本周完成内容、当前问题、下周计划及风险阻塞，且数据图表必须标明测试环境和参数[S4]。\n- **研究建议**：建议：在证据结构中增加“实验环境元数据”子项（拓扑、驱动版本、CPU绑定），以响应纪要中关于 RDMA 实验统一记录的要求[S3][S4]。\n- **模型推断**：推断：鉴于研究计划强调 GVAddr 抽象设计，周度证据应专门设立“系统模型演进”板块，对比现有 GAM 与新增层的差异[S5]。\n- **研究建议**：建议：引入“答辩式自检”清单作为证据附件，强制回答“为何是 NUMA 问题而非一般远程内存问题”，以对齐组会模板提醒[S1][S3]。\n\n**证据局限**：未提供具体的实验记录表模板细节，仅能基于通用制度推导。；缺乏最新一周的具体实验数据，无法验证当前实际执行偏差。；研究计划中的 GVAddr 方案仅为初步构想，尚未形成最终定论。；RDMA 平台稳定性问题的具体日志数据未在证据包中展示。",
+          "document_titles": [
+            "分布式NUMA课题组会模板",
+            "新生入组第一周任务清单",
+            "实验室例会纪要_2026-04-15",
+            "实验室组会制度与汇报要求",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 12144,
+          "input_tokens": 6365,
+          "output_tokens": 651,
+          "logical_api_calls_estimate": 5,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6666666666666666,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "PASS",
+          "revision_count": 0,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C15",
+        "query": "结合实验室成员分工、组会制度和项目资料，分析复杂实验出现阻塞时应如何升级和协作",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "实验室成员与分工说明",
+          "实验室组会制度与汇报要求",
+          "分布式NUMA研究计划"
+        ],
+        "expected_keywords": [
+          "阻塞",
+          "负责人",
+          "协作"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "当复杂实验出现阻塞时，应遵循以下升级与协作流程：\n\n1.  **自主排查与记录**\n    首先检查代码版本、环境参数（Python/驱动/NUMA）、数据集及测试节点一致性 [文档3]。系统方向强调“做了必须记录”，需确认当前代码版本、实验参数及图表出处是否清晰 [文档2]。若结果异常，先核对实验记录 [文档1]。\n\n2.  **组内协作与讨论**\n    若无法定位原因，应在课题组内与同学讨论 [文档1]。对于环境或平台冲突（如GPU/RDMA），直接联系平台维护负责人或实验室管理员 [文档1][文档3]。\n\n3.  **向导师或骨干升级**\n    若涉及系统设计细节不清或需要额外资源支持，应联系项目负责人或高年级骨干 [文档1]。在组会汇报中，必须明确列出“风险与阻塞”因素，说明是否需要导师决策或额外资源 [文档2]。\n\n4.  **正式汇报机制**\n    无论是否有明显进展，均需在组会上汇报。重点说明卡点位置、已排查内容及所需帮助 [文档3]。若无法参加组会，需提前请假并补交书面汇报 [文档2]。\n\n5.  **行政与资源协调**\n    若阻塞源于账号权限或设备预约问题，由实验室管理员协助处理 [文档1][文档3]。\n\n*注：以上流程基于实验室现有分工与制度整理，具体执行需结合课题实际进度灵活调整。*",
+          "document_titles": [
+            "实验室成员与分工说明",
+            "实验室组会制度与汇报要求",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 5383,
+          "input_tokens": 1670,
+          "output_tokens": 332,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5555555555555556,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "当复杂实验出现阻塞时，应遵循以下升级与协作流程：\n\n**1. 初步排查与内部协作**\n首先检查实验记录是否完整，确认代码版本、环境参数（如驱动、内核、NUMA 绑定）及数据集一致性 [文档 4]。若问题未定位，应立即在课题组内讨论，优先咨询负责该课题的高年级骨干或项目负责人，获取系统设计细节指导 [文档 1]。\n\n**2. 组会汇报与暴露风险**\n若内部无法解决，必须在周会上正式汇报。汇报需明确说明“当前卡在哪里”、“已排查的内容”以及“具体需要的帮助”，严禁隐瞒无进展的情况 [文档 2]。同时，需在组会中列出导致延期的风险因素，并申请是否需要额外资源支持 [文档 2]。\n\n**3. 行政与资源升级**\n若阻塞源于硬件资源冲突（如 GPU/RDMA 节点占用），需联系平台维护负责人协调；若涉及账号权限或公共环境损坏，则直接联系实验室管理员 [文档 1]。对于系统级配置修改或特殊资源需求，需提前登记并同步组内，避免违规操作 [文档 5]。\n\n**4. 导师决策介入**\n若上述步骤仍无法突破，且任务面临延期风险，应在组会中提请导师或联合指导教师进行最终决策，调整研究方向或阶段目标 [文档 1][文档 2]。\n\n*注：以上流程基于实验室现有分工与制度整理，具体执行需结合项目实际进度灵活调整。*",
+          "document_titles": [
+            "实验室成员与分工说明",
+            "实验室组会制度与汇报要求",
+            "知识目录索引",
+            "实验室常见问题FAQ",
+            "高性能计算集群使用说明"
+          ],
+          "latency_ms": 7298,
+          "input_tokens": 2483,
+          "output_tokens": 328,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：遇到环境与平台问题（如GPU冲突、代码仓访问）时，应优先联系项目负责人或实验室管理员，而非直接升级至导师[S1]。\n- **资料事实**：实验结果异常时，成员应先自行检查记录与参数一致性，再在课题组内讨论，最后才考虑上报[S1][S3]。\n- **模型推断**：推断：组会是暴露阻塞点的关键机制，若任务延期需明确说明风险并请求导师决策，而非仅口头汇报进度[S2]。\n- **研究建议**：建议：发现公共服务器无法登录或RDMA网络异常等严重故障时，必须第一时间在组内同步并记录值班日志[S5]。\n- **资料事实**：新成员入组第一周必须掌握如何提问和同步阻塞问题，这是建立协作习惯的核心要求之一[S4]。\n- **模型推断**：推断：系统方向实验结论强依赖环境，若不记录参数版本即视为未完成工作，可能导致后续无法复现而引发阻塞[S3][S6]。\n\n**证据局限**：未提供具体项目级别的紧急联系人名单及电话。；缺乏针对跨实验室或外部合作时的升级流程说明。；未定义不同级别阻塞（如数据丢失vs进度延迟）的具体响应时效标准。；缺少关于非工作时间（周末/夜间）突发硬件故障的应急联络机制。",
+          "document_titles": [
+            "实验室成员与分工说明",
+            "实验室组会制度与汇报要求",
+            "实验室常见问题FAQ",
+            "新生入组第一周任务清单",
+            "实验室安全与值班制度",
+            "高性能计算集群使用说明",
+            "知识目录索引"
+          ],
+          "latency_ms": 13008,
+          "input_tokens": 8252,
+          "output_tokens": 478,
+          "logical_api_calls_estimate": 6,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6666666666666666,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "PASS",
+          "revision_count": 0,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C16",
+        "query": "综合安全值班、设备预约和集群资料，为长时间 RDMA 压测形成风险控制与交接建议",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "实验室安全与值班制度",
+          "设备预约与共享资源使用流程",
+          "高性能计算集群使用说明",
+          "RDMA与高性能网络实验规范"
+        ],
+        "expected_keywords": [
+          "登记",
+          "日志",
+          "建议"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "针对长时间 RDMA 压测，结合实验室现有制度，提出以下风险控制与交接建议：\n\n**一、事前控制与预约规范**\n1. **严格预约登记**：RDMA 测试节点属于共享资源，必须提前提交包含起止时间、独占需求及实验目的的预约信息 [文档2]。若涉及长任务，需优先说明并确认无冲突 [文档2]。\n2. **环境一致性保障**：压测前需明确记录 Commit ID、驱动及固件版本，严禁混用不同版本导致结果不可复现或差异 [文档3]。同时，需记录 CPU/内存绑定策略（NUMA），因其直接决定实验结论 [文档3]。\n3. **安全合规检查**：确保不私接大功率设备，且机柜周边无杂物堆放；公共节点上不得存放未加说明的敏感数据 [文档1]。\n\n**二、运行中风险监测**\n1. **异常实时响应**：值班人员需每日监控核心服务器状态、存储空间及异常日志。若发现 RDMA 网络异常、关键存储不可用或温度电源问题，应立即停止破坏性操作并在组内同步 [文档1][文档2]。\n2. **资源释放机制**：严禁擅自延长已登记的使用时间。若实验提前结束，须及时更新状态以释放资源 [文档2]。\n\n**三、交接与归档要求**\n1. **标准化输出结构**：实验结束后，按 `experiments/年份-月/rdma-latency/` 结构整理输出，包含 `config.md`、`env.txt`、`commit.txt` 及原始数据 [文档3]。\n2. **详细交接记录**：值班结束时需汇总本周发现的问题、已处理事项及未解决风险点。对于重要实验，需在记录中注明使用的具体节点、网络资源及是否独占 [文档1][文档2]。\n3. **数据备份**：建议将重要实验结果异地备份或同步至共享存储，防止单点故障导致数据丢失 [文档1]。",
+          "document_titles": [
+            "实验室安全与值班制度",
+            "设备预约与共享资源使用流程",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 6917,
+          "input_tokens": 1373,
+          "output_tokens": 434,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5555555555555556,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.75,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "针对长时间 RDMA 压测任务，结合实验室现有规范，提出以下风险控制与交接建议：\n\n**一、事前预约与资源锁定**\n1. **提前登记**：必须提交包含起止时间、独占需求及实验目的的预约申请，遵循“先登记、后使用”原则 [文档2]。\n2. **资源确认**：明确占用 GPU、RDMA 网卡或大内存节点，避免与其他成员任务冲突 [文档1][文档2]。\n\n**二、实验过程风险控制**\n1. **参数记录**：必须详细记录 CPU/NUMA/网卡绑定策略、内核参数及驱动版本，确保结果可复现 [文档1][文档4]。\n2. **异常监控**：值班人员需每日检查核心服务器状态、存储空间及是否有异常空跑任务；若遇网络异常或设备故障，立即停止操作并组内同步 [文档3]。\n3. **禁止行为**：严禁在共享节点直接运行不受控压力测试，不得修改公共环境变量 [文档1][文档3]。\n\n**三、任务交接与收尾**\n1. **环境清理**：实验结束后须清理僵尸进程、无用 Checkpoint 及临时日志，释放资源 [文档1]。\n2. **数据归档**：将输出目录（含 config.md、env.txt 等）整理归档至共享存储，防止数据丢失 [文档4]。\n3. **值班交接**：若涉及跨日或长假期，需在值班记录中注明未解决事项及风险点，并完成责任人交接 [文档3]。\n4. **状态更新**：提前结束任务时，应及时更新预约状态并通知管理员 [文档2]。",
+          "document_titles": [
+            "高性能计算集群使用说明",
+            "设备预约与共享资源使用流程",
+            "实验室安全与值班制度",
+            "RDMA与高性能网络实验规范",
+            "实验室考勤与请假制度"
+          ],
+          "latency_ms": 6703,
+          "input_tokens": 2326,
+          "output_tokens": 359,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6428571428571429,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：长时间RDMA压测需提前登记起止时间、资源名称及是否独占，冲突时由管理员协调[S1]。\n- **资料事实**：值班人员需每日检查核心服务器状态、存储空间及异常长时任务，每周归档共享目录[S2]。\n- **模型推断**：推断：压测前必须记录CPU/NUMA绑定及驱动版本，否则无法复现结果或解释性能差异[S3][S5]。\n- **研究建议**：建议：交接时需同步未解决事项及风险点，并明确实验参数与节点拓扑配置[S2][S5]。\n\n**证据局限**：缺乏针对RDMA压测特定故障的应急操作细则；未提供具体的值班轮值表模板；未说明设备预约的具体审批时限；缺少关于压测期间网络中断的自动恢复机制描述",
+          "document_titles": [
+            "设备预约与共享资源使用流程",
+            "实验室安全与值班制度",
+            "高性能计算集群使用说明",
+            "实验室常见问题FAQ",
+            "RDMA与高性能网络实验规范",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 10716,
+          "input_tokens": 7018,
+          "output_tokens": 323,
+          "logical_api_calls_estimate": 6,
+          "keyword_correctness": 0.6666666666666666,
+          "citation_coverage": 0.5714285714285714,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "PASS",
+          "revision_count": 0,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C17",
+        "query": "分析新旧 RDMA 实验记录和最近组会结论的冲突与时间演化，判断性能波动前提是否成立",
+        "category": "temporal_conflict",
+        "relevant_doc_ids": [
+          "RDMA与高性能网络实验规范",
+          "实验室例会纪要_2026-04-15"
+        ],
+        "expected_keywords": [
+          "波动",
+          "NUMA",
+          "记录"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": true,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于提供的检索资料，无法完成“新旧 RDMA 实验记录对比”及“时间演化分析”，因为文档中**未包含具体的历史实验数据或旧版记录内容**，仅提供了当前的规范要求与会议结论。\n\n关于您提出的核心问题，现有资料可得出以下结论：\n\n1.  **性能波动前提的成立性判断**\n    根据 2026-04-15 例会纪要，实验室已确认近期节点在长时间压力测试下出现性能波动，且初步怀疑原因与“线程绑定、网卡 NUMA 位置和测试脚本配置不一致”有关 [文档 1]。因此，“配置不一致导致波动”这一前提在组会层面已被认定为**事实依据**。\n\n2.  **新旧记录的潜在冲突与规范演进**\n    *   **旧状态（隐含）**：此前可能存在“只有摘要、没有分析”的笔记，且缺乏对拓扑、驱动版本和 CPU 绑定的统一记录，导致结果不可复现 [文档 1][文档 3]。\n    *   **新规范**：组会明确要求所有高性能网络实验必须补齐环境信息，特别是必须明确记录“网卡挂在哪个 NUMA node\"、“发送/接收线程绑定位置”以及“内存 buffer 分配位置” [文档 2]。若线程与 NIC 不在同一 NUMA node，必须单独标注，因为这会显著影响延迟和带宽 [文档 2]。\n    *   **冲突点**：若旧记录缺失上述关键拓扑绑定信息，则无法解释为何会出现波动；新规范正是为了解决这一“黑盒”问题而制定 [文档 1]。\n\n3.  **局限性说明**\n    由于资料中缺乏具体的“旧实验记录数据”和“新实验记录数据”的数值对比，无法量化分析两者的具体差异或验证波动是否完全由该因素引起。目前的结论仅基于组会的定性分析和新的执行规范 [文档 1][文档 2]。\n\n建议后续任务重点在于补充对比表，整理已有系统抽象差异，并严格对照新规范重新运行基准测试以验证假设 [文档 1]。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "高性能计算集群使用说明"
+          ],
+          "latency_ms": 7221,
+          "input_tokens": 1659,
+          "output_tokens": 451,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的实验室资料，无法直接分析“新旧 RDMA 实验记录”的具体内容，因为检索资料中仅包含**实验规范**和**组会纪要**，并未提供历史实验数据或具体的新旧记录对比文件。因此，无法完成对具体记录冲突的实证分析。\n\n但根据现有资料，可以梳理出**时间演化逻辑**与**性能波动前提的合理性判断**：\n\n1.  **时间演化与问题定位**\n    *   **过去（隐含）**：存在“不记录 CPU/内存绑定”、“混用驱动版本”等不规范操作 [文档3]。\n    *   **现在（2026-04-15 组会）**：针对近期出现的“长时间压力测试下性能波动”，组会初步怀疑原因正是上述不规范操作（如线程绑定、网卡 NUMA 位置不一致）[文档2]。\n    *   **未来（规范确立）**：已明确要求所有实验必须补齐拓扑、驱动版本及绑定策略记录，并统一使用模板 [文档1][文档2]。\n\n2.  **性能波动前提的判断**\n    *   **前提成立性**：**高度成立**。\n    *   **依据**：RDMA 实验高度依赖拓扑位置，若线程与 NIC 不在同一 NUMA node，将显著影响延迟和带宽 [文档1]。组会明确指出，近期性能波动极可能与“线程绑定、网卡 NUMA 位置和测试脚本配置不一致”有关 [文档2]。\n    *   **结论**：在缺乏严格的环境记录（如 commit id、NUMA 绑定）的情况下，实验结果不可复现且极易出现异常波动 [文档3]。因此，将性能波动归因于环境配置不一致是符合实验室当前认知和规范的合理推断。\n\n**局限性说明**：由于缺乏具体的历史实验日志数据，本分析仅基于组会讨论的假设和规范要求推导，无法量化验证新旧记录的具体差异数值。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "实验室组会制度与汇报要求",
+            "高性能计算集群使用说明"
+          ],
+          "latency_ms": 7414,
+          "input_tokens": 2368,
+          "output_tokens": 413,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.42857142857142855,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：实验室规范明确要求RDMA实验必须记录网卡型号、驱动版本、NUMA拓扑及线程绑定策略，缺失这些信息将导致结果不可复现[S1]。\n- **模型推断**：推断2026-04-15组会指出的性能波动前提成立，其根本原因极可能是历史实验记录中缺失了NUMA绑定或驱动版本等关键环境信息[S2][S3]。\n- **资料事实**：2026-04-15会议纪要确认近期节点在长时间压力测试下出现性能波动，并初步怀疑与线程绑定、网卡位置及脚本配置不一致有关[S2]。\n- **研究建议**：建议立即执行针对性修订：强制要求所有RDMA实验补充完整的拓扑与驱动日志，并建立缺失信息的案例统计机制以验证假设[S2][S3]。\n\n**证据局限**：EvidencePackage中未包含2026-04-15前后具体的性能波动原始日志数据及详细环境配置记录。；无法提供历史实验中缺失NUMA绑定或驱动版本信息的具体案例统计数据。；缺乏新旧实验记录的直接对比数据，仅能基于规范与纪要进行逻辑推断。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "实验室组会制度与汇报要求",
+            "实验室常见问题FAQ",
+            "实验室成员与分工说明",
+            "新生入组第一周任务清单"
+          ],
+          "latency_ms": 20912,
+          "input_tokens": 12273,
+          "output_tokens": 1139,
+          "logical_api_calls_estimate": 8,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5714285714285714,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C18",
+        "query": "比较项目研究计划与最近组会纪要的阶段目标，分析进展变化和仍缺失的证据",
+        "category": "temporal_conflict",
+        "relevant_doc_ids": [
+          "分布式NUMA研究计划",
+          "实验室例会纪要_2026-04-15"
+        ],
+        "expected_keywords": [
+          "进展",
+          "证据"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": true,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于提供的检索资料，**无法直接完成“比较项目研究计划与最近组会纪要”的分析**，原因如下：\n\n1.  **缺失具体研究计划文档**：检索资料中仅包含《实验室组会制度与汇报要求》[文档1]、《新生入组第一周任务清单》[文档2] 和《实验室例会纪要_2026-04-15》[文档3]。资料中未提供具体的“项目研究计划”原文或阶段性目标定义，仅提及分布式 NUMA 方向已完成“研究计划初稿整理”[文档3]。\n2.  **缺乏对比基准**：由于缺少具体的项目计划书内容，无法将其与会议纪要中的进展（如 RDMA 平台稳定性问题、NUMA 抽象策略讨论）进行逐条比对。\n\n**基于现有资料的现状分析：**\n\n*   **当前阶段目标（来自纪要）**：\n    *   **分布式 NUMA**：聚焦于“远端 NUMA 节点抽象”和“线程/数据放置策略”，需回答“为何是 NUMA 问题而非一般远程内存问题”[文档3]。\n    *   **RDMA 平台**：解决长时间压力测试下的性能波动，统一记录拓扑、驱动版本和 CPU 绑定信息 [文档3]。\n    *   **规范建设**：不再接受无分析的论文笔记，强调实验环境信息的完整性 [文档3]。\n\n*   **仍缺失的证据（基于纪要推断）**：\n    *   **对比表**：分布式 NUMA 方向尚未补充“已有系统抽象差异的对比表”[文档3]。\n    *   **环境基线数据**：RDMA 节点的完整拓扑结构和驱动版本尚未由平台维护同学整理完毕 [文档3]。\n    *   **详细实验日志**：部分长时间任务的日志目录与参数记录尚需补齐，以支撑下周组会的检查 [文档3]。\n\n**结论**：若需进行详细的“计划 vs 纪要”差距分析，请提供具体的《项目研究计划》文档内容。目前仅能确认各方向正从“调研/初稿”向“原型验证/规范落地”过渡，但关键的结构化对比数据和底层环境基线数据仍缺失 [文档3]。",
+          "document_titles": [
+            "实验室组会制度与汇报要求",
+            "新生入组第一周任务清单",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 7363,
+          "input_tokens": 1515,
+          "output_tokens": 482,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的检索资料，无法直接比较“项目研究计划”与“最近组会纪要”，因为资料中**未包含具体的项目研究计划文档内容**。\n\n根据现有资料（主要是 2026-04-15 的例会纪要 [文档3]），可分析如下：\n\n**1. 阶段目标对比与进展变化**\n*   **原定/当前重点**：分布式 NUMA 方向已从“前期论文调研与研究计划初稿整理”阶段，推进至“远端 NUMA 节点抽象”和“线程/数据放置策略”的具体讨论 [文档3]。\n*   **验证路径调整**：计划明确先基于现有 RDMA 平台做原型验证，再决定是否引入新的共享内存抽象，显示出从理论规划向工程验证的实质性跨越 [文档3]。\n*   **规范升级**：针对系统方向“做了但没有记录清楚”的痛点，组会强调不再接受无分析的笔记，要求明确设计动机、核心机制及局限，并强制补齐高性能实验的环境信息（拓扑、驱动版本等）[文档3]。\n\n**2. 仍缺失的证据**\n由于缺乏具体的“项目研究计划”原文，以下关键证据在现有资料中**不可见**，需补充：\n*   **原始计划基准**：无法确认当前“原型验证”是否偏离了最初计划的时间表或技术路线。\n*   **RDMA 稳定性归因证据**：纪要提到性能波动怀疑与线程绑定或配置不一致有关，但尚未提供确切的测试日志或对比数据来证实这一假设 [文档3]。\n*   **具体产出物**：纪要要求补充“对比表”以整理已有系统抽象差异，目前该表格尚未完成 [文档3]。\n\n**结论**：资料仅展示了从“计划整理”到“原型验证”的进展趋势，但因缺少原始计划书，无法量化评估偏差；同时，关于 RDMA 平台波动的根本原因及系统抽象差异的对比数据仍是当前缺失的关键证据。",
+          "document_titles": [
+            "新生入组第一周任务清单",
+            "实验室组会制度与汇报要求",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 7201,
+          "input_tokens": 1515,
+          "output_tokens": 428,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.46153846153846156,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "\n**证据局限**：证据仅包含2026-04-15的会议纪要，无法反映该日期之后任务的实际完成进度。；缺乏具体的对比表草稿或拓扑报告原文，只能确认其缺失状态而非内容细节。；未提供各阶段目标的具体量化指标，难以精确评估进展变化的幅度。；关于RDMA问题的分析仅为初步推测，缺乏详细的故障日志作为直接证据。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "实验室组会制度与汇报要求",
+            "新生入组第一周任务清单",
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "实验室成员与分工说明",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 22166,
+          "input_tokens": 12690,
+          "output_tokens": 1252,
+          "logical_api_calls_estimate": 8,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 0.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C19",
+        "query": "综合分析论文、实验记录和投稿流程中版本要求是否存在冲突，并说明应以哪些证据消解",
+        "category": "temporal_conflict",
+        "relevant_doc_ids": [
+          "论文阅读与实验记录要求",
+          "论文投稿与对外汇报流程"
+        ],
+        "expected_keywords": [
+          "版本",
+          "证据"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": true,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于提供的实验室资料，论文、实验记录与投稿流程中的版本要求**不存在逻辑冲突**，而是构成了从“过程复现”到“最终定稿”的完整闭环。各阶段对版本的要求侧重点不同，互为支撑：\n\n1.  **实验记录强调“过程可追溯”**：要求每次实验必须独立记录代码版本（commit id）、参数配置及环境信息，以确保结论在复杂环境下可复现 [文档2]。这是后续验证的基础。\n2.  **投稿前检查强调“结果一致性”**：在提交投稿版本前，需确认实验结果可复现，且文中使用的系统名、缩写统一，同时保留脚本和 commit id 以对应实验记录 [文档1]。这要求投稿时的版本状态必须能回溯至实验记录中的具体节点。\n3.  **对外汇报强调“状态明确性”**：若对外展示版本与投稿版本不一致，必须明确说明当前版本状态，避免误导 [文档1]。\n\n**消解依据与执行策略：**\n应以**实验记录中的 Commit ID 和参数配置**作为核心证据来消解潜在歧义。\n*   当论文描述的方法或数据与实验记录出现差异时，以**实验记录中保存的原始 Commit ID**为准，证明该结果是在特定代码版本下产生的 [文档1][文档2]。\n*   若对外汇报版本与投稿版本不同，应依据**实验记录的完整性**来解释差异来源（如：是临时优化还是正式收敛），并明确标注版本状态 [文档1]。\n\n综上，实验记录提供了“事实锚点”，投稿流程确保了“表述规范”，两者通过统一的版本标识（Commit ID）实现无缝衔接，无需消解冲突，只需严格对齐。",
+          "document_titles": [
+            "论文投稿与对外汇报流程",
+            "论文阅读与实验记录要求"
+          ],
+          "latency_ms": 6370,
+          "input_tokens": 1047,
+          "output_tokens": 370,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.4166666666666667,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的实验室资料，论文、实验记录与投稿流程在版本要求上**不存在实质性冲突**，而是构成了“可复现性闭环”的互补关系。\n\n1.  **一致性原则**：\n    *   **投稿前检查**明确要求实验结果必须可复现，且需保留脚本、参数和具体的 commit id（代码版本）[文档 1]。\n    *   **实验记录**强制要求每次实验必须独立记录代码版本、参数配置及环境信息，以确保结论不依赖模糊的环境条件 [文档 2]。\n    *   **FAQ**指出，若不同机器结果不一致，首要排查项即为代码版本、驱动及绑定策略是否一致 [文档 5]。\n    *   **例会纪要**进一步强调，RDMA 等高性能实验必须统一记录拓扑、驱动版本和 CPU 绑定，否则无法解释性能波动 [文档 3]。\n\n2.  **消解证据与执行逻辑**：\n    当出现版本差异或结果不一致时，应以以下证据链进行消解：\n    *   **核心证据**：以**Git Commit ID**和**实验记录中的参数配置文件**为唯一真理源。投稿版本必须严格对应这些记录中的特定快照 [文档 1][文档 2]。\n    *   **环境证据**：核对**系统拓扑、驱动版本及内核参数**。若实验复现失败，需依据《常见问题 FAQ》逐层比对上述硬件与软件环境的一致性 [文档 5]。\n    *   **流程证据**：若对外汇报版本与投稿版本不一致，必须在展示中明确声明当前状态，避免混淆 [文档 1]。\n\n**结论**：三者共同指向“精确锁定”的要求。不存在冲突，关键在于严格执行“实验记录即投稿依据”的原则，确保所有对外展示的结论均能追溯到具体的代码提交与环境日志 [文档 3]。",
+          "document_titles": [
+            "论文投稿与对外汇报流程",
+            "论文阅读与实验记录要求",
+            "实验室例会纪要_2026-04-15",
+            "实验室成员与分工说明",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 7498,
+          "input_tokens": 2474,
+          "output_tokens": 401,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：投稿流程要求提交前确认所有作者已确认版本，且实验结果需保留脚本、参数和commit id以确保可复现[S1]。\n- **资料事实**：实验规范要求每次实验必须记录代码commit id、驱动版本、内核参数及NUMA拓扑等环境信息[S2][S3]。\n- **模型推断**：推断：论文与实验记录在版本控制上无冲突，均强制要求记录commit id和环境配置以保障可复现性[S1][S2][S3]。\n- **研究建议**：建议：消解潜在冲突应以“代码commit id”和“完整环境参数记录”为核心证据，优先核对S2与S3中的实验日志[S2][S3]。\n\n**证据局限**：EvidencePackage中未包含具体的论文草稿或历史实验记录数据，无法进行实际内容比对。；缺少关于“对外汇报版本”与“投稿版本”不一致时的具体案例描述。；文档仅规定了记录要求，未提供版本冲突自动检测工具或机制的说明。；无法判断是否存在因不同文档定义模糊导致的隐性冲突。",
+          "document_titles": [
+            "论文投稿与对外汇报流程",
+            "RDMA与高性能网络实验规范",
+            "论文阅读与实验记录要求",
+            "实验室常见问题FAQ",
+            "实验室成员与分工说明"
+          ],
+          "latency_ms": 16342,
+          "input_tokens": 6250,
+          "output_tokens": 480,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5714285714285714,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "PASS",
+          "revision_count": 0,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C20",
+        "query": "分析集群配置规范与 RDMA 实验配置记录之间可能的冲突和时间演化，并给出变更审计建议",
+        "category": "temporal_conflict",
+        "relevant_doc_ids": [
+          "高性能计算集群使用说明",
+          "RDMA与高性能网络实验规范",
+          "实验室安全与值班制度"
+        ],
+        "expected_keywords": [
+          "配置",
+          "记录",
+          "建议"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": true,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于提供的实验室资料，集群配置规范与 RDMA 实验记录在**资源占用边界**、**环境一致性要求**及**时间演化下的审计难点**上存在潜在冲突与关联。\n\n### 1. 潜在冲突分析\n*   **资源独占 vs. 共享约束**：RDMA 实验高度依赖特定的 NUMA 绑定、HugePages 及内核参数 [文档 2]，这往往需要修改系统级配置或长期占用特定节点；而集群规范明确禁止“随意修改系统级配置”且不允许“未经说明长期占用 GPU/大内存节点”[文档 1]。若未提前登记，RDMA 实验极易触犯共享环境的红线。\n*   **动态拓扑 vs. 静态规范**：RDMA 实验要求精确记录网卡 PCIe 根、CPU Socket 及 NUMA 位置等拓扑细节 [文档 2]，但集群规范仅要求“独立账号”和基础目录结构 [文档 1]。当硬件拓扑因维护发生微调时，若仅遵循基础规范而未同步更新实验记录中的拓扑字段，将导致实验不可复现。\n\n### 2. 时间演化与现状\n近期组会已发现 RDMA 平台在长时间压力测试下出现性能波动，初步归因为“线程绑定、网卡 NUMA 位置和测试脚本配置不一致”[文档 3]。这表明随着实验深入，**配置漂移**（Configuration Drift）已成为主要风险点。会议明确要求后续所有实验必须统一补齐环境信息，标志着从“基础合规”向“精细化可追溯”的演进 [文档 3]。\n\n### 3. 变更审计建议\n为应对上述挑战，建议实施以下审计机制：\n1.  **前置强制登记**：凡涉及 RDMA 特殊配置（如 CPU/NUMA 绑定、内核参数修改），必须在提交作业前完成用途说明与资源登记，作为执行前提 [文档 1][文档 2]。\n2.  **全量元数据快照**：建立自动化脚本，在实验启动时自动抓取并固化当前节点的驱动版本、固件、内核参数及拓扑信息，确保“代码 Commit ID\"与环境状态一一对应 [文档 2]。\n3.  **定期一致性核查**：利用例会机制，定期检查长时运行任务的日志目录与参数记录是否完整，重点核对实际运行环境与实验记录模板的一致性 [文档 3]。\n4.  **清理与回溯**：实验结束后，除清理僵尸进程外，需归档当时的配置快照，以便在出现性能波动时进行差异对比 [文档 1][文档 3]。",
+          "document_titles": [
+            "高性能计算集群使用说明",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 9524,
+          "input_tokens": 1657,
+          "output_tokens": 555,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于现有实验室资料，集群配置规范与 RDMA 实验记录在“系统级修改权限”与“实验环境可复现性”之间存在潜在冲突，且随时间演化可能产生审计盲区。\n\n**1. 潜在冲突分析**\n*   **配置修改权 vs. 环境一致性**：集群规范严禁未经说明长期占用或随意修改系统级配置（如内核参数、HugePages）[文档2]；而 RDMA 实验规范要求必须记录并对比不同内核参数、驱动版本及 NUMA 绑定策略对性能的影响 [文档1]。若为追求极致性能临时修改系统配置而未登记，将导致实验结果不可复现，违反集群安全原则。\n*   **资源动态变化 vs. 静态快照**：RDMA 实验高度依赖拓扑位置（如 NIC 所在 PCIe 根、NUMA 节点），要求精确记录硬件状态 [文档1]；但集群资源在多租户和动态调度下可能发生变化 [文档3]。若未实时同步拓扑变更，实验记录的“基准环境”将随时间失效。\n\n**2. 时间演化风险**\n随着实验周期延长，若缺乏持续审计，累积的临时配置修改（如为了调试开启的 IOMMU 开关）可能成为常态，导致后续实验数据偏离真实基线，且难以追溯具体变更时间点。\n\n**3. 变更审计建议**\n*   **建立配置变更登记制**：凡涉及 RDMA 实验所需的系统级修改（内核参数、驱动升级、NUMA 绑定调整），必须在执行前参照集群规范进行用途说明与登记 [文档2]，并在实验记录中明确标注该配置变更的时间点及负责人 [文档1]。\n*   **实施拓扑与版本快照**：每次实验启动时，强制自动采集并归档当前节点的 CPU/NUMA 拓扑、NIC 固件版本及内核参数快照，作为实验数据的元数据 [文档1][文档3]。\n*   **定期清理与复核**：实验结束后立即清理僵尸进程与临时缓存，并复核是否遗留了非预期的系统配置修改，确保共享环境回归标准状态 [文档2]。\n\n注：以上建议基于实验室现有规范推导，具体审计工具需结合组内实际脚本实现。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "高性能计算集群使用说明",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 7813,
+          "input_tokens": 1541,
+          "output_tokens": 478,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.4666666666666667,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：RDMA实验规范要求记录网卡型号、驱动版本、NUMA拓扑及线程绑定策略，并明确标注跨NUMA节点情况[S1]。\n- **资料事实**：集群使用说明规定高性能实验必须额外记录CPU/NUMA/网卡绑定及内核参数，且禁止随意修改系统配置[S4]。\n- **模型推断**：推断：近期出现的性能波动可能源于实验记录中缺失了规范的拓扑与绑定信息，导致配置不一致[S2]。\n- **研究建议**：建议：强制要求所有RDMA实验在提交前补齐环境信息模板，特别是NUMA位置与驱动版本的一致性校验[S2][S3]。\n\n**证据局限**：缺乏历史配置变更记录，无法分析具体的时间演化过程。；无具体冲突案例数据，仅能基于规范进行潜在风险推断。；未获取到实际运行日志，无法验证当前配置违规的具体实例。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15",
+            "实验室研究方向与课题地图",
+            "高性能计算集群使用说明",
+            "实验室成员与分工说明"
+          ],
+          "latency_ms": 16481,
+          "input_tokens": 9203,
+          "output_tokens": 766,
+          "logical_api_calls_estimate": 8,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5714285714285714,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "NEED_MORE_EVIDENCE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C21",
+        "query": "比较 Caladan 和 Shenango 的旧有调度假设，分析与当前资源池化研究方向是否存在冲突",
+        "category": "temporal_conflict",
+        "relevant_doc_ids": [
+          "Caladan",
+          "Shenango",
+          "实验室研究方向与课题地图"
+        ],
+        "expected_keywords": [
+          "调度",
+          "资源",
+          "冲突"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": true,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "根据提供的实验室检索资料，**无法回答**关于 Caladan 和 Shenango 具体调度假设的比较及其与资源池化方向冲突的分析。\n\n原因如下：\n1.  **缺乏具体系统细节**：检索资料中仅概括了实验室的研究方向（如分布式 NUMA、资源池化）和关注问题，未提及 Caladan 或 Shenango 这两个特定系统的名称、架构或其具体的“旧有调度假设”[文档 1][文档 2]。\n2.  **无对比数据**：资料中没有包含对这两个系统历史设计的描述，因此无法进行对比分析 [文档 1]。\n3.  **研究方向一致性提示**：虽然资料指出实验室当前重点包括“逻辑进程/资源池化抽象对分布式 NUMA 的支持”以及“面向微秒级服务的远程内存访问路径优化”，暗示这些是当前的演进目标，但并未说明 Caladan 或 Shenango 是否构成阻碍或冲突 [文档 2]。\n\n建议新成员在进阶阶段阅读相关论文时，将上述系统与实验室的“资源池化”及“分布式 NUMA\"设计进行映射对比，以完成该分析任务 [文档 2]。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 4742,
+          "input_tokens": 988,
+          "output_tokens": 252,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "根据提供的实验室资料，无法直接比较 Caladan 和 Shenango 的具体旧有调度假设，因为检索文档中未包含这两篇论文的详细技术细节或历史假设分析。\n\n不过，资料明确指出了当前资源池化（Resource Disaggregation）与分布式 NUMA 的研究方向及核心关注点，可作为分析潜在冲突的理论框架：\n\n1.  **当前研究方向的核心**：实验室聚焦于“面向大规模节点的资源管理与调度”及“分布式 NUMA/远程内存”，强调在系统层实现远程页迁移、缓存或内存映射，并解决多租户下的性能干扰问题 [文档 1]。\n2.  **潜在冲突点分析**：若 Caladan 或 Shenango 的旧有假设基于传统的紧密耦合架构或静态资源分配，则可能与当前“资源碎片化与弹性伸缩”、“数据放置与线程调度”的动态优化目标存在冲突 [文档 1][文档 2]。特别是如果旧假设未充分考虑“远端访问代价”或“本地 vs 远端”的性能差异，将难以适应当前对微秒级服务延迟敏感的工作负载要求 [文档 2]。\n\n建议新成员在阅读相关论文时，重点对比其设计目标、接口抽象及资源管理策略与我们实验室“系统设计 + 原型实现 + 定量评测”的路径是否契合 [文档 2]。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 5276,
+          "input_tokens": 988,
+          "output_tokens": 285,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "\n**证据局限**：证据包缺失Caladan和Shenango系统的核心机制描述，无法完成具体对比。；现有资料仅涵盖实验室当前研究方向，未涉及历史系统（如Caladan/Shenango）的旧有假设。；无法基于现有证据推断旧有假设与资源池化方向的潜在冲突或兼容性。；缺少针对特定历史系统的评测数据或设计目标记录。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "实验室研究方向与课题地图",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 18710,
+          "input_tokens": 5879,
+          "output_tokens": 957,
+          "logical_api_calls_estimate": 8,
+          "keyword_correctness": 0.6666666666666666,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "NEED_MORE_EVIDENCE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C22",
+        "query": "分析 Nu、Quicksand 与分布式 NUMA 资料中的资源粒度差异和潜在矛盾，并区分事实与推断",
+        "category": "temporal_conflict",
+        "relevant_doc_ids": [
+          "Nu Achieving",
+          "Quicksand",
+          "分布式NUMA研究计划"
+        ],
+        "expected_keywords": [
+          "粒度",
+          "事实",
+          "推断"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": true,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于提供的检索资料，无法完成对 **Quicksand** 的分析，因为资料中未包含该系统的任何信息。\n\n关于 **Nu** 与 **分布式 NUMA** 的资料分析如下：\n\n### 1. 资源粒度差异\n*   **现有 GAM 系统（事实）：** 当前系统基于全局物理地址，分配接口 `GAlloc` 返回带有物理归属信息的地址，底层操作涉及页级或裸地址的显式读写、锁与 fence [文档 1]。\n*   **Nu 系统（推断/启发）：** 资料指出 Nu 的核心启发在于运行时应理解“对象、指针与数据结构语义”，而非仅理解页和裸地址，旨在支持更细粒度的远程内存访问 [文档 1]。\n*   **差异总结：** 现有实现偏向粗粒度的“地址/页”管理，而 Nu 代表的研究方向倾向于细粒度的“对象/结构”管理。\n\n### 2. 潜在矛盾\n*   **抽象层级冲突（事实 vs 目标）：** 现有 GAM 本质是“显式地址 + 显式读写”的分布式共享内存，而分布式 NUMA 的目标是构建一个程序员视角的统一共享内存系统，由运行时后台处理映射与迁移 [文档 1]。这要求从“显式控制”向“透明托管”转变。\n*   **功能定位偏差（推断）：** 资料提到 AIFM 原型以\"unshared far memory\"为主，并未将“共享可写 DSM（分布式共享内存）”作为中心问题，暗示了现有启发式方案在完全满足分布式 NUMA 核心需求上可能存在缺口 [文档 1]。\n\n### 3. 事实与推断区分\n*   **事实：**\n    *   现有 GAM 代码具备分布式共享内存底座能力，使用全局物理地址 [文档 1]。\n    *   RDMA 实验需记录 CPU 绑定、内存绑定及 commit id，否则结果不可复现 [文档 2]。\n    *   实验室计划先基于 RDMA 平台做原型验证，再决定是否引入新抽象 [文档 3]。\n*   **推断/研究假设：**\n    *   Nu 和 AIFM 的设计理念可作为提升 GAM 性能的启发，但尚未在现有系统中完全实现 [文档 1]。\n    *   将 GAM 升级为分布式 NUMA 运行时需要解决“远端访问抽象稳定性”及“数据/线程布局协同”问题 [文档 2]。\n\n**局限性说明：** 资料中缺失 Quicksand 的相关信息，且关于 Nu 的描述主要基于其设计启发，缺乏具体的实现细节对比数据。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 7952,
+          "input_tokens": 1412,
+          "output_tokens": 569,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的检索资料，无法完成对 **Quicksand** 的分析，因为资料中未包含该系统的任何信息。同时，关于 **Nu** 的描述仅提及核心启发，缺乏具体的资源粒度细节。\n\n针对现有资料（主要涉及 GAM、AIFM 与 Nu），分析如下：\n\n### 1. 资源粒度差异\n*   **GAM（现有系统）**：采用**物理地址级**粒度。其 `Malloc` 返回带有物理归属信息的全局物理地址（GAddr），显式处理本地/远程请求及缓存失效 [文档 1]。\n*   **AIFM（启发来源）**：强调**对象与数据结构语义**粒度。运行时需理解指针与对象，而非仅关注页和裸地址，以支持细粒度远程访问 [文档 1]。\n*   **目标分布式 NUMA（设计方向）**：拟构建**全局虚拟地址（GVAddr）**粒度。通过引入句柄式映射表，将逻辑地址与底层物理位置解耦，实现透明迁移与统一共享内存语义 [文档 2]。\n*   **Nu（启发来源）**：资料仅指出其提供了“核心启发”，但未具体说明其资源粒度是页级、对象级还是其他层级 [文档 1]。\n\n### 2. 潜在矛盾与冲突\n资料中存在以下描述不一致或需澄清之处：\n*   **实验规范与研究目标的冲突**：《RDMA 与高性能网络实验规范》强调实验必须记录 CPU/内存绑定策略及 Commit ID 以确保可复现性 [文档 3]；而《分布式 NUMA 研究计划》提出通过动态迁移机制改变数据物理位置（即改变绑定关系）作为核心功能 [文档 2]。这构成了“静态绑定要求”与“动态迁移特性”在实验验证层面的潜在张力。\n*   **事实与推断的界限**：\n    *   **事实**：GAM 当前返回 GAddr 且基于物理位置编码 [文档 1]；AIFM 主张理解对象语义 [文档 1]。\n    *   **推断/规划**：资料推测引入 GVAddr 能最小化改动并利于迁移，但这属于设计方案的预期效果，尚未在系统中实现 [文档 2]。\n\n### 3. 局限性说明\n由于资料缺失 Quicksand 相关内容，且对 Nu 的具体实现细节描述不足，无法进行三者完整的对比分析。上述结论严格基于提供的三篇文档内容。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 8208,
+          "input_tokens": 1465,
+          "output_tokens": 528,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：现有GAM系统基于全局物理地址，通过TO_GLOB编码本地指针与Worker身份，返回带有物理归属的GAddr[S1]。\n- **模型推断**：推断：若直接沿用GAddr将导致地址绑定物理位置，不利于透明变量访问与迁移，需设计新的GVAddr层[S3]。\n- **研究建议**：建议采用句柄式虚拟地址方案，以最小改动复用GAM并支持对象迁移及NUMA局部性优化[S4]。\n- **资料事实**：Nu的核心启发在于运行时应理解对象与数据结构语义，但其原型仍以unshared far memory为主[S1]。\n- **模型推断**：推断：引入逻辑进程与线程需以稳定的地址空间与对象身份为前提，且迁移应成为系统内生能力[S4]。\n\n**证据局限**：证据包中明确缺失关于Quicksand资源粒度特征的任何事实或推断描述。；Nu的资源粒度特征仅提及理解对象语义，未提供具体的粒度数值或实现细节。；分布式NUMA的设计目前处于研究计划阶段，缺乏实际系统的性能数据验证。\n\n**冲突核验**：现有证据不足以确认资料之间是否构成事实冲突；不能把缺少资料直接解释为结论一致。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "分布式NUMA课题组会模板",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 16771,
+          "input_tokens": 7950,
+          "output_tokens": 930,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "NEED_MORE_EVIDENCE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C23",
+        "query": "综合最近组会、RDMA 规范和常见问题，分析实验结果不一致的解释是否互相冲突",
+        "category": "temporal_conflict",
+        "relevant_doc_ids": [
+          "实验室例会纪要_2026-04-15",
+          "RDMA与高性能网络实验规范",
+          "实验室常见问题FAQ"
+        ],
+        "expected_keywords": [
+          "不一致",
+          "绑定",
+          "版本"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": true,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "综合三份资料分析，关于“实验结果不一致”的解释**不存在冲突**，反而形成了高度互补的闭环逻辑。\n\n1.  **原因归因的一致性**\n    *   **RDMA 规范**明确指出，网卡 NUMA 位置、线程绑定策略及内存分配节点是决定延迟和带宽的关键变量 [文档 1]。\n    *   **组会纪要**指出近期性能波动正是源于“线程绑定、网卡 NUMA 位置和测试脚本配置不一致” [文档 2]。\n    *   **FAQ**将上述因素列为排查“结果不同”时的首要检查项（CPU/NUMA 绑定、驱动版本等） [文档 3]。\n    *   **结论**：三者均将环境拓扑与配置差异视为核心原因，观点完全一致。\n\n2.  **解决路径的协同性**\n    *   **规范**要求必须记录详细的拓扑和绑定信息 [文档 1]。\n    *   **组会**强调后续实验需统一记录这些参数以复现问题 [文档 2]。\n    *   **FAQ**规定若不记录参数则无法复现，并提供了具体的排查清单 [文档 3]。\n    *   **结论**：从“发现问题”到“记录要求”再到“排查步骤”，三者在方法论上相互支撑。\n\n综上所述，实验室在实验复现性问题上达成了统一共识：**环境拓扑（特别是 NUMA 与线程绑定）的不一致性是导致结果偏差的根本原因**。建议在执行 RDMA 实验时，严格对照《RDMA 与高性能网络实验规范》中的检查清单进行配置记录 [文档 1]，以确保数据可复现。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 5938,
+          "input_tokens": 1662,
+          "output_tokens": 355,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "综合实验室资料分析，关于“实验结果不一致”的解释**不存在冲突**，反而在组会纪要、RDMA 规范及 FAQ 中形成了高度一致的闭环逻辑。\n\n1. **归因逻辑一致**：\n   - **组会纪要**指出性能波动怀疑与“线程绑定、网卡 NUMA 位置和测试脚本配置不一致”有关 [文档 1]。\n   - **RDMA 规范**明确要求必须记录“网卡挂在哪个 NUMA node\"、“线程绑定核心”及“内存分配位置”，并强调若线程与 NIC 不在同一 NUMA 节点将显著影响延迟和带宽 [文档 4]。\n   - **常见问题 FAQ**将“CPU/NUMA 绑定”列为排查结果差异的首要检查项 [文档 2]。\n   三者均将环境拓扑（特别是 NUMA 亲和性）视为导致结果不一致的核心变量，逻辑完全自洽。\n\n2. **解决路径互补**：\n   - **组会**要求后续实验统一记录拓扑和驱动版本 [文档 1]。\n   - **RDMA 规范**细化了必须记录的字段清单（如内核参数、commit id）[文档 4]。\n   - **FAQ**提供了具体的排查步骤（检查代码版本、环境、数据集等）[文档 2]。\n   从“发现问题”到“记录标准”再到“排查动作”，各文档共同构建了标准化的复现机制，而非互相矛盾。\n\n3. **结论**：\n   所有资料均指向同一结论：**系统方向实验强依赖环境配置**。结果不一致通常源于未严格遵循统一的拓扑记录和 NUMA 绑定策略。组会提出的“补充对比表”和“统一模板”正是为了解决规范中定义的潜在差异点 [文档 1][文档 4]。因此，这些解释是相互支撑的，旨在消除不可复现性。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "实验室常见问题FAQ",
+            "实验室成员与分工说明",
+            "RDMA与高性能网络实验规范",
+            "实验室组会制度与汇报要求"
+          ],
+          "latency_ms": 6986,
+          "input_tokens": 2600,
+          "output_tokens": 400,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：RDMA规范指出，线程与NIC不在同一NUMA节点会显著影响延迟和带宽，是结果不一致的关键因素[S1]。\n- **资料事实**：混用不同驱动、固件版本或未记录commit id，会导致同一实验在不同节点出现不可解释的差异[S4]。\n- **模型推断**：推断：组会纪要中提到的性能波动主要源于线程绑定、网卡位置及脚本配置的不一致，而非硬件故障[S3]。\n- **资料事实**：FAQ明确列出代码版本、环境参数、CPU/NUMA绑定及数据集版本不一致是导致结果差异的首要排查项[S5]。\n- **研究建议**：建议：所有RDMA实验必须统一记录拓扑、驱动版本和CPU绑定策略，以消除环境变量导致的冲突[S1][S3]。\n\n**证据局限**：缺乏具体实验数据日志，无法量化不同解释对结果的具体影响权重。；未提供特定实验场景的原始报错信息，难以判断是否存在非文档列出的异常原因。；证据仅涵盖通用规范与会议记录，未包含针对特定“不一致”案例的详细复盘报告。；无法确认当前实验室是否已完全执行了新的实验记录模板要求。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "实验室组会制度与汇报要求",
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "实验室常见问题FAQ",
+            "实验室成员与分工说明"
+          ],
+          "latency_ms": 11668,
+          "input_tokens": 7246,
+          "output_tokens": 450,
+          "logical_api_calls_estimate": 6,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.625,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "PASS",
+          "revision_count": 0,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C24",
+        "query": "分析设备预约与长任务登记制度在时间和责任边界上的冲突，形成统一执行建议",
+        "category": "temporal_conflict",
+        "relevant_doc_ids": [
+          "设备预约与共享资源使用流程",
+          "高性能计算集群使用说明",
+          "实验室安全与值班制度"
+        ],
+        "expected_keywords": [
+          "登记",
+          "时间",
+          "建议"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": true,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于现有实验室资料，设备预约与长任务登记在“时间边界”和“责任归属”上存在以下潜在冲突及执行建议：\n\n### 一、核心冲突分析\n\n1.  **时间边界的刚性 vs. 弹性**\n    *   **冲突点**：制度要求“先登记、后使用”且严禁擅自延长使用时间 [文档 1]，但长任务往往具有不确定性。若长任务未提前明确说明或无法精确预估结束时间，极易导致“占用资源但不运行实际任务”的违规风险 [文档 1]。\n    *   **责任模糊**：若实验提前结束未及时释放，或延期未同步，责任界定不清（是个人疏忽还是流程缺陷）[文档 1]。\n\n2.  **独占需求与共享秩序的矛盾**\n    *   **冲突点**：长任务常需独占环境，而共享原则强调“对多人影响大的资源优先保证已登记任务” [文档 1]。若长任务申请时未充分评估对他人影响，易引发资源争夺。\n    *   **请假联动缺失**：若承担长任务的成员因事假/病假缺席，缺乏明确的“交接人”强制机制，可能导致长任务中断且无人负责 [文档 2]。\n\n### 二、统一执行建议\n\n1.  **建立“长任务分级申报”机制**\n    *   对于预计超过 24 小时的任务，除常规预约外，必须额外提交《长任务风险评估表》，明确**预期起止时间**、**独占必要性**及**异常终止预案** [文档 1]。\n    *   若任务涉及系统级修改，必须提前书面说明并获得管理员确认 [文档 1]。\n\n2.  **强化动态状态同步与交接**\n    *   **实时反馈**：任务提前结束或延期超过 30 分钟，必须立即更新预约状态并通知组内 [文档 1]。\n    *   **强制交接**：长任务负责人若遇请假，必须在请假流程中指定**临时交接人**，确保实验连续性，否则不予批准请假 [文档 2]。\n\n3.  **完善实验记录闭环**\n    *   所有长任务必须在实验记录中详细注明：使用的具体节点、网络配置、是否独占及当前状态，作为后续审计依据 [文档 1]。\n\n*注：以上建议基于现有《设备预约与共享资源使用流程》及《考勤与请假制度》推导，若涉及更复杂的跨课题组协调，需补充相关管理细则。*",
+          "document_titles": [
+            "设备预约与共享资源使用流程",
+            "实验室考勤与请假制度",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 7472,
+          "input_tokens": 1621,
+          "output_tokens": 547,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于现有资料，设备预约与长任务登记在**时间边界**（独占性 vs 共享性）和**责任边界**（个人使用 vs 系统影响）上存在以下潜在冲突及执行建议：\n\n### 1. 核心冲突分析\n*   **时间边界冲突**：制度要求“先登记、后使用”[文档1]，但长任务若未提前说明，易导致资源被长期占用却无实际运行，或与其他人的短期实验产生时间重叠 [文档1]。\n*   **责任边界模糊**：若长任务提前结束但未同步更新状态，或进行系统级修改未报备，会导致后续使用者环境异常或资源释放不及时 [文档1]。此外，请假期间若涉及实验交接不清，会进一步加剧责任断档 [文档2]。\n\n### 2. 统一执行建议\n为明确边界，建议执行以下流程：\n\n1.  **强制前置申报**：所有长任务必须在预约时明确标注“是否独占”及预计周期，并同步至组内，避免隐性占用 [文档1]。\n2.  **动态状态同步**：建立“使用中”状态的动态更新机制。若实验提前结束或需延长，必须立即在预约系统中更新起止时间及原因，严禁擅自延期 [文档1]。\n3.  **明确异常责任**：对公共资源的系统级修改或产生的大体积数据，责任人需在实验记录中详细注明节点、网络及存储配置，确保可追溯 [文档1]。\n4.  **请假与交接闭环**：承担长任务者若遇请假或外出，必须指定替代人并完成实验交接，否则视为违规 [文档2]。\n5.  **冲突裁决机制**：当长任务与多人共享需求发生不可协调的时间冲突时，由实验室管理员或平台负责人依据“已登记任务优先”原则裁定 [文档1]。\n\n*注：以上建议基于实验室现有管理流程推导，具体执行细节需结合课题组内部细则确认。*",
+          "document_titles": [
+            "设备预约与共享资源使用流程",
+            "实验室考勤与请假制度",
+            "实验室常见问题FAQ",
+            "实验室成员与分工说明"
+          ],
+          "latency_ms": 6999,
+          "input_tokens": 2112,
+          "output_tokens": 423,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5714285714285714,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：设备预约流程规定长任务需提前说明，且对多人共享资源优先保证已登记任务[S1]。\n- **模型推断**：推断：现有制度要求长任务提前同步以避免冲突，但未定义具体时长阈值（如多少小时视为长任务）[S1]。\n- **资料事实**：FAQ明确建议长任务需提前同步以与他人实验避免冲突，但无具体统计案例支持[S3]。\n- **模型推断**：推断：因缺乏“长任务”时长定义及历史争议案例数据，无法量化当前时间边界冲突的严重程度[S1][S3]。\n- **研究建议**：建议：制定明确的“长任务”时长标准（如>4小时），并建立冲突登记与仲裁机制以统一执行[S1]。\n\n**证据局限**：证据未提供“长任务”的具体时长定义标准。；证据中无过去一年因设备预约与长任务冲突导致的争议案例统计数据。；现有流程仅提及协商调整，未明确管理员裁决的具体时效或优先级细则。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "设备预约与共享资源使用流程",
+            "实验室考勤与请假制度",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 17313,
+          "input_tokens": 6240,
+          "output_tokens": 900,
+          "logical_api_calls_estimate": 8,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.625,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C25",
+        "query": "基于多份论文和项目资料，给出验证远程内存访问代价的下一步研究建议与最小实验",
+        "category": "recommendation",
+        "relevant_doc_ids": [
+          "AIFM",
+          "Scaling out NUMA-Aware Applications",
+          "分布式NUMA研究计划"
+        ],
+        "expected_keywords": [
+          "远程内存",
+          "建议",
+          "实验"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室现有资料，验证远程内存访问代价的下一步研究建议与最小实验方案如下：\n\n### 一、研究建议\n1. **聚焦数据布局与调度协同**：重点研究如何让应用感知远端访问代价并主动优化数据布局，以及逻辑进程/资源池化抽象对分布式 NUMA 的支持 [文档 1]。\n2. **明确拓扑依赖关系**：在实验中必须严格记录网卡、线程及内存 Buffer 所在的 NUMA Node 位置，因为线程与 NIC 不在同一 NUMA 节点会显著影响延迟和带宽 [文档 2]。\n3. **关注本地性破坏**：评估远端访问是否破坏了应用的本地性，确保远端访问抽象的稳定性与代价的可预测性 [文档 3]。\n\n### 二、最小实验方案\n为确保结果可复现且具备对比价值，需执行以下“最小集”测试：\n\n1. **环境配置检查**：\n   - 记录网卡型号、驱动/固件版本、内核参数及 HugePages 状态 [文档 2]。\n   - 确认所有节点时钟同步，并明确 CPU Socket、NUMA Node 及 NIC 所在 PCIe 根 [文档 2]。\n\n2. **核心对比测试项**：\n   - **单连接延迟测试**：测量基础远端访问时延。\n   - **不同 NUMA 绑定策略对比**：对比“线程/NIC/内存同 NUMA\"与“跨 NUMA\"场景下的性能差异（这是关键变量）[文档 2]。\n   - **消息大小曲线**：测试不同消息大小下的延迟/吞吐变化。\n\n3. **数据归档要求**：\n   - 必须记录代码 Commit ID、编译选项及完整的实验配置（如 `config.md`, `env.txt`），无 Commit ID 的结果不可视为有效 [文档 2][文档 3]。\n   - 输出目录需包含原始数据、绘图及总结报告 [文档 3]。\n\n*注：以上建议严格基于实验室内部规范与课题地图，若需涉及具体论文细节，请补充相关文献信息。*",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "RDMA与高性能网络实验规范",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 5764,
+          "input_tokens": 1328,
+          "output_tokens": 455,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室现有资料，验证远程内存访问代价的下一步研究建议与最小实验方案如下：\n\n### 1. 研究建议\n*   **明确抽象与优化目标**：重点解决“远端 NUMA 节点”的统一抽象定义，并设计机制让应用感知远端访问代价以主动优化数据布局 [文档 1]。\n*   **构建透明访问层**：在现有全局物理地址和显式接口基础上，优先实现“全局虚拟地址 + 全局变量 + 透明访问”层，将系统从显式远程内存接口升级为变量级分布式 NUMA 运行时 [文档 4]。\n*   **强化论文阅读深度**：阅读相关论文时，需对比不同系统在接口抽象、资源管理及性能隔离上的取舍，并将设计映射到本组实验平台 [文档 1][文档 3]。\n\n### 2. 最小实验方案\n*   **环境准备与拓扑记录**：\n    *   确认网卡型号、驱动版本、内核参数及 HugePages 状态 [文档 2]。\n    *   **关键步骤**：必须明确记录 NIC 所在的 NUMA node、发送/接收线程绑定的核心及内存 Buffer 分配的 NUMA node。若线程与 NIC 不在同一 NUMA node，需单独标注，因其显著影响延迟 [文档 2]。\n*   **基准测试项（最少包含）**：\n    1.  **单连接延迟测试**：测量基础远程访问时延。\n    2.  **NUMA 绑定策略对比**：对比“同 NUMA\"与“跨 NUMA\"场景下的延迟与吞吐差异 [文档 2]。\n    3.  **微秒级路径优化测试**：针对面向微秒级服务的远程内存访问路径进行专项评测 [文档 1]。\n*   **记录规范**：\n    *   每次实验需独立记录目标、环境、代码 Commit ID、参数配置及异常现象 [文档 3]。\n    *   保留完整的配置、版本和数据路径归档信息，确保可复现 [文档 1]。\n\n**局限性说明**：以上建议基于实验室当前对 RDMA 及分布式 NUMA 的研究规划，具体实验细节需结合实验室实际硬件拓扑（如 PCIe 根、交换机端口）进行调整 [文档 2]。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "RDMA与高性能网络实验规范",
+            "论文阅读与实验记录要求",
+            "分布式NUMA研究计划",
+            "论文投稿与对外汇报流程"
+          ],
+          "latency_ms": 7465,
+          "input_tokens": 2255,
+          "output_tokens": 501,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：现有GAM系统已具备分布式共享内存底座，但返回的是绑定物理归属的全局物理地址(GAddr)，而非位置无关的虚拟地址[S3]。\n- **模型推断**：推断：直接沿用GAddr将导致地址与物理位置强绑定，阻碍透明变量访问、迁移及动态扩展，需设计全局虚拟地址(GVAddr)[S5]。\n- **研究建议**：建议：最小实验应复用GAM底层能力，新增GVAddr层以提供透明接口，重点验证远端访问代价的可预测性与抽象稳定性[S4][S5]。\n- **资料事实**：RDMA实验高度依赖拓扑，线程/NIC/内存的NUMA绑定策略直接决定延迟和带宽测试结果，必须严格记录[S2][S4]。\n- **研究建议**：建议：最小实验方案必须包含不同NUMA绑定策略下的对比测试，并完整记录驱动版本、commit id及环境配置以确保可复现[S2][S4]。\n\n**证据局限**：文档间存在关于RDMA与高性能网络实验规范的描述冲突，可能影响结论一致性。；缺乏具体的性能基准数据（如微秒级延迟数值），无法量化当前远程访问的具体代价。；未提供针对特定应用场景（如微秒级服务）的实测数据支持。；实验规范仅列出通用要求，未给出针对“最小实验”的具体代码实现或脚本模板。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "RDMA与高性能网络实验规范",
+            "分布式NUMA研究计划",
+            "RDMA与高性能网络实验规范",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 14367,
+          "input_tokens": 8765,
+          "output_tokens": 1019,
+          "logical_api_calls_estimate": 6,
+          "keyword_correctness": 0.6666666666666666,
+          "citation_coverage": 0.5555555555555556,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C26",
+        "query": "综合 Caladan、Shenango 和 RDMA 实验规范，为微秒级尾延迟研究提出下一步实验建议",
+        "category": "recommendation",
+        "relevant_doc_ids": [
+          "Caladan",
+          "Shenango",
+          "RDMA与高性能网络实验规范"
+        ],
+        "expected_keywords": [
+          "尾延迟",
+          "CPU",
+          "建议"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于提供的实验室检索资料，**无法**直接回答关于\"Caladan\"和\"Shenango\"系统的具体实验建议，因为检索文档中未包含这两个系统的技术细节或对比数据 [文档 1][文档 2]。\n\n仅能依据现有的《RDMA 与高性能网络实验规范》及例会纪要，针对微秒级尾延迟研究提出以下通用实验建议：\n\n1.  **完善环境拓扑记录**\n    必须明确记录网卡所在的 NUMA Node、发送/接收线程绑定的核心及 NUMA Node，以及内存 Buffer 的分配位置。若线程与 NIC 不在同一 NUMA Node，需单独标注其对尾延迟的影响 [文档 1]。\n\n2.  **执行基准测试项**\n    除常规的单连接延迟和多连接吞吐外，必须增加“不同 NUMA 绑定策略下的对比测试”以及“长时间运行下的尾延迟测试”，以捕捉微秒级波动 [文档 1]。\n\n3.  **确保可复现性**\n    实验记录必须包含代码 Commit ID、驱动版本、固件版本及内核参数。严禁混用不同版本的驱动或固件，否则会导致结果不可解释 [文档 2]。\n\n4.  **关注分布式 NUMA 特性**\n    将 RDMA 实验视为“远端资源访问路径实验”，重点评估远端访问抽象的稳定性及数据布局与线程布局的协同性，分析是否破坏了应用本地性 [文档 2]。\n\n5.  **规范输出结构**\n    建议按 `experiments/年份-月/实验名/` 结构组织数据，包含 `config.md`（配置）、`env.txt`（环境）、`commit.txt`（版本）及原始日志目录 [文档 2]。\n\n*注：关于 Caladan 和 Shenango 的具体机制对比及差异化实验设计，因资料缺失，建议先补充相关论文阅读笔记（需包含设计动机、核心机制及局限），再结合上述规范制定具体方案 [文档 3]。*",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 6269,
+          "input_tokens": 1456,
+          "output_tokens": 434,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 0.6666666666666666,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的实验室检索资料，目前**无法**综合 Caladan 和 Shenango 的具体细节提出建议，因为检索文档中未包含这两篇论文的具体内容或实验数据 [文档 2]。\n\n仅依据现有的 RDMA 与高性能网络实验规范及组会纪要，针对微秒级尾延迟研究，可提出以下基于现有规范的实验建议：\n\n1.  **完善拓扑与绑定记录**：必须明确记录网卡所在的 NUMA Node、发送/接收线程绑定的核心及 NUMA 位置，以及内存 Buffer 的分配节点。若线程与 NIC 跨 NUMA 节点，需单独标注其对尾延迟的影响 [文档 1][文档 3]。\n2.  **统一环境配置**：确保所有实验节点使用相同的网卡型号、驱动版本（OFED/rdma-core）及固件版本，严禁混用不同版本导致不可解释的差异 [文档 1][文档 3]。\n3.  **执行基准测试项**：除常规的单连接延迟和多连接吞吐外，必须增加“长时间运行下的尾延迟测试”以及“不同 NUMA 绑定策略下的对比测试”，以验证远端访问路径的稳定性 [文档 1][文档 3]。\n4.  **规范实验复现性**：每次实验必须记录代码 Commit ID、编译选项及数据集模式，否则结果不可视为可复现 [文档 1][文档 3]。\n5.  **关注资源协同**：在分布式 NUMA 视角下，重点评估数据布局与线程布局是否协同，以及远端访问是否破坏了应用本地性 [文档 3]。\n\n*注：关于 Caladan 和 Shenango 的具体机制对比及差异化实验设计，因资料缺失无法提供，建议先补充相关论文阅读笔记（需包含核心机制与评测方法）[文档 2]。*",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 5587,
+          "input_tokens": 1456,
+          "output_tokens": 395,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 0.6666666666666666,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：RDMA实验规范明确要求记录网卡型号、驱动版本、固件版本及节点拓扑，以确保微秒级尾延迟测试的可复现性[S1]。\n- **资料事实**：规范规定必须记录线程与NIC的NUMA绑定策略，若不在同一NUMA节点需单独标注，因其显著影响测得的延迟和带宽[S1]。\n- **模型推断**：推断：针对微秒级尾延迟研究，下一步实验必须严格统一CPU/内存绑定策略并完整记录拓扑，否则无法解释性能波动[S2][S3]。\n- **研究建议**：建议：在后续实验中增加“长时间运行下的尾延迟测试”项，并建立包含commit id与环境参数的标准化输出目录结构[S1][S2]。\n\n**证据局限**：证据包中未包含Caladan和Shenango的具体实验规范内容，无法进行三者对比分析。；缺乏关于微秒级尾延迟的具体测量数据或历史实验结果，仅能基于规范提出流程建议。；未提供当前RDMA平台具体的性能基线数值，难以量化评估下一步实验的预期改进目标。；会议纪要是2026年的未来时间设定，可能不代表当前实际可用的硬件或软件状态。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 16718,
+          "input_tokens": 5833,
+          "output_tokens": 1033,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "NEED_MORE_EVIDENCE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C27",
+        "query": "基于 Nu、Quicksand 和实验室课题地图，提出资源池化方向可证伪的下一步研究假设",
+        "category": "recommendation",
+        "relevant_doc_ids": [
+          "Nu Achieving",
+          "Quicksand",
+          "实验室研究方向与课题地图"
+        ],
+        "expected_keywords": [
+          "资源",
+          "假设",
+          "实验"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于提供的实验室资料，**无法回答**关于\"Nu\"和\"Quicksand\"的具体研究假设，因为检索资料中未包含这两个系统的相关描述或技术细节 [文档 1][文档 2]。\n\n不过，结合实验室课题地图与近期例会纪要，可针对“资源池化”方向提出以下基于现有资料的**可证伪研究假设**：\n\n**假设：** 在分布式 NUMA 架构下，引入统一的远程内存抽象层（Resource Pooling Abstraction）将显著降低线程/数据放置策略的复杂度，但会因增加一致性维护开销而导致高延迟敏感型工作负载的性能退化超过 15%。\n\n**验证依据与路径：**\n1.  **问题背景**：实验室明确关注“分布式 NUMA / 远程内存 / 资源池化”及“远端 NUMA 节点抽象”问题 [文档 1]。\n2.  **实验约束**：需基于现有 RDMA 平台进行原型验证，并严格记录拓扑、驱动版本及 CPU 绑定信息，以排除环境干扰导致的性能波动 [文档 3]。\n3.  **证伪标准**：若实验数据显示，在引入统一抽象后，高延迟敏感型工作负载（如 tail latency）的性能退化幅度小于 15%，或者在特定调度策略下实现了无性能退化的资源池化，则该假设被证伪 [文档 1][文档 3]。\n4.  **规范要求**：实验必须补齐环境信息，且论文笔记需明确核心机制与评测方法，拒绝仅有摘要的分析 [文档 3]。\n\n建议先补充 Nu 与 Quicksand 的系统对比表，再细化上述假设中的具体参数阈值 [文档 3]。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "知识目录索引",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 5677,
+          "input_tokens": 1448,
+          "output_tokens": 367,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的实验室资料，**无法回答**关于\"Quicksand\"的研究假设，因为检索资料中未包含该系统的任何信息。\n\n关于\"Nu\"和“资源池化”方向，资料提供了以下可证伪的研究线索与假设建议：\n\n1.  **假设一：变量级透明访问的迁移性能优于静态绑定**\n    *   **依据**：资料指出当前 GAM 适合静态集群，而真正的分布式 NUMA 需具备迁移能力。若将对象迁移设计为系统内生能力而非异常路径，应能显著降低动态扩展时的性能抖动 [文档 4]。\n    *   **可证伪点**：在引入逻辑线程与全局变量映射重定向机制后，对比静态部署，观测高负载下节点加入时的尾延迟（Tail Latency）是否确实下降。\n\n2.  **假设二：句柄式虚拟地址（GVAddr）是平衡透明性与工程量的最优解**\n    *   **依据**：研究计划建议采用句柄式 GVAddr 以复用底层 GAM 协议，通过映射表支持迁移，避免直接暴露物理 GAddr [文档 5]。\n    *   **可证伪点**：对比“句柄式映射”与“直接物理寻址”方案，验证前者在频繁迁移场景下的开销是否低于后者，或证明其透明性足以支撑普通变量语义。\n\n3.  **假设三：从“变量级”向“进程级”抽象演进是必要路径**\n    *   **依据**：资料强调逻辑线程应定义为分布在不同节点上的共享 DSM 执行流，这是推进至“进程级分布式 NUMA 执行环境”的前提 [文档 4]。\n    *   **可证伪点**：若跳过稳定的变量级模型直接引入逻辑进程，系统的一致性维护成本是否会导致整体吞吐量不可接受地下降。\n\n**局限性说明**：\n由于缺乏\"Quicksand\"的相关资料，上述假设仅基于 Nu 架构思想及实验室对分布式 NUMA/资源池化的规划提出。如需结合 Quicksand 的特性，请补充相关技术细节。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "知识目录索引",
+            "实验室成员与分工说明",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 7916,
+          "input_tokens": 2373,
+          "output_tokens": 449,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：实验室将“分布式 NUMA / 远程内存 / 资源池化”列为五大核心研究方向之一，强调系统设计、原型实现与定量评测三位一体[S1]。\n- **模型推断**：推断：当前研究重点正从通用远程内存转向明确的“远端 NUMA 节点抽象”，需验证其与传统远程内存的本质差异[S4]。\n- **研究建议**：建议：下一步假设应聚焦于“线程/数据放置策略”在分布式 NUMA 布局下的性能边界，以区分一般远程内存问题[S3][S4]。\n- **资料事实**：现有 RDMA 实验平台存在长时间压力测试下的性能波动，初步归因于线程绑定与网卡 NUMA 位置配置不一致[S4]。\n- **模型推断**：推断：资源池化方向的可证伪假设必须包含对“本地访问与远端访问代价对比”的量化指标，而非仅定性描述[S3]。\n- **研究建议**：建议：构建可证伪假设时，需明确 baseline 系统与不同负载强度下的延迟/吞吐对比，作为验证资源调度策略有效性的依据[S3]。\n\n**证据局限**：缺乏 Nu 和 Quicksand 具体系统的详细技术文档或论文数据，无法直接分析其现状。；未提供具体的硬件拓扑细节（如 NUMA 节点数量、RDMA 带宽），难以构建精确的性能模型。；证据中未包含历史实验数据，无法验证当前假设的可行性或过往失败案例。；关于“资源池化”的具体算法或架构方案未在文档中展开，仅停留在方向定义层面。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "知识目录索引",
+            "分布式NUMA课题组会模板",
+            "实验室例会纪要_2026-04-15",
+            "实验室成员与分工说明"
+          ],
+          "latency_ms": 18216,
+          "input_tokens": 9200,
+          "output_tokens": 1066,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C28",
+        "query": "综合项目计划、组会模板和实验记录要求，为分布式 NUMA 项目设计下一轮里程碑建议",
+        "category": "recommendation",
+        "relevant_doc_ids": [
+          "分布式NUMA研究计划",
+          "分布式NUMA课题组会模板",
+          "论文阅读与实验记录要求"
+        ],
+        "expected_keywords": [
+          "里程碑",
+          "实验",
+          "建议"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室现有资料，为分布式 NUMA 项目设计的下一轮里程碑建议如下：\n\n**1. 原型验证与抽象定义（近期核心）**\n*   **目标**：完成“远端 NUMA 节点”的统一抽象定义，并基于现有 RDMA 平台构建原型。\n*   **依据**：当前重点讨论该抽象及线程/数据放置策略，计划先做原型验证 [文档2]。需明确回答“为何是 NUMA 问题而非一般远程内存问题”[文档3]。\n\n**2. 实验规范与环境对齐**\n*   **目标**：统一所有高性能网络实验的环境记录标准，解决性能波动问题。\n*   **要求**：必须补齐拓扑、驱动版本、CPU 绑定等配置信息，确保长时间任务日志完整 [文档2]。新成员需熟悉集群规范 [文档3]。\n\n**3. 组会汇报与对比分析**\n*   **目标**：在组会中提交系统设计与对比表。\n*   **内容**：按模板要求，清晰阐述接口设计、数据路径与控制路径；补充已有系统的抽象差异对比表 [文档1][文档2]。\n\n**4. 评测指标体系建立**\n*   **目标**：完成关键实验设计，覆盖本地/远端访问代价、不同布局策略及扩展性测试。\n*   **依据**：实验设计必须包含 Baseline、测试平台及多维度负载对比 [文档1]。\n\n**局限性说明**：以上建议基于实验室通用模板与纪要制定，具体技术细节（如特定硬件型号或代码实现）需结合课题组实际进展动态调整。",
+          "document_titles": [
+            "分布式NUMA课题组会模板",
+            "实验室例会纪要_2026-04-15",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 5379,
+          "input_tokens": 1552,
+          "output_tokens": 349,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.35294117647058826,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室现有资料，为分布式 NUMA 项目设计的下一轮里程碑建议如下：\n\n**1. 原型验证与抽象细化（对应文档 1）**\n*   **目标**：完成“远端 NUMA 节点抽象”和“线程/数据放置策略”的原型验证。\n*   **要求**：优先基于现有 RDMA 平台进行验证，暂不引入新的共享内存抽象；明确区分该研究与一般远程内存问题的本质差异 [文档 1]。\n*   **产出**：补充对比表，整理已有系统的抽象差异 [文档 1]。\n\n**2. 实验规范与环境标准化（对应文档 1、2）**\n*   **目标**：解决 RDMA 平台性能波动问题，确保实验可复现。\n*   **要求**：统一记录拓扑、驱动版本、CPU 绑定及 commit id；严禁混用不同驱动或固件 [文档 2]。\n*   **产出**：建立标准化的实验输出目录结构（含 `config.md`, `env.txt` 等）[文档 2]。\n\n**3. 系统性汇报与答辩准备（对应文档 3、4）**\n*   **目标**：在组会中清晰阐述系统设计逻辑。\n*   **要求**：按模板汇报“问题背景 - 相关工作 - 系统设计 - 实验设计”，重点回答“为何是 NUMA 问题”及“数据/控制路径切换机制” [文档 3]。\n*   **产出**：包含 baseline 对比、不同布局策略及扩展性测试的完整实验报告 [文档 3]。\n\n**4. 进度同步与阻塞管理（对应文档 4）**\n*   **目标**：暴露风险并获取资源支持。\n*   **要求**：明确列出当前代码版本、实验参数变化点及主要阻塞因素 [文档 4]。\n\n若上述计划需调整或涉及具体硬件细节，请查阅最新组会纪要确认。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "分布式NUMA课题组会模板",
+            "实验室组会制度与汇报要求",
+            "新生入组第一周任务清单"
+          ],
+          "latency_ms": 6486,
+          "input_tokens": 2293,
+          "output_tokens": 420,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：项目目标是将现有GAM提升为分布式NUMA运行时，实现多节点共享全局地址空间，区分本地与远程访问代价[S1]。\n- **模型推断**：推断下一轮里程碑应聚焦于验证“远端NUMA节点抽象”和“线程/数据放置策略”，这是当前讨论重点[S6]。\n- **研究建议**：建议里程碑汇报严格遵循组会模板，包含系统设计（接口、数据路径、控制路径）及四类对比实验[S2]。\n- **资料事实**：实验记录规范强制要求记录网卡型号、驱动版本、CPU绑定及NUMA拓扑，否则无法复现结果[S7]。\n- **研究建议**：建议在里程碑节点补充已有系统抽象差异对比表，以明确回答为何是NUMA问题而非一般远程内存问题[S6][S2]。\n\n**证据局限**：未提供具体的项目时间表或资源预算信息，无法制定精确的日期规划。；缺乏实验室内部关于里程碑通过的具体验收标准细则。；未包含其他并行课题（如RDMA平台维护）对分布式NUMA项目的具体依赖关系。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "分布式NUMA课题组会模板",
+            "实验室研究方向与课题地图",
+            "实验室组会制度与汇报要求",
+            "实验室常见问题FAQ",
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 18615,
+          "input_tokens": 12868,
+          "output_tokens": 962,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.625,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C29",
+        "query": "基于 RDMA 规范、例会纪要和设备预约资料，提出降低压力测试波动的下一步行动建议",
+        "category": "recommendation",
+        "relevant_doc_ids": [
+          "RDMA与高性能网络实验规范",
+          "实验室例会纪要_2026-04-15",
+          "设备预约与共享资源使用流程"
+        ],
+        "expected_keywords": [
+          "波动",
+          "绑定",
+          "建议"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室现有资料，针对 RDMA 平台在长时间压力测试下出现的性能波动问题，建议采取以下行动：\n\n1. **统一实验环境记录与拓扑核查**\n   立即对所有 RDMA 节点进行拓扑梳理，明确网卡所在的 NUMA 节点、CPU Socket 及 PCIe 根位置。在后续实验中，必须严格记录 CPU 绑定策略（发送/接收线程绑定的核心）、驱动版本及内核参数，确保线程与 NIC 处于同一 NUMA 域或明确标注跨域情况 [文档 3]。此前已发现波动可能与“线程绑定、网卡 NUMA 位置和测试脚本配置不一致”有关 [文档 1]。\n\n2. **完善实验前检查清单**\n   在执行压力测试前，强制核对硬件状态（网卡型号、固件、OFED 版本）及软件配置（HugePages、IOMMU 开关等），并确认所有实验节点时钟已同步 [文档 3]。同时，需补齐环境信息日志，包括交换机端口速率与链路状态，以排除网络层干扰 [文档 3]。\n\n3. **规范资源预约与独占管理**\n   对于长时压力测试任务，应提前提交详细的预约申请，明确注明是否需要独占环境，避免与其他任务共享资源导致干扰 [文档 2]。若使用期间出现异常，应立即停止破坏性操作并在组内同步，联系平台维护负责人处理 [文档 2]。\n\n4. **落实会议决议与数据留存**\n   执行例会纪要要求，所有高性能网络实验必须保留完整的日志目录与参数记录，不再接受缺乏分析的实验报告 [文档 1]。下周组会将重点检查实验记录的完整性，请各方向同学按要求补充对比表及拓扑信息 [文档 1]。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "设备预约与共享资源使用流程",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 5938,
+          "input_tokens": 1595,
+          "output_tokens": 375,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的实验室资料，针对 RDMA 压力测试中出现的性能波动问题，建议采取以下行动：\n\n1.  **统一环境记录与拓扑核查**\n    立即检查并补全所有实验节点的拓扑信息，重点确认网卡所在的 NUMA 节点、CPU 绑定策略及驱动版本。若线程与网卡不在同一 NUMA 节点，必须单独标注，因这显著影响延迟和带宽 [文档 2]。同时，确保所有长时间任务均记录了完整的日志目录与参数 [文档 1]。\n\n2.  **规范实验执行流程**\n    在开始新的压力测试前，严格执行“实验前检查清单”，确认内核版本、OFED/rdma-core 版本、HugePages 配置及网络链路状态一致 [文档 2]。对于长时压测，需提前通过设备预约系统登记独占资源或明确共享状态，避免资源争抢导致的波动 [文档 3][文档 4]。\n\n3.  **优化测试脚本与对比策略**\n    调整测试脚本，增加不同 NUMA 绑定策略下的对比测试项，以验证当前配置是否为最优解 [文档 2]。组内应统一使用实验记录模板，不再接受缺乏详细分析（如设计动机、评测局限）的笔记，确保问题可追溯 [文档 1]。\n\n4.  **异常监控与清理**\n    若测试中出现异常波动，应立即停止破坏性操作并在组内同步，联系平台维护负责人排查 [文档 3]。实验结束后，务必清理僵尸进程和无用缓存，防止残留进程干扰后续测试 [文档 4]。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "设备预约与共享资源使用流程",
+            "高性能计算集群使用说明",
+            "报销与采购说明"
+          ],
+          "latency_ms": 6426,
+          "input_tokens": 2440,
+          "output_tokens": 346,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：2026-04-15例会纪要指出，RDMA节点在长时间压力测试下出现性能波动，初步怀疑与线程绑定、网卡NUMA位置及脚本配置不一致有关[S1]。\n- **模型推断**：推断波动根源在于实验环境记录缺失导致拓扑与绑定策略未标准化，需强制统一记录CPU绑定、NIC NUMA位置等关键参数[S1][S3]。\n- **研究建议**：建议立即执行设备预约流程中的冲突检查机制，确保长时压测任务独占资源并提前登记，避免共享干扰[S2][S6]。\n- **研究建议**：建议参照RDMA规范补充基准测试项，增加不同NUMA绑定策略下的对比测试及长时间运行尾延迟测试以定位波动[S3]。\n- **研究建议**：建议建立值班制度监控公共服务器状态，每日检查异常日志与空跑任务，及时同步网络或存储异常[S5]。\n\n**证据局限**：缺乏具体波动数值（如带宽下降百分比）的量化证据，无法评估严重程度。；未提供历史测试脚本的具体配置内容，难以直接复现问题场景。；无设备故障日志，无法确认是否为硬件老化导致的物理波动。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "设备预约与共享资源使用流程",
+            "RDMA与高性能网络实验规范",
+            "知识目录索引",
+            "实验室安全与值班制度",
+            "高性能计算集群使用说明"
+          ],
+          "latency_ms": 16576,
+          "input_tokens": 10737,
+          "output_tokens": 1010,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.625,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C30",
+        "query": "综合论文投稿、实验记录和组会要求，为投稿前证据缺口检查提出研究建议",
+        "category": "recommendation",
+        "relevant_doc_ids": [
+          "论文投稿与对外汇报流程",
+          "论文阅读与实验记录要求",
+          "实验室组会制度与汇报要求"
+        ],
+        "expected_keywords": [
+          "证据",
+          "复现",
+          "建议"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于实验室现有资料，针对投稿前的“证据缺口”检查，提出以下研究建议：\n\n**1. 验证实验可复现性与数据完整性**\n在投稿前，必须确认实验结果具备可复现性。需检查是否保留了完整的脚本、参数配置及代码 Commit ID，确保实验环境记录详尽 [文档 1]。同时，核对实验记录是否包含异常现象与下一步计划，避免因缺乏详细的环境依赖记录导致结论无法被组内复用或外部验证 [文档 3]。\n\n**2. 审查图表逻辑与基线充分性**\n重点核查所有图表是否有明确的来源与实验条件说明，并确认文中使用的系统名、缩写统一 [文档 1]。在内部评审阶段，需严格检查 Baseline 是否充分，以及图表数据与最终结论是否存在逻辑偏差，杜绝选择性展示结果的问题 [文档 1][文档 3]。\n\n**3. 完善论文笔记与局限性分析**\n检查论文笔记是否超越了简单的摘要翻译，是否清晰阐述了核心机制、关键优化点及与本组课题的关联 [文档 3]。特别需补充对论文局限性的深入分析，明确现有工作在特定场景下的失效风险，以回应潜在的审稿质疑 [文档 3]。\n\n**4. 确认版本一致性与作者共识**\n确保对外汇报版本与投稿版本状态一致，若存在差异需明确说明 [文档 1]。最后，必须获得所有作者的版本确认，并检查匿名要求是否满足 [文档 1]。\n\n*注：以上建议仅基于提供的实验室流程文档整理，未涵盖具体的学术领域细节或组会口头讨论内容。*",
+          "document_titles": [
+            "论文投稿与对外汇报流程",
+            "实验室成员与分工说明",
+            "论文阅读与实验记录要求"
+          ],
+          "latency_ms": 5553,
+          "input_tokens": 1536,
+          "output_tokens": 346,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于实验室现有资料，针对投稿前的“证据缺口”检查，建议从以下三个维度开展研究补强：\n\n**1. 实验复现性与数据完整性核查**\n投稿前必须确认实验结果可复现，并保留完整的脚本、参数及代码 Commit ID [文档 1]。需重点检查是否存在选择性展示结果的情况，确保 Baseline 充分且图表与结论逻辑一致 [文档 1][文档 2]。若组会汇报中曾提及“实验结果异常”或“原因未定位”，必须在投稿前完成归因分析，否则视为证据链缺失 [文档 4]。\n\n**2. 论文笔记的深度与局限性分析**\n依据阅读要求，需补充对论文局限性的深度剖析，明确本研究与已有工作的边界 [文档 2]。检查是否已详细记录评测方法、Baseline 选择及实验环境细节，避免仅停留在摘要翻译层面 [文档 2]。若组会纪要显示方向理解不清，需重新梳理核心机制与设计目标 [文档 3][文档 4]。\n\n**3. 汇报与文档的闭环验证**\n对照组会汇报标准，确认当前版本是否已包含所有关键图表及其测试环境说明 [文档 4]。检查是否已整理出“常见问题清单”及“风险与阻塞点”，特别是涉及外部合作或敏感数据的边界确认 [文档 1]。若发现代码版本、参数配置或图表出处在组会记录中不一致，需立即修正以消除证据矛盾 [文档 4]。\n\n*注：以上建议严格基于实验室现行流程规范，若涉及具体课题的特殊数据缺失，需结合导师指导进一步制定补充方案 [文档 3]。*",
+          "document_titles": [
+            "论文投稿与对外汇报流程",
+            "论文阅读与实验记录要求",
+            "实验室成员与分工说明",
+            "实验室组会制度与汇报要求",
+            "新生入组第一周任务清单"
+          ],
+          "latency_ms": 7634,
+          "input_tokens": 2353,
+          "output_tokens": 358,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：投稿前检查需确认论文结构完整、图表来源明确、实验可复现且保留脚本参数，所有作者已确认版本[S1]。\n- **模型推断**：推断：当前分布式NUMA课题存在选择性展示结果的风险，需在内部评审阶段重点核查baseline充分性与图表结论一致性[S1]。\n- **资料事实**：RDMA实验必须记录网卡型号、驱动版本、NUMA拓扑及线程绑定策略，若线程与NIC不在同一NUMA节点需单独标注[S2]。\n- **研究建议**：建议：立即补充现有系统对比表草稿，整理已有系统在远端NUMA抽象和线程/数据放置策略上的差异[S4]。\n- **资料事实**：组会要求实验记录必须包含目标、环境、代码版本、参数配置及异常现象，否则无法判断结果差异来源[S3][S6]。\n- **模型推断**：推断：近期性能波动可能源于线程绑定或NUMA位置记录不一致，需统一记录拓扑与驱动版本以消除证据缺口[S2][S4]。\n\n**证据局限**：未获取到具体的“现有系统对比表”原始数据，仅能基于会议纪要提出补充建议。；无法验证当前项目是否存在实际的选择性展示行为，仅能指出流程中的潜在风险点。；缺乏具体实验节点的实时运行日志，无法直接定位导致性能波动的确切原因。；未涉及外部合作方对敏感数据的特定限制细节，仅依据通用对外汇报流程分析。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "论文投稿与对外汇报流程",
+            "RDMA与高性能网络实验规范",
+            "论文阅读与实验记录要求",
+            "实验室例会纪要_2026-04-15",
+            "实验室成员与分工说明",
+            "实验室常见问题FAQ"
+          ],
+          "latency_ms": 18825,
+          "input_tokens": 11097,
+          "output_tokens": 1102,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.6666666666666666,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C31",
+        "query": "跨多个研究方向比较现有资料后，为新生选择高性能网络或分布式 NUMA 课题给出证据化建议",
+        "category": "recommendation",
+        "relevant_doc_ids": [
+          "实验室研究方向与课题地图",
+          "新生入组第一周任务清单",
+          "分布式NUMA研究计划",
+          "RDMA与高性能网络实验规范"
+        ],
+        "expected_keywords": [
+          "RDMA",
+          "NUMA",
+          "建议"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于现有实验室资料，针对新生选择“高性能网络”或“分布式 NUMA\"课题的建议如下：\n\n**1. 分布式 NUMA：当前重点方向，适合系统架构与调度研究**\n*   **研究成熟度与紧迫性**：该方向是近期组会核心议题，已完成前期调研并进入原型验证阶段 [文档2]。研究目标明确，旨在将现有的 GAM 分布式共享内存底座升级为支持统一地址空间、具备非一致性访问代价的运行时 [文档3]。\n*   **核心挑战**：需解决“远端 NUMA 节点抽象”及“线程/数据放置策略”，重点在于区分其与一般远程内存的本质差异 [文档2][文档3]。\n*   **建议**：若新生对操作系统内核、资源调度及复杂状态管理（如 Directory/Cache 一致性）感兴趣，且希望参与正在推进的核心项目，此方向提供明确的路线图和对比分析任务 [文档2]。\n\n**2. 高性能网络（RDMA）：基础平台支撑，侧重工程稳定性与优化**\n*   **现状与挑战**：作为底层基础设施，目前面临长时间压力测试下的性能波动问题，主要源于拓扑配置、驱动版本及 CPU 绑定的不一致 [文档2]。\n*   **研究切入点**：适合关注低延迟 RPC、无内核绕过路径优化及实验环境标准化构建的新生。该方向强调“定量评测”与“环境信息补齐”，要求极高的实验规范性 [文档1][文档2]。\n*   **建议**：若新生擅长底层调试、网络栈优化或对建立高可靠实验平台感兴趣，可优先投入 RDMA 平台的稳定性攻关。\n\n**综合建议**：\n*   **选分布式 NUMA**：适合追求算法创新、系统抽象设计及逻辑进程模型研究的同学，该方向处于从理论到原型的攻坚期 [文档3]。\n*   **选高性能网络**：适合偏好工程实践、性能调优及建立标准化评测体系的同学，该方向是其他研究的基础且急需规范化 [文档2]。\n\n两者均需遵循“系统设计 + 原型实现 + 定量评测”的三位一体路径，且必须严格记录实验环境与参数 [文档1][文档2]。",
+          "document_titles": [
+            "实验室研究方向与课题地图",
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 7055,
+          "input_tokens": 1540,
+          "output_tokens": 467,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于现有实验室资料，针对新生选择“高性能网络（RDMA）”或“分布式 NUMA”课题的建议如下：\n\n**1. 推荐优先选择“分布式 NUMA\"方向**\n*   **研究成熟度与路径清晰**：该方向已具备明确的演进路线。团队在现有 GAM 代码基础上，计划分三步走：先实现“全局虚拟地址 + 变量级透明访问”，再构建“逻辑进程/线程”抽象，最后解决“迁移与扩展”问题 [文档 2]。这种从显式接口向透明运行时过渡的路径，适合新生逐步深入。\n*   **核心挑战明确**：当前重点在于区分“远端 NUMA 节点抽象”与“一般远程内存”的界限，并制定线程与数据的放置策略 [文档 3]。这要求新生不仅关注网络性能，更需理解系统语义与数据一致性，学术深度更高。\n*   **汇报标准严格**：该方向要求新生在组会中必须论证“为何是 NUMA 问题而非普通远程内存问题”，迫使研究者建立严谨的系统观 [文档 5]。\n\n**2. “高性能网络（RDMA）”作为基础支撑**\n*   **定位**：RDMA 是该方向的底层基础设施，而非独立的顶层研究目标。其研究重点在于“无内核绕过路径下的优化”及“与共享内存抽象的结合” [文档 4]。\n*   **风险提示**：近期实验平台出现因拓扑、驱动版本或 CPU 绑定不一致导致的性能波动，要求所有实验必须严格记录环境信息（如拓扑、驱动、绑定策略）[文档 3]。若新生缺乏对硬件细节的敏感度，容易陷入调试陷阱。\n\n**综合建议**\n若新生希望从事**系统架构设计与语义抽象**研究，建议选择**分布式 NUMA**，因其有清晰的“原型验证 -> 抽象提升”路线图 [文档 2]；若新生擅长**底层调优与工程落地**，可先参与 RDMA 平台维护，但需注意实验环境的标准化记录 [文档 3]。两者并非割裂，RDMA 是实现分布式 NUMA 的关键手段 [文档 4]。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "实验室例会纪要_2026-04-15",
+            "实验室研究方向与课题地图",
+            "分布式NUMA课题组会模板"
+          ],
+          "latency_ms": 10593,
+          "input_tokens": 2436,
+          "output_tokens": 460,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "- **资料事实**：现有GAM系统已具备基于全局物理地址的分布式共享内存底座，包含显式读写接口及目录缓存一致性机制[S1]。\n- **模型推断**：推断：新生选择分布式NUMA课题应优先聚焦于在GAM基础上构建全局虚拟地址与变量级透明访问层，而非重写底层[S2][S5]。\n- **资料事实**：高性能网络方向核心关注RDMA低延迟RPC、无内核路径优化及与共享内存抽象结合时的一致性问题[S4]。\n- **资料比较**：对比显示：分布式NUMA强调多节点承载单一逻辑进程的统一地址空间，而高性能网络侧重通信路径与协议栈优化[S4][S5]。\n- **研究建议**：建议：若选分布式NUMA，需重点研究远端NUMA节点抽象与线程/数据放置策略，并明确其与一般远程内存的区别[S3][S7]。\n- **研究建议**：建议：无论选择哪个方向，实验必须严格记录CPU/NUMA绑定、网卡配置及拓扑信息以确保可复现性[S6]。\n\n**证据局限**：缺乏具体性能基准数据（如微秒级延迟实测值）来量化比较两个方向的优劣。；未提供关于实验室当前硬件资源（如RDMA网卡型号、节点规模）的详细清单。；缺少针对特定应用场景（如AI训练或HPC模拟）的定制化课题匹配分析。；无法评估学生个人背景与这两个方向技术栈的契合度。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "实验室例会纪要_2026-04-15",
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "高性能计算集群使用说明",
+            "分布式NUMA课题组会模板"
+          ],
+          "latency_ms": 17364,
+          "input_tokens": 12326,
+          "output_tokens": 1048,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.5,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C32",
+        "query": "基于 AIFM、Argo 和项目研究计划，提出远程内存原型下一步应优先验证的研究问题",
+        "category": "recommendation",
+        "relevant_doc_ids": [
+          "AIFM",
+          "Argo",
+          "分布式NUMA研究计划"
+        ],
+        "expected_keywords": [
+          "远程内存",
+          "验证",
+          "建议"
+        ],
+        "min_sources": 3,
+        "should_flag_false_premise": false,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于提供的实验室资料，当前项目（GAM 分布式 NUMA 研究计划）明确参考了 AIFM 和 Nu（注：资料中未提及 Argo，故仅基于 AIFM、Nu 及项目计划），提出远程内存原型下一步应优先验证的研究问题如下：\n\n1.  **全局虚拟地址与透明访问语义的构建**\n    首要任务是验证从“显式物理地址 + 显式读写”向“全局虚拟地址 + 变量级透明访问”的迁移可行性。需重点解决 `gint sa` 等全局变量的初始化、映射及跨节点识别问题，并验证运算符重载（如 `a = sa`, `sa++`）能否在底层正确转换为 GAM 的地址解析与读写调用，从而消除程序员手动调用 Read/Write 的需求 [文档2][文档3]。\n\n2.  **细粒度对象语义与共享可写一致性**\n    受 AIFM 启发，需验证运行时是否具备理解对象、指针与数据结构语义的能力，以支持比页更细粒度的远程访问。核心挑战在于如何在保持“共享可写”的分布式 NUMA 语义下，处理引用、取址、别名及生命周期管理，确保数据在不同节点间的缓存一致性与权限转换正确性 [文档1][文档2]。\n\n3.  **句柄式 GVAddr 的迁移与重映射机制**\n    针对全局变量注册，需优先验证采用“句柄式 GVAddr\"方案的有效性。该方案旨在最小化对现有 GAM 底层的改动，同时支持高效的内存迁移与重映射，是连接逻辑进程与物理分布的关键验证点 [文档2]。\n\n**局限性说明**：提供的资料中未包含关于\"Argo\"项目的具体信息，因此无法结合 Argo 的特性提出针对性的验证问题。上述建议仅基于 AIFM、Nu 及当前 GAM 分布式 NUMA 研究计划推导得出 [文档1][文档2][文档3]。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 6270,
+          "input_tokens": 1534,
+          "output_tokens": 420,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.3333333333333333,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的实验室资料，远程内存原型下一步应优先验证的研究问题如下：\n\n1.  **全局虚拟地址与变量级透明访问机制**\n    当前系统基于全局物理地址和显式读写接口，下一步需优先验证从“显式远程内存接口”向“变量级分布式 NUMA 运行时”的演进。核心是建立全局虚拟地址（GVAddr）及变量级透明访问层，支持 `gint` 等基础类型的自然赋值、表达式求值及自增操作，使程序员无需手动调用底层 Read/Write 即可像操作本地变量一样访问远端数据 [文档 1][文档 4]。\n\n2.  **句柄式 GVAddr 的实现与迁移可行性**\n    在实现全局地址空间时，建议优先采用“句柄式 GVAddr\"方案进行验证。该方案对现有 GAM 代码改动最小，且最有利于后续的逻辑进程迁移与重映射研究，需尽快在主节点初始化并跨节点识别同一变量 [文档 4]。\n\n3.  **远端访问代价感知与数据布局优化**\n    需定义“远端 NUMA 节点”的统一抽象，并验证应用层如何感知远端访问的高延迟代价。重点在于研究如何在多租户和资源动态变化条件下，通过主动优化数据布局来维持性能稳定性，而非仅关注底层的 RDMA 连通性 [文档 3]。\n\n*注：提供的检索资料中未包含关于\"Argo\"项目的具体信息，因此无法结合 Argo 提出针对性验证点。上述建议主要基于 AIFM 启发（理解对象语义）及实验室当前的分布式 NUMA 研究计划。*",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 6021,
+          "input_tokens": 1872,
+          "output_tokens": 353,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "\n**证据局限**：证据仅覆盖特定研究计划文档，未包含Argo框架的具体技术细节或最新实验数据。；关于复杂类型推广（如结构体、生命周期）的验证重点目前仅为规划阶段，缺乏具体实施约束。；未提供RDMA底层网络性能的具体量化指标，难以精确评估远程访问路径优化的实际瓶颈。；缺乏对多租户环境下资源动态变化导致性能干扰的实测数据支持。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 19638,
+          "input_tokens": 8558,
+          "output_tokens": 1276,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 0.3333333333333333,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.3333333333333333,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C33",
+        "query": "综合多份论文和实验记录，验证实验室已经证明 RDMA 在所有负载下都优于本地内存这一前提，并给出建议",
+        "category": "false_premise",
+        "relevant_doc_ids": [
+          "RDMA与高性能网络实验规范",
+          "实验室例会纪要_2026-04-15"
+        ],
+        "expected_keywords": [
+          "证据",
+          "前提"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": true,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于提供的实验室资料，**无法验证**“RDMA 在所有负载下都优于本地内存”这一前提。相反，现有资料明确指出了该前提的局限性及实验中的关键约束：\n\n1.  **前提不成立**：资料强调 RDMA 性能高度依赖拓扑位置。若线程与网卡（NIC）不在同一 NUMA 节点，会显著影响延迟和带宽 [文档2]。此外，近期 RDMA 平台在长时间压力测试下已出现性能波动，需排查线程绑定与配置问题 [文档1]。\n2.  **核心挑战**：当前研究重点正是解决“远端访问代价”问题，即如何让应用感知并优化本地与远端访问的差异，而非默认远端更优 [文档3]。\n3.  **实验规范建议**：\n    *   **严格记录拓扑**：必须明确记录 NIC、发送/接收线程及内存 Buffer 所在的 NUMA 节点，若跨节点需单独标注 [文档2]。\n    *   **对比测试**：基准测试必须包含“不同 NUMA 绑定策略下的对比测试”，以量化本地与远程的性能差异 [文档2]。\n    *   **环境一致性**：所有实验需统一记录驱动版本、内核参数及 CPU 绑定，避免因配置不一致导致结果不可复现 [文档1][文档2]。\n\n综上，实验室目前的共识是 RDMA 并非在所有场景下均优于本地内存，其性能受 NUMA 拓扑和配置影响极大，需通过精细化实验进行验证和优化。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "实验室研究方向与课题地图"
+          ],
+          "latency_ms": 5345,
+          "input_tokens": 1536,
+          "output_tokens": 326,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 0.5,
+          "citation_coverage": 0.5454545454545454,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的实验室资料，**无法验证**“RDMA 在所有负载下都优于本地内存”这一前提。相反，现有记录明确指出该前提不成立，且强调必须严谨区分本地与远端访问的代价差异。\n\n具体依据与建议如下：\n\n1.  **前提验证结论：不成立**\n    *   实验室研究重点在于量化“本地访问 vs 远端访问”的代价差异，而非证明 RDMA 全面优于本地内存 [文档4]。\n    *   实验规范明确要求对比不同 NUMA 绑定策略下的性能，因为若线程与网卡不在同一 NUMA 节点，会显著增加延迟和降低带宽 [文档1]。\n    *   研究目标之一是分析远端访问是否破坏应用本地性，暗示在特定场景下（如高局部性需求），本地内存更具优势 [文档3]。\n\n2.  **给用户的建议**\n    *   **修正假设**：不要预设 RDMA 在所有负载下更优。实验设计应聚焦于界定 RDMA 相对于本地内存的性能边界和适用场景 [文档4]。\n    *   **完善实验记录**：在进行对比测试时，必须详细记录 CPU/内存绑定策略、NUMA 拓扑及驱动版本，避免因配置不一致导致数据不可复现 [文档1][文档2]。\n    *   **关注关键指标**：重点评估微秒级服务中的远程访问路径优化，以及数据布局与线程布局的协同效应，而非单纯追求吞吐量 [文档3][文档4]。\n    *   **论文阅读规范**：阅读相关文献时，需明确其设计动机与局限性，特别是关于资源抽象和性能隔离的取舍 [文档2][文档4]。\n\n综上，实验室当前的共识是 RDMA 提供了低延迟的远程访问能力，但其性能表现高度依赖于系统拓扑、绑定策略及负载特性，绝非在所有情况下均优于本地内存。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "实验室研究方向与课题地图",
+            "知识目录索引"
+          ],
+          "latency_ms": 7104,
+          "input_tokens": 2140,
+          "output_tokens": 407,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 0.5,
+          "citation_coverage": 0.5,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "**前提核验**：Reviewer 发现问题前提可能不成立，请先核对该前提。\n\n- **模型推断**：推断：现有证据未支持“RDMA在所有负载下均优于本地内存”的绝对化前提，反而强调NUMA绑定与拓扑对结果有决定性影响[S1][S2]。\n- **资料事实**：事实：实验规范明确要求记录CPU/NUMA绑定、驱动版本及节点拓扑，因配置差异会导致不可解释的性能波动[S1][S2]。\n- **资料事实**：事实：实验室近期发现RDMA平台在压力测试下出现性能波动，初步归因于线程绑定与网卡位置不一致[S4]。\n- **研究建议**：建议：在缺乏全场景对比数据前，不应默认RDMA全面优于本地内存，需针对特定负载设计包含NUMA绑定的对照实验[S2][S3]。\n\n**证据局限**：无直接实验数据证明RDMA在所有负载下的具体性能表现。；无法确认实验室是否已进行过覆盖所有负载类型的系统性对比测试。；证据仅显示存在性能波动风险，未提供具体的优劣量化结论。；缺乏外部独立论文或第三方基准测试作为补充验证。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "RDMA与高性能网络实验规范",
+            "RDMA与高性能网络实验规范",
+            "实验室研究方向与课题地图",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 15503,
+          "input_tokens": 6957,
+          "output_tokens": 888,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.5,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C34",
+        "query": "分析项目资料和组会纪要，验证分布式 NUMA 项目已经在 2026 年正式结题这一前提是否成立",
+        "category": "false_premise",
+        "relevant_doc_ids": [
+          "分布式NUMA研究计划",
+          "实验室例会纪要_2026-04-15"
+        ],
+        "expected_keywords": [
+          "前提",
+          "证据"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": true,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "基于提供的实验室资料，**“分布式 NUMA 项目已在 2026 年正式结题”这一前提不成立**。现有证据表明该项目在 2026 年仍处于进行中阶段。\n\n具体分析如下：\n\n1.  **处于计划细化与原型验证阶段**\n    根据 2026 年 4 月 15 日的例会纪要，分布式 NUMA 方向的重点是“研究计划细化”，当前工作聚焦于“远端 NUMA 节点抽象”和“线程/数据放置策略”的讨论 [文档 1]。会议明确计划“先基于现有 RDMA 平台做原型验证，再决定是否引入新的共享内存抽象”，这表明核心实验尚未完成，更未进入结题验收环节 [文档 1]。\n\n2.  **存在明确的后续任务与待办事项**\n    会议纪要中列出了具体的后续任务，包括要求相关同学补充对比表、整理系统抽象差异，以及下周组会重点检查实验记录的完整性 [文档 1]。这些任务导向的是项目的推进而非收尾。\n\n3.  **研究计划仍在撰写与深化中**\n    名为《分布式 NUMA 研究计划》的文档（作者李福润，日期 2026/4/3）详细阐述了研究背景、问题定义及未来启发（如 AIFM 与 Nu），并指出目标是“把现有 GAM 提升为一个分布式 NUMA 运行时” [文档 2]。该文档内容显示项目正处于理论构建与方案设计期，而非成果固化期。\n\n综上所述，所有资料均指向该项目在 2026 年 4 月正处于**中期研究与原型开发阶段**，不存在任何关于结题、验收或项目终止的记录。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA研究计划"
+          ],
+          "latency_ms": 5412,
+          "input_tokens": 1154,
+          "output_tokens": 373,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "基于提供的实验室资料，**“分布式 NUMA 项目已在 2026 年正式结题”这一前提不成立**。现有资料明确显示该项目仍处于进行中状态。\n\n具体依据如下：\n\n1.  **研究计划处于初期阶段**：根据《分布式 NUMA 研究计划》（2026/4/3），当前工作是将现有的 GAM 代码提升为分布式 NUMA 运行时，重点在于理解对象语义和远程内存访问机制，尚未提及完成或结题 [文档 3]。\n2.  **组会纪要显示正在进行中**：2026-04-15 的例会纪要指出，该方向“已完成前期论文调研与研究计划初稿整理”，当前重点是讨论“远端 NUMA 节点抽象”和“线程/数据放置策略”，并计划先做原型验证 [文档 1]。\n3.  **后续任务明确**：会议纪要要求成员补充对比表、整理拓扑信息，且下周组会将检查实验记录完整性，这表明项目正处于执行和迭代过程中，而非收尾结题阶段 [文档 1]。\n4.  **汇报模板暗示未完成**：课题组会模板要求汇报者说明“当前进展”、“主要阻塞”及“下周计划”，这通常用于进行中的课题，而非已结题项目的总结 [文档 2]。\n\n综上，所有资料均指向该项目在 2026 年 4 月仍处于**原型验证与核心机制设计**的关键实施期，并未结题。",
+          "document_titles": [
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA课题组会模板",
+            "分布式NUMA研究计划",
+            "实验室成员与分工说明",
+            "知识目录索引"
+          ],
+          "latency_ms": 5998,
+          "input_tokens": 2493,
+          "output_tokens": 322,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 0.5,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "**前提核验**：Reviewer 发现问题前提可能不成立，请先核对该前提。\n\n- **资料事实**：证据显示2026年4月3日发布了《分布式NUMA研究计划》，且4月15日会议纪要仍在讨论该方向的“原型验证”与“抽象差异”，表明当时项目处于进行中[S4][S5]。\n- **模型推断**：推断：现有证据无法支持“分布式NUMA项目已在2026年正式结题”这一绝对化前提，相反迹象表明其仍处于研究或原型阶段[S4][S5]。\n- **资料事实**：证据中仅包含研究计划、组会模板及方向地图，缺失任何关于项目验收报告、结题答辩记录或官方结项公告的文档[S1][S2][S3][S6]。\n- **研究建议**：建议：需补充查询2026年4月之后的项目结题会议纪要、结题答辩记录或官方发布的结题公告以验证前提。\n\n**证据局限**：缺乏2026年4月15日之后的会议纪要或结题相关文档，无法确认项目后续状态。；未检索到任何官方发布的结题验收报告或结项公告，无法直接证实结题事实。；现有证据仅能证明项目在2026年初处于规划与原型阶段，不能反向推导已结题。；无法排除项目在2026年4月后迅速完成并结题的可能性，但无证据支持。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "分布式NUMA课题组会模板",
+            "实验室研究方向与课题地图",
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "实验室例会纪要_2026-04-15",
+            "知识目录索引"
+          ],
+          "latency_ms": 18896,
+          "input_tokens": 8464,
+          "output_tokens": 970,
+          "logical_api_calls_estimate": 8,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.375,
+          "citation_support_rate": 0.75,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "NEED_MORE_EVIDENCE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C35",
+        "query": "跨论文比较并验证 Caladan 与 Shenango 使用完全相同调度机制这一前提，说明冲突证据",
+        "category": "false_premise",
+        "relevant_doc_ids": [
+          "Caladan",
+          "Shenango"
+        ],
+        "expected_keywords": [
+          "前提",
+          "差异"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": true,
+        "should_handle_conflict": true,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "现有权限范围内没有找到足够证据，无法可靠回答。",
+          "document_titles": [],
+          "latency_ms": 1642,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "logical_api_calls_estimate": 1,
+          "keyword_correctness": 0.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 0.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "现有权限范围内没有找到足够证据，无法可靠回答。",
+          "document_titles": [
+            "论文阅读与实验记录要求",
+            "论文投稿与对外汇报流程",
+            "知识目录索引"
+          ],
+          "latency_ms": 2648,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "logical_api_calls_estimate": 1,
+          "keyword_correctness": 0.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 0.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "**前提核验**：Reviewer 发现问题前提可能不成立，请先核对该前提。\n\n现有权限范围内没有找到足够证据，无法可靠完成这项复杂科研分析。\n\n**冲突核验**：现有证据不足以确认资料之间是否构成事实冲突；不能把缺少资料直接解释为结论一致。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [],
+          "latency_ms": 14311,
+          "input_tokens": 303,
+          "output_tokens": 46,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 0.5,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 0.0,
+          "review_decision": "NEED_MORE_EVIDENCE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "C36",
+        "query": "综合制度和项目资料，验证实验室规定所有 RDMA 实验都无需预约设备这一前提是否成立",
+        "category": "false_premise",
+        "relevant_doc_ids": [
+          "设备预约与共享资源使用流程",
+          "RDMA与高性能网络实验规范"
+        ],
+        "expected_keywords": [
+          "预约",
+          "前提"
+        ],
+        "min_sources": 2,
+        "should_flag_false_premise": true,
+        "should_handle_conflict": false,
+        "description": ""
+      },
+      "variants": {
+        "A": {
+          "variant": "A",
+          "answer": "该前提**不成立**。根据现有资料，RDMA 实验**必须**进行设备预约。\n\n1.  **适用范围明确包含 RDMA 节点**：实验室《设备预约与共享资源使用流程》明确规定，可预约的资源包括\"RDMA 测试节点”及“交换机/专用测试环境”，且所有共享资源（含 RDMA 节点）均适用“先登记、后使用”的原则 [文档 1]。\n2.  **实验规范强调记录与独占性**：《RDMA 与高性能网络实验规范》要求每次实验必须详细记录参与节点列表、拓扑结构及是否开启 SR-IOV 等配置信息，这隐含了实验需占用特定硬件资源的前提 [文档 2]。\n3.  **会议决议强化管理要求**：2026-04-15 例会纪要指出，针对 RDMA 平台稳定性问题，要求后续所有实验统一记录拓扑和驱动版本，并强调长时间任务需保留日志，这进一步证实了 RDMA 实验属于受控的共享资源使用范畴，需纳入统一管理 [文档 3]。\n\n综上，实验室规定并未豁免 RDMA 实验的预约义务，相反，为确保实验复现性和资源公平性，RDMA 实验应严格遵循预约流程 [文档 1][文档 2][文档 3]。",
+          "document_titles": [
+            "设备预约与共享资源使用流程",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "latency_ms": 4637,
+          "input_tokens": 1595,
+          "output_tokens": 286,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "B": {
+          "variant": "B",
+          "answer": "该前提**不成立**。根据实验室现有资料，RDMA 实验设备属于必须预约的共享资源。\n\n1.  **RDMA 节点属于预约范围**：实验室明确规定，RDMA 测试节点、GPU 训练节点及专用测试环境均纳入“设备预约与共享资源使用流程”的管理范畴 [文档 1]。\n2.  **实验规范强制要求记录拓扑**：RDMA 实验高度依赖硬件拓扑（如 NUMA 绑定、网卡位置），规范要求实验前必须确认并记录节点信息，这隐含了需提前规划和使用特定资源 [文档 2]。\n3.  **会议决议强调统一记录**：组会纪要指出，近期 RDMA 平台出现性能波动，明确要求后续所有 RDMA 实验必须统一记录拓扑和驱动版本，且所有高性能网络实验需补齐环境信息，这通常意味着需通过预约机制锁定资源以保证环境一致性 [文档 3]。\n4.  **安全与值班制度佐证**：非授权人员不得随意操作 RDMA 网卡节点，公共服务器变更配置需登记，进一步说明其使用受控而非无预约开放 [文档 4]。\n\n综上，实验室规定 RDMA 实验**需要**按照“先登记、后使用”的原则进行预约，严禁擅自占用或长期独占资源 [文档 1]。",
+          "document_titles": [
+            "设备预约与共享资源使用流程",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15",
+            "实验室安全与值班制度",
+            "实验室考勤与请假制度"
+          ],
+          "latency_ms": 5111,
+          "input_tokens": 2525,
+          "output_tokens": 282,
+          "logical_api_calls_estimate": 2,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.0,
+          "citation_support_rate": 0.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "",
+          "revision_count": 0,
+          "error": ""
+        },
+        "C": {
+          "variant": "C",
+          "answer": "**前提核验**：Reviewer 发现问题前提可能不成立，请先核对该前提。\n\n- **资料事实**：证据S1明确规定RDMA测试节点属于可预约资源，适用“先登记、后使用”原则[S1]。\n- **资料事实**：证据S4指出预约RDMA节点需登记起止时间、用途及是否独占，长任务需提前同步[S4]。\n- **模型推断**：推断：问题中“所有RDMA实验都无需预约设备”的绝对化前提不成立，现有制度明确要求预约[S1][S4]。\n- **研究建议**：建议：明确否定该前提，并依据S1和S4强调RDMA实验必须执行标准预约流程[S1][S4]。\n\n**证据局限**：未检索到针对特定豁免场景（如紧急调试）的特殊规定，无法确认是否存在例外情况。；仅基于提供的四份文档分析，若存在未收录的内部临时通知，结论可能受限。\n\n> 已按独立复核意见完成一次受限修订；未获得证据支持的内容不应视为事实。",
+          "document_titles": [
+            "设备预约与共享资源使用流程",
+            "RDMA与高性能网络实验规范",
+            "实验室安全与值班制度",
+            "实验室常见问题FAQ",
+            "RDMA与高性能网络实验规范"
+          ],
+          "latency_ms": 14208,
+          "input_tokens": 8936,
+          "output_tokens": 745,
+          "logical_api_calls_estimate": 7,
+          "keyword_correctness": 1.0,
+          "citation_coverage": 0.6666666666666666,
+          "citation_support_rate": 1.0,
+          "false_premise_accuracy": 1.0,
+          "conflict_accuracy": 1.0,
+          "acl_leak_count": 0,
+          "retrieved_doc_recall": 1.0,
+          "review_decision": "REVISE",
+          "revision_count": 1,
+          "error": ""
+        }
+      }
+    }
+  ]
+}

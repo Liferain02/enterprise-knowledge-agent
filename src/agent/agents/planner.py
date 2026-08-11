@@ -158,6 +158,21 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "plan_reasoning": "无用户消息输入"
         }
 
+    # 固定 Research Team 只服务真正的复杂科研综合任务。该窄路由必须先于
+    # 普通“对比/列举”复杂度判断；后者仍走原 Query Expansion + 单 Agent。
+    from .research_team import should_use_research_team
+    if should_use_research_team(last_user_message):
+        logger.info("复杂科研综合任务进入固定 Research Team")
+        return {
+            "is_complex": True,
+            "use_research_team": True,
+            "plan_steps": [],
+            "plan_reasoning": "需要多来源证据、结构化分析与独立复核",
+            "current_step": 0,
+            "_quick_agent": "research_team",
+            "needs_expansion": False,
+        }
+
     # ── 快速路径：规则预判 ──────────────────────────────────────────
     quick_result = _quick_complexity_check(last_user_message)
 
@@ -372,6 +387,9 @@ def route_from_planner(state: Dict[str, Any]) -> str:
     - 简单任务 -> 直接跳转到对应 Worker
     - 无法识别 -> 默认进入知识检索
     """
+    if state.get("use_research_team", False):
+        return "research_agent"
+
     is_complex = state.get("is_complex", False)
 
     if is_complex:
