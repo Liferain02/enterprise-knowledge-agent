@@ -47,6 +47,7 @@ async def chat(request: ChatRequest, current_user: dict = Depends(get_current_us
             username=username,
             images=images_data,
             user_context=user_context,
+            research_mode=request.research_mode,
         )
 
         return ChatResponse(
@@ -86,6 +87,7 @@ async def chat_stream(
             username=username,
             images=images_data,
             user_context=user_context,
+            research_mode=request.research_mode,
         )
 
         return StreamingResponse(

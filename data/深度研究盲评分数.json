@@ -1,0 +1,25 @@
+{
+  "scored_at": "2026-08-13T01:18:00+08:00",
+  "mapping_opened_before_scoring": false,
+  "rubric": "每项 0-2：正确性、完整性、证据依据；总分 0-6",
+  "scores": [
+    {"case_id":"H01","候选甲":{"correctness":2,"completeness":1,"grounding":2,"reason":"核心环境、拓扑、代码记录正确，但账号与权限准备不够明确"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"四个预设关键点完整且主要事实均就近引用"}},
+    {"case_id":"H02","候选甲":{"correctness":2,"completeness":2,"grounding":2,"reason":"清楚区分内部汇报与投稿审计材料，覆盖复现资产、图表条件和局限"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"六类材料紧凑完整且有明确依据"}},
+    {"case_id":"H03","候选甲":{"correctness":2,"completeness":1,"grounding":2,"reason":"记录、升级、协调和交接清楚，但项目负责人处理项目阻塞未明确"},"候选乙":{"correctness":2,"completeness":1,"grounding":2,"reason":"流程和责任主体正确，但同样缺少项目负责人这一预设点"}},
+    {"case_id":"H04","候选甲":{"correctness":2,"completeness":2,"grounding":2,"reason":"正确呈现从计划到执行收敛并明确量化与原型证据缺口"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"时间线、计划非成果边界和下一步验证均完整"}},
+    {"case_id":"H05","候选甲":{"correctness":1,"completeness":2,"grounding":2,"reason":"互补判断和执行闭环正确，但把登记表述为审批略强于证据"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"准确区分两份制度侧重点并覆盖 sudo、登记、留痕"}},
+    {"case_id":"H06","候选甲":{"correctness":2,"completeness":2,"grounding":2,"reason":"三处制度逐一对应并清楚区分硬性事实与建议"},"候选乙":{"correctness":1,"completeness":1,"grounding":1,"reason":"把实验记录要求误换成入组任务，证据范围和硬性字段覆盖不足"}},
+    {"case_id":"H07","候选甲":{"correctness":2,"completeness":1,"grounding":2,"reason":"控制变量、绑定记录和延迟分析可执行，但可证伪假设及吞吐指标不够明确"},"候选乙":{"correctness":1,"completeness":1,"grounding":1,"reason":"给出一般原则但没有形成真正区分两种放置代价的最小对照实验"}},
+    {"case_id":"H08","候选甲":{"correctness":1,"completeness":0,"grounding":1,"reason":"检索只落到分布式 NUMA 计划，未使用 Nu/Quicksand/集群证据，停止条件也不可操作"},"候选乙":{"correctness":1,"completeness":1,"grounding":1,"reason":"诚实说明证据缺口并给出部分控制与停止条件，但仍未基于目标论文机制"}},
+    {"case_id":"H09","候选甲":{"correctness":2,"completeness":2,"grounding":2,"reason":"四项整改均覆盖且证据逐项对应"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"事实、局限和受控复测建议完整，主要事实有引用"}},
+    {"case_id":"H10","候选甲":{"correctness":2,"completeness":2,"grounding":2,"reason":"明确反驳并覆盖授权、登记、留痕与职责边界"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"前提结论明确，证据链和不确定项完整"}},
+    {"case_id":"H11","候选甲":{"correctness":2,"completeness":2,"grounding":2,"reason":"明确反驳，完整覆盖脚本、参数、commit 与独立记录"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"区分临时清理与核心复现资产，事实引用充分"}},
+    {"case_id":"H12","候选甲":{"correctness":1,"completeness":2,"grounding":2,"reason":"前提反驳成立，但把 AIFM 也概括为关注线程布局略有过度"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"分别用对象语义和线程/数据布局证据精确反驳绝对前提"}},
+    {"case_id":"H13","候选甲":{"correctness":2,"completeness":2,"grounding":2,"reason":"结论明确并完整覆盖登记、共享资源原则和可追踪性"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"直接确认前提且各关键要求均有依据"}},
+    {"case_id":"H14","候选甲":{"correctness":2,"completeness":2,"grounding":2,"reason":"代码、参数、硬件与拓扑记录完整且明确确认前提"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"答案紧凑但覆盖全部预设点，引用有效"}},
+    {"case_id":"H15","候选甲":{"correctness":2,"completeness":2,"grounding":2,"reason":"sudo、系统配置限制、登记留痕均完整"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"直接验证成立并给出两份制度的明确条款"}},
+    {"case_id":"H16","候选甲":{"correctness":1,"completeness":1,"grounding":1,"reason":"诚实指出 Argo 缺失，但无法完成三类起点比较，且部分来源映射重复混乱"},"候选乙":{"correctness":1,"completeness":1,"grounding":2,"reason":"同样缺失 Argo，AIFM/GAM 比较与后续验证较清楚且引用更稳"}},
+    {"case_id":"H17","候选甲":{"correctness":2,"completeness":2,"grounding":2,"reason":"现象、已知配置事实、待证原因和受控复测完整"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"七段 Brief 完整，明确区分事实、推断和证据局限"}},
+    {"case_id":"H18","候选甲":{"correctness":1,"completeness":2,"grounding":2,"reason":"四类决策信息完整，但把完整基准套件表述为首题最小产出略重"},"候选乙":{"correctness":2,"completeness":2,"grounding":2,"reason":"两个方向、能力、风险与最小产出均清晰且更贴近选题决策"}}
+  ]
+}

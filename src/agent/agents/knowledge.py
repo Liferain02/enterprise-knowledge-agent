@@ -259,6 +259,8 @@ async def generation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             summary=summary,
             mem0_memories=mem0_memories,
             user_context=state.get("user_context"),
+            answer_format_instructions=state.get("answer_format_instructions", "") or "",
+            max_answer_chars=int(state.get("max_answer_chars", 500)),
         )
 
         # 获取 Mem0 记忆注入
@@ -280,6 +282,13 @@ async def generation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
         gen_time = time.time() - t0
         final_answer = response.content
+        usage = getattr(response, "usage_metadata", None) or {}
+        generation_metrics = {
+            "llm_calls": 1,
+            "input_tokens": int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0),
+            "output_tokens": int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0),
+            "elapsed_ms": int(gen_time * 1000),
+        }
         logger.debug("生成答案完成: len=%d duration=%.2fs", len(final_answer), gen_time)
 
         # ── 追踪引用质量 ──────────────────────────────────────────────
@@ -290,6 +299,7 @@ async def generation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "final_answer": response.content,
             "sources": "knowledge_base",
             "used_agent": "knowledge_agent",
+            "generation_metrics": generation_metrics,
         }
 
     except Exception as e:
@@ -308,6 +318,8 @@ def _build_generation_prompt(
     summary: str,
     mem0_memories: str,
     user_context=None,
+    answer_format_instructions: str = "",
+    max_answer_chars: int = 500,
 ) -> str:
     """构建生成阶段的系统提示"""
     lines = [
@@ -352,11 +364,12 @@ def _build_generation_prompt(
         "1. 优先基于以上实验室资料回答，若资料中没有相关信息，直接告知用户",
         "2. 必须引用来源，使用 [文档N] 格式标注（如：实验要求如下[文档1]）",
         "3. 若存在多个来源，引用优先级：来源标题更精确的 > 相关度更高的",
-        "4. 回答使用中文，简洁专业，不超过 500 字",
+        f"4. 回答使用中文，简洁专业，不超过 {max_answer_chars} 字",
         "5. 若文档内容不足以完整回答，诚实说明局限性",
-        "",
-        f"用户问题：{query}",
     ])
+    if answer_format_instructions:
+        lines.extend(["", "【指定输出结构】", answer_format_instructions])
+    lines.extend(["", f"用户问题：{query}"])
 
     return "\n".join(lines)
 

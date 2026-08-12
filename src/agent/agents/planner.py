@@ -370,6 +370,10 @@ def route_from_planner(state: Dict[str, Any]) -> str:
     - 简单任务 -> 直接跳转到对应 Worker
     - 无法识别 -> 默认进入知识检索
     """
+    # Deep Research 只能由调用方显式选择，不增加第二套自动路由器。
+    if state.get("research_mode", "normal") == "deep":
+        return "research_agent"
+
     is_complex = state.get("is_complex", False)
 
     if is_complex:

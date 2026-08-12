@@ -1,0 +1,49 @@
+{
+  "decided_at": "2026-08-13T01:20:00+08:00",
+  "decision": "enable_explicit_deep_only",
+  "normal_remains_default": true,
+  "automatic_routing": false,
+  "gate_passed": true,
+  "passing_category": "temporal_conflict",
+  "passing_category_scores": {
+    "normal_average_total": 4.6667,
+    "deep_average_total": 6.0,
+    "deep_wins": 2,
+    "cases": 3
+  },
+  "overall_blind_scores": {
+    "normal": {
+      "correctness": 1.7222,
+      "completeness": 1.6667,
+      "evidence_grounding": 1.8889,
+      "total": 5.2778
+    },
+    "deep": {
+      "correctness": 1.7778,
+      "completeness": 1.7222,
+      "evidence_grounding": 1.8333,
+      "total": 5.3333
+    }
+  },
+  "automatic_safety": {
+    "normal_premise_accuracy": 0.6667,
+    "deep_premise_accuracy": 1.0,
+    "normal_acl_leaks": 0,
+    "deep_acl_leaks": 0,
+    "normal_success_cases": 18,
+    "deep_success_cases": 18
+  },
+  "cost": {
+    "normal_p50_ms": 7177,
+    "deep_p50_ms": 26032,
+    "normal_average_logical_calls": 2.0,
+    "deep_average_logical_calls": 7.44
+  },
+  "limitations": [
+    "全集盲评总分几乎持平，Deep 不得替换 normal",
+    "recommendation 与 research_brief 类未证明净收益",
+    "评分者为实现审查者而非独立第三方领域专家",
+    "非前提问题中 Reviewer 偶尔仍会生成多余的前提核验提示",
+    "目标论文未被检索到时，多 Agent 无法补足证据"
+  ]
+}

@@ -112,22 +112,38 @@ async def test_planner_remains_single_entry_and_routes_only_real_research_tasks(
     assert planner_module.route_from_planner(ordinary_state) == "retrieval_agent"
 
 
-def test_production_graph_excludes_unproven_team_supervisor_and_review_loop():
+def test_production_graph_has_explicit_bounded_team_without_supervisor_or_review_loop():
     graph = create_multi_agent_graph().compile().get_graph()
     mermaid = graph.draw_mermaid()
 
     for node in (
         "research_agent", "analyst_agent", "reviewer_agent",
-        "research_revision", "research_team_finalizer",
+        "research_revision", "deep_research_generation",
     ):
-        assert node not in mermaid
+        assert node in mermaid
+    assert "research_team_finalizer" not in mermaid
     assert "supervisor" not in mermaid
     assert "research_revision --> reviewer_agent" not in mermaid
+
+
+def test_deep_mode_is_explicit_and_normal_route_is_unchanged():
+    base = {"is_complex": False, "_quick_agent": "knowledge_agent"}
+    assert planner_module.route_from_planner(base) == "retrieval_agent"
+    assert planner_module.route_from_planner({**base, "research_mode": "normal"}) == "retrieval_agent"
+    assert planner_module.route_from_planner({**base, "research_mode": "deep"}) == "research_agent"
 
 
 def test_review_report_only_accepts_three_decisions():
     with pytest.raises(ValidationError):
         team.ReviewReport(decision="DISCUSS")
+
+
+def test_review_report_accepts_qwen_wrapped_premise_enum():
+    report = team.ReviewReport.model_validate({
+        "decision": "PASS",
+        "premise_assessment": {"status": "supported", "reason": "有直接证据"},
+    })
+    assert report.premise_assessment == "supported"
 
 
 def test_analysis_normalization_moves_transient_limitation_out_of_claims():
@@ -138,6 +154,22 @@ def test_analysis_normalization_moves_transient_limitation_out_of_claims():
     normalized = team._normalize_analysis(report, package)
     assert normalized.claims == []
     assert normalized.limitations == ["缺少定量实验数据"]
+
+
+def test_claim_accepts_qwen_wire_aliases_and_normalizes_missing_type():
+    claim = team.Claim.model_validate({
+        "claim_text": "建议下一步补做消融实验",
+        "source_ids": ["S1"],
+    })
+    package = team.EvidencePackage(
+        original_question="问题",
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="问题", title="资料", source="资料.md", excerpt="证据",
+        )],
+    )
+    report = team._normalize_analysis(team.AnalysisReport(claims=[claim]), package)
+    assert report.claims[0].text == "建议下一步补做消融实验"
+    assert report.claims[0].claim_type == "recommendation"
 
 
 @pytest.mark.asyncio
@@ -293,7 +325,7 @@ def test_reviewer_can_trigger_at_most_one_revision():
     assert team.route_after_reviewer({
         "review_report": report.model_dump(),
         "research_revision_count": 1,
-    }) == "research_team_finalizer"
+    }) == "deep_research_generation"
 
 
 @pytest.mark.asyncio
@@ -424,3 +456,45 @@ async def test_team_finalizer_uses_claim_citations_even_when_passed_draft_is_unq
     assert "自由草稿" not in result["final_answer"]
     assert "有限结论[S1]。" in result["final_answer"]
     assert "冲突核验" in result["final_answer"]
+
+
+@pytest.mark.asyncio
+async def test_deep_generation_reuses_existing_generation_agent_with_validated_claims(monkeypatch):
+    package = team.EvidencePackage(
+        original_question="综合资料形成研究简报",
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="问题", title="资料一", source="资料一.md",
+            excerpt="资料明确记录了实验结果",
+        )],
+    )
+    analysis = team.AnalysisReport(claims=[
+        team.Claim(claim_id="C1", text="资料明确记录了实验结果", claim_type="fact", source_ids=["S1"]),
+        team.Claim(claim_id="C2", text="应被 Reviewer 删除", claim_type="fact", source_ids=["S1"]),
+    ])
+    review = team.ReviewReport(
+        decision="PASS",
+        items=[team.ReviewItem(
+            claim="应被 Reviewer 删除", source_ids=["S1"], supported=False,
+            issue_type="unsupported",
+        )],
+    )
+    generation = AsyncMock(return_value={
+        "final_answer": "1. 研究问题\n问题\n3. 关键事实\n实验结果[文档1]。\n7. Sources\n资料一",
+        "generation_metrics": {"llm_calls": 1, "input_tokens": 10, "output_tokens": 5, "elapsed_ms": 3},
+    })
+    monkeypatch.setattr("src.agent.agents.knowledge.generation_agent_node", generation)
+
+    result = await team.deep_research_generation_node({
+        "messages": [HumanMessage(content=package.original_question)],
+        "evidence_package": package.model_dump(),
+        "analysis_report": analysis.model_dump(),
+        "review_report": review.model_dump(),
+    })
+
+    generation_state = generation.await_args.args[0]
+    assert "资料明确记录了实验结果" in generation_state["retrieval_context"]
+    assert "应被 Reviewer 删除" not in generation_state["retrieval_context"]
+    assert "严格按以下七个标题输出" in generation_state["answer_format_instructions"]
+    assert result["used_agent"] == "deep_research"
+    assert result["research_team_metrics"]["llm_calls"] == 1
+    assert result["research_trace"]["stages"]["generation"]["validated_claims"]

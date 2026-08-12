@@ -1,8 +1,8 @@
 """实验室科研协作助手的生产 LangGraph。
 
 当前架构：摘要 → 可选记忆检索 → Planner 唯一路由 → 普通 RAG / 工具 /
-通用分支 → deterministic Finalizer。纠偏评测未证明固定科研团队存在稳定净收益，
-因此它只保留为离线 A/B/C 实验实现，不在生产图中。生产图也不包含 Supervisor、
+通用分支 → deterministic Finalizer。显式 deep 模式进入固定 Researcher → Analyst
+→ Reviewer → 最多一次修订 → 既有 Generation Agent。生产图不包含 Supervisor、
 动态 Worker、Send fan-out 或 Reviewer 回环。
 """
 import asyncio
@@ -21,6 +21,14 @@ logger = logging.getLogger(__name__)
 _background_memory_tasks: set[asyncio.Task] = set()
 
 from .agents.knowledge import retrieval_agent_node, generation_agent_node
+from .agents.research_team import (
+    analyst_agent_node,
+    deep_research_generation_node,
+    research_agent_node,
+    research_revision_node,
+    reviewer_agent_node,
+    route_after_reviewer,
+)
 from src.rag.retrieval.acl_filter import UserContext
 from .agents.operation import operation_agent_node
 from .agents.general import general_agent_node
@@ -80,6 +88,19 @@ class AgentState(MessagesState):
     retrieval_rewrite_history: list # 查询改写/分解历史
     conflict_warnings: list        # 文档冲突警告列表
     version_source: str             # 版本溯源信息（格式化的 Markdown，供前端展示）
+
+    # ==================== 显式 Deep Research 状态 ====================
+    research_mode: str
+    research_question: str
+    evidence_package: dict
+    analysis_report: dict
+    review_report: dict
+    research_revision_count: int
+    research_team_metrics: dict
+    research_trace: dict
+    generation_metrics: dict
+    answer_format_instructions: str
+    max_answer_chars: int
 
 
 # ==================== 语义总结记忆节点 ====================
@@ -292,6 +313,11 @@ def create_multi_agent_graph() -> StateGraph:
     workflow.add_node("generation_agent", generation_agent_node) # 新增：生成阶段
     workflow.add_node("operation_agent", operation_agent_node)
     workflow.add_node("general_agent", general_agent_node)
+    workflow.add_node("research_agent", research_agent_node)
+    workflow.add_node("analyst_agent", analyst_agent_node)
+    workflow.add_node("reviewer_agent", reviewer_agent_node)
+    workflow.add_node("research_revision", research_revision_node)
+    workflow.add_node("deep_research_generation", deep_research_generation_node)
     workflow.add_node("finalize_response", finalize_response_node)
 
     # Planner 节点（任务规划）
@@ -310,16 +336,29 @@ def create_multi_agent_graph() -> StateGraph:
             "retrieval_agent": "retrieval_agent",
             "general_agent": "general_agent",
             "operation_agent": "operation_agent",
+            "research_agent": "research_agent",
         }
     )
 
     # retrieval_agent → generation_agent（检索完成后生成）
     workflow.add_edge("retrieval_agent", "generation_agent")
+    workflow.add_edge("research_agent", "analyst_agent")
+    workflow.add_edge("analyst_agent", "reviewer_agent")
+    workflow.add_conditional_edges(
+        "reviewer_agent",
+        route_after_reviewer,
+        {
+            "research_revision": "research_revision",
+            "deep_research_generation": "deep_research_generation",
+        },
+    )
+    workflow.add_edge("research_revision", "deep_research_generation")
 
     # Worker Agent → 统一终态 → END。Mem0 不属于用户响应关键路径。
     workflow.add_edge("generation_agent", "finalize_response")
     workflow.add_edge("operation_agent", "finalize_response")
     workflow.add_edge("general_agent", "finalize_response")
+    workflow.add_edge("deep_research_generation", "finalize_response")
     workflow.add_edge("finalize_response", END)
 
     return workflow
@@ -521,7 +560,8 @@ def run_agent(
     session_id: str = "default",
     user_id: str = "default_user",
     user_context: UserContext = None,
-    config: Dict[str, Any] = None
+    config: Dict[str, Any] = None,
+    research_mode: str = "normal",
 ) -> Dict[str, Any]:
     """
     运行 Agent（同步封装，使用 MemorySaver）
@@ -544,6 +584,7 @@ def run_agent(
             "session_id": session_id,
             "user_id": user_id,
             "user_context": user_context,
+            "research_mode": research_mode,
         }
         return await graph.ainvoke(initial_state, run_config)
 
@@ -565,7 +606,8 @@ async def arun_agent(
     session_id: str = "default",
     user_id: str = "default_user",
     user_context: UserContext = None,
-    config: Dict[str, Any] = None
+    config: Dict[str, Any] = None,
+    research_mode: str = "normal",
 ) -> Dict[str, Any]:
     """
     运行 Agent（异步，使用 AsyncSqliteSaver）
@@ -586,6 +628,7 @@ async def arun_agent(
         "session_id": session_id,
         "user_id": user_id,
         "user_context": user_context,
+        "research_mode": research_mode,
     }
 
     t0 = _time.time()

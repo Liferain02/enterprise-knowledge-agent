@@ -270,6 +270,7 @@ class ChatService:
         username: str = "anonymous",
         images: list = None,
         user_context = None,
+        research_mode: str = "normal",
     ) -> Dict[str, Any]:
         """
         处理聊天请求（异步版本，支持多模态图片输入）。
@@ -279,6 +280,14 @@ class ChatService:
         total_start = time.time()
         user_id = username
 
+        if research_mode == "deep" and not get_settings().deep_research_enabled:
+            return {
+                "answer": "Deep Research 当前仍处于冻结评测阶段，尚未通过生产门禁；请先使用 normal 模式。",
+                "sources": [],
+                "used_agent": "deep_research_offline",
+                "image_understood": False,
+            }
+
         logger.info(
             f"收到聊天请求 - session: {session_id}, user: {user_id}, "
             f"message: {message[:50]}..., images={len(images) if images else 0}"
@@ -286,7 +295,9 @@ class ChatService:
 
         session_service.ensure_session_exists(user_id, session_id)
 
-        onboarding_result = self._maybe_build_onboarding_response(message, user_context=user_context)
+        onboarding_result = None
+        if research_mode == "normal":
+            onboarding_result = self._maybe_build_onboarding_response(message, user_context=user_context)
         if onboarding_result:
             title = self._generate_title(user_id, message, session_id)
             self._save_chat_message(
@@ -309,6 +320,7 @@ class ChatService:
             session_id=session_id,
             user_id=user_id,
             user_context=user_context,
+            research_mode=research_mode,
         )
 
         answer = result.get("final_answer", "抱歉，无法生成答案。")
@@ -353,6 +365,7 @@ class ChatService:
         username: str = "anonymous",
         images: list = None,
         user_context = None,
+        research_mode: str = "normal",
     ) -> AsyncGenerator[str, None]:
         """流式聊天 SSE Generator。user_context 传入用于 ACL 检索过滤。"""
         from langchain_core.messages import HumanMessage
@@ -360,7 +373,17 @@ class ChatService:
         user_id = username
         session_service.ensure_session_exists(user_id, session_id)
 
-        onboarding_result = self._maybe_build_onboarding_response(message, user_context=user_context)
+        if research_mode == "deep" and not get_settings().deep_research_enabled:
+            answer = "Deep Research 当前仍处于冻结评测阶段，尚未通过生产门禁；请先使用 normal 模式。"
+            yield self._sse_event("used_agent", "deep_research_offline")
+            yield self._sse_event("llm_token", answer)
+            yield self._sse_event("sources", [])
+            yield self._sse_event("done", answer)
+            return
+
+        onboarding_result = None
+        if research_mode == "normal":
+            onboarding_result = self._maybe_build_onboarding_response(message, user_context=user_context)
         if onboarding_result:
             title = self._generate_title(user_id, message, session_id)
             session_service.save_message(user_id, session_id, "user", message)
@@ -435,6 +458,7 @@ class ChatService:
             "session_id": session_id,
             "user_id": user_id,
             "user_context": _user_context_to_dict(user_context),
+            "research_mode": research_mode,
         }
 
         collected_tokens = []
@@ -473,6 +497,11 @@ class ChatService:
                     status_text = {
                         "retrieval_agent": "正在检索实验室资料...",
                         "generation_agent": "正在根据资料组织回答...",
+                        "research_agent": "正在拆分研究问题并收集证据...",
+                        "analyst_agent": "正在形成证据声明...",
+                        "reviewer_agent": "正在独立复核声明与前提...",
+                        "research_revision": "正在进行一次受限修订...",
+                        "deep_research_generation": "正在生成 Research Brief...",
                     }.get(name)
                     if status_text:
                         yield self._sse_event("thinking", status_text)

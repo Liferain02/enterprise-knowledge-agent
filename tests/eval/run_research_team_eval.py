@@ -3,7 +3,7 @@
 
 A: Hybrid/CRAG + 单 Agent，不主动 Query Expansion
 B: Hybrid/CRAG + Query Expansion + 单 Agent
-C: 固定 Researcher + Analyst + Reviewer
+C: 固定 Researcher + Analyst + Reviewer + 既有 Generation Agent
 
 主报告中的 token 为接口返回的可观测 usage；CRAG 内部 grader 调用无法全部取得
 usage，因此同时报告 logical_api_calls_estimate，且不把它声明为账单值。
@@ -39,9 +39,9 @@ from src.agent.agents.research_team import (
     EvidencePackage,
     ReviewReport,
     analyst_agent_node,
+    deep_research_generation_node,
     research_agent_node,
     research_revision_node,
-    research_team_finalizer_node,
     reviewer_agent_node,
 )
 from src.models.llm import get_llm
@@ -81,6 +81,11 @@ class VariantRun:
     retrieved_doc_recall: float = 0.0
     review_decision: str = ""
     revision_count: int = 0
+    researcher_coverage: float = 0.0
+    analyst_claim_coverage: float = 0.0
+    reviewer_drop_rate: float = 0.0
+    final_answer_coverage: float = 0.0
+    research_trace: Dict[str, Any] = field(default_factory=dict)
     error: str = ""
 
 
@@ -107,8 +112,9 @@ def _doc_recall(docs: Sequence[Document], expected: Sequence[str]) -> float:
 def _keyword_correctness(answer: str, keywords: Sequence[str]) -> float:
     if not keywords:
         return 1.0
-    lowered = answer.lower()
-    return sum(keyword.lower() in lowered for keyword in keywords) / len(keywords)
+    normalize = lambda text: re.sub(r"[\W_]+", "", text.lower(), flags=re.UNICODE)
+    lowered = normalize(answer)
+    return sum(normalize(keyword) in lowered for keyword in keywords) / len(keywords)
 
 
 def _sentences(answer: str) -> List[str]:
@@ -125,6 +131,9 @@ def _citation_coverage(answer: str) -> float:
         sentence for sentence in _sentences(answer)
         if not sentence.startswith(">")
         and not any(label in sentence for label in ("证据局限", "资料冲突", "前提核验"))
+        and not re.match(r"^#{0,6}\s*\d+[.、]\s*", sentence)
+        and not re.match(r"^#{0,6}\s*(研究问题|已有证据|关键事实|冲突/不确定项|推断|下一步研究建议|Sources)\s*$", sentence, re.I)
+        and not re.match(r"^(推断|建议)[:：]", sentence)
     ]
     if not sentences:
         return 0.0
@@ -183,9 +192,9 @@ def _premise_accuracy(answer: str, case: ComplexResearchQuery) -> Optional[float
     if expectation == "false":
         has_boundary = bool(re.search(
             r"^\s*(否|不是|不成立)|"
-            r"前提.{0,16}(不成立|不准确|不受支持|缺乏|没有|无法|未被)|"
-            r"(没有|缺乏|无法|不足).{0,12}(证据|证明|支持)|"
-            r"证据.{0,12}(不支持|不足以支持|无法支持)",
+            r"前提.{0,16}(不成立|不准确|不受支持|被反驳)|"
+            r"证据.{0,12}(反驳|否定).{0,12}(该前提|这一前提)|"
+            r"(与|同).{0,16}(制度|资料|证据).{0,12}(冲突|矛盾)",
             answer,
         ))
         return float(has_boundary)
@@ -277,7 +286,7 @@ async def _run_team(
     review = ReviewReport.model_validate(state["review_report"])
     if review.decision != "PASS":
         state.update(await research_revision_node(state))
-    state.update(await research_team_finalizer_node(state))
+    state.update(await deep_research_generation_node(state))
     return state["final_answer"], list(state.get("retrieved_docs") or []), state
 
 
@@ -292,11 +301,9 @@ def _score_run(
 ) -> VariantRun:
     run.keyword_correctness = _keyword_correctness(run.answer, case.expected_keywords)
     run.citation_coverage = _citation_coverage(run.answer)
-    run.citation_support_rate = (
-        _citation_support_team(analysis, package)
-        if analysis is not None and package is not None
-        else _citation_support_single(run.answer, docs)
-    )
+    # 三种方案都按最终用户答案中的 [文档N]/[Sx] 与实际文档片段评分；
+    # Claim Map 的内部引用质量另由阶段诊断记录，不能替代最终答案质量。
+    run.citation_support_rate = _citation_support_single(run.answer, docs)
     run.premise_accuracy = _premise_accuracy(run.answer, case)
     run.conflict_accuracy = _conflict_accuracy(run.answer, case)
     run.acl_leak_count = _acl_leaks(docs, user)
@@ -333,6 +340,12 @@ async def evaluate_case(
                 analysis = AnalysisReport.model_validate(state.get("analysis_report") or {})
                 package = EvidencePackage.model_validate(state.get("evidence_package") or {})
                 review = ReviewReport.model_validate(state.get("review_report") or {})
+                trace = state.get("research_trace") or {}
+                stages = trace.get("stages") or {}
+                analyst_stage = stages.get("analyst") or {}
+                generation_stage = stages.get("generation") or {}
+                initial_claims = len(analyst_stage.get("claims") or [])
+                validated_claims = len(generation_stage.get("validated_claims") or [])
                 run = VariantRun(
                     variant=variant,
                     answer=answer,
@@ -343,8 +356,18 @@ async def evaluate_case(
                     logical_api_calls_estimate=int(metrics.get("llm_calls", 0)) + int(metrics.get("retrieval_calls", 0)),
                     review_decision=review.decision,
                     revision_count=int(state.get("research_revision_count", 0)),
+                    analyst_claim_coverage=float(
+                        analyst_stage.get("evidence_to_claim_coverage", 0.0) or 0.0
+                    ),
+                    reviewer_drop_rate=(
+                        max(0, initial_claims - validated_claims) / initial_claims
+                        if initial_claims else 0.0
+                    ),
+                    research_trace=trace,
                 )
                 _score_run(run, case, docs, user, analysis=analysis, package=package)
+                run.researcher_coverage = run.retrieved_doc_recall
+                run.final_answer_coverage = run.keyword_correctness
         except Exception as exc:
             run = VariantRun(
                 variant=variant,
@@ -385,6 +408,10 @@ def aggregate(results: Sequence[Dict[str, Any]], variants: Sequence[str]) -> Dic
             "avg_logical_api_calls_estimate": sum(row["logical_api_calls_estimate"] for row in valid) / len(valid) if valid else 0,
             "latency_p50_ms": _percentile([row["latency_ms"] for row in valid], 0.50),
             "latency_p95_ms": _percentile([row["latency_ms"] for row in valid], 0.95),
+            "avg_researcher_coverage": sum(row.get("researcher_coverage", 0) for row in valid) / len(valid) if valid else 0,
+            "avg_analyst_claim_coverage": sum(row.get("analyst_claim_coverage", 0) for row in valid) / len(valid) if valid else 0,
+            "avg_reviewer_drop_rate": sum(row.get("reviewer_drop_rate", 0) for row in valid) / len(valid) if valid else 0,
+            "avg_final_answer_coverage": sum(row.get("final_answer_coverage", 0) for row in valid) / len(valid) if valid else 0,
         }
         for metric in metrics:
             summary[f"avg_{metric}"] = sum(row[metric] for row in valid) / len(valid) if valid else 0
@@ -490,9 +517,24 @@ def render_markdown(payload: Dict[str, Any]) -> str:
         lines.append("")
     lines.extend([
         "",
-        "## 当前生产决策",
+        "## Deep Research 阶段诊断",
         "",
-        "修正 citation 统计后，C 在任何类别都没有同时保持正确性、引用质量、前提可靠性和可接受成本；固定团队不进入生产图，仅保留为离线可复现实验。生产知识与复杂科研请求统一使用 Query Expansion + 单 Agent。",
+        "| Researcher 文档覆盖 | Analyst 证据成 Claim 覆盖 | Reviewer Claim 丢弃率 | 最终答案关键点覆盖 |",
+        "|---:|---:|---:|---:|",
+    ])
+    if "C" in payload["aggregate"]:
+        deep = payload["aggregate"]["C"]
+        lines.append(
+            f"| {deep['avg_researcher_coverage']:.3f} | "
+            f"{deep['avg_analyst_claim_coverage']:.3f} | "
+            f"{deep['avg_reviewer_drop_rate']:.3f} | "
+            f"{deep['avg_final_answer_coverage']:.3f} |"
+        )
+    lines.extend([
+        "",
+        "## 当前阶段结论",
+        "",
+        "这是 Development Eval，只用于诊断和冻结实现，不能据此开放生产 Deep Research。最终门禁只读取冻结后新建并一次性运行的 Blind Holdout。",
     ])
     return "\n".join(lines) + "\n"
 

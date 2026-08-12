@@ -18,6 +18,10 @@ class ChatRequest(BaseModel):
     message: str = Field(description="用户消息")
     session_id: str = Field(default="default", description="会话ID")
     images: Optional[List[ImageContent]] = Field(default=None, description="附带的图片（支持多张）")
+    research_mode: Literal["normal", "deep"] = Field(
+        default="normal",
+        description="研究模式：normal 保持原链路；deep 使用固定三角色深度研究链路",
+    )
 
 
 class ChatStreamRequest(BaseModel):
@@ -25,6 +29,10 @@ class ChatStreamRequest(BaseModel):
     message: str = Field(description="用户消息")
     session_id: str = Field(default="default", description="会话ID")
     images: Optional[List[ImageContent]] = Field(default=None, description="附带的图片（支持多张）")
+    research_mode: Literal["normal", "deep"] = Field(
+        default="normal",
+        description="研究模式：normal 或 deep",
+    )
 
 
 class CreateSessionRequest(BaseModel):

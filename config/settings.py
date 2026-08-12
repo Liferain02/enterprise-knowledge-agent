@@ -457,6 +457,12 @@ class Settings(BaseSettings):
         description="RRF 排序参数 k"
     )
 
+    # 开发/盲测可直接调用固定链路；只有 Blind Holdout 达标后才在部署中开启。
+    deep_research_enabled: bool = Field(
+        default=True,
+        description="是否允许 API 使用显式 Deep Research 模式",
+    )
+
     # 项目根目录
     @property
     def project_root(self) -> Path:

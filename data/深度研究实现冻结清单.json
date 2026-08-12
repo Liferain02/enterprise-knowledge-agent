@@ -1,0 +1,15 @@
+{
+  "frozen_at": "2026-08-13T00:53:00+08:00",
+  "development_eval": "data/复杂科研开发评测结果.json",
+  "production_gate_default": false,
+  "files": {
+    "src/agent/agents/research_team.py": "f865545d0ff6a03477bc17398965e46068d18da338056c98aba1d2d93e7267c6",
+    "src/agent/agents/knowledge.py": "681dc072d2ee93bc06782dce5fcd18702ec5354b59feab1c27ff627a46b8e323",
+    "src/agent/graph.py": "570b938199203636a9cf0e49fa8ec2ba9e7632ab6f868100f9b1ca4ec8df86ef",
+    "src/agent/agents/planner.py": "dc375386c359a2f8c127e8ff9621d1991569ec481e15f64b89d10786f9a58ae1",
+    "src/api/services/chat_service.py": "3b73cbf760727bb9396e5efeabc17669d0b6e7d3764942c09f0d84e638f2427d",
+    "src/api/schemas/__init__.py": "079581c4155a11e749f0a3d19385a2f26811e48162f2aaac79accf0dc93e3170",
+    "tests/eval/run_research_team_eval.py": "650085a7bd753a55a16252bfb7855c396d7fd24ea684d0ebec15e523aefc1760"
+  },
+  "rule": "Blind Holdout 创建和运行后，不再修改上述实现与评测口径；只允许切换预置生产门禁并补充报告。"
+}
