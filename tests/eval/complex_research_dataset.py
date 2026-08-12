@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-"""固定 Research Team 的 36 条复杂科研任务评测集。"""
-from dataclasses import dataclass, field
-from typing import List
+"""固定 Research Team 的 41 条复杂科研任务评测集。"""
+from dataclasses import dataclass
+from typing import List, Literal
 
 
 @dataclass(frozen=True)
@@ -15,6 +15,7 @@ class ComplexResearchQuery:
     should_flag_false_premise: bool = False
     should_handle_conflict: bool = False
     description: str = ""
+    premise_expectation: Literal["none", "false", "supported"] = "none"
 
 
 COMPLEX_RESEARCH_DATASET: List[ComplexResearchQuery] = [
@@ -59,10 +60,57 @@ COMPLEX_RESEARCH_DATASET: List[ComplexResearchQuery] = [
     ComplexResearchQuery("C32", "基于 AIFM、Argo 和项目研究计划，提出远程内存原型下一步应优先验证的研究问题", "recommendation", ["AIFM", "Argo", "分布式NUMA研究计划"], ["远程内存", "验证", "建议"], 3),
 
     # 错误前提（4）
-    ComplexResearchQuery("C33", "综合多份论文和实验记录，验证实验室已经证明 RDMA 在所有负载下都优于本地内存这一前提，并给出建议", "false_premise", ["RDMA与高性能网络实验规范", "实验室例会纪要_2026-04-15"], ["证据", "前提"], 2, True),
-    ComplexResearchQuery("C34", "分析项目资料和组会纪要，验证分布式 NUMA 项目已经在 2026 年正式结题这一前提是否成立", "false_premise", ["分布式NUMA研究计划", "实验室例会纪要_2026-04-15"], ["前提", "证据"], 2, True),
-    ComplexResearchQuery("C35", "跨论文比较并验证 Caladan 与 Shenango 使用完全相同调度机制这一前提，说明冲突证据", "false_premise", ["Caladan", "Shenango"], ["前提", "差异"], 2, True, True),
-    ComplexResearchQuery("C36", "综合制度和项目资料，验证实验室规定所有 RDMA 实验都无需预约设备这一前提是否成立", "false_premise", ["设备预约与共享资源使用流程", "RDMA与高性能网络实验规范"], ["预约", "前提"], 2, True),
+    ComplexResearchQuery("C33", "综合多份论文和实验记录，验证实验室已经证明 RDMA 在所有负载下都优于本地内存这一前提，并给出建议", "false_premise", ["RDMA与高性能网络实验规范", "实验室例会纪要_2026-04-15"], ["证据", "前提"], 2, True, premise_expectation="false"),
+    ComplexResearchQuery("C34", "分析项目资料和组会纪要，验证分布式 NUMA 项目已经在 2026 年正式结题这一前提是否成立", "false_premise", ["分布式NUMA研究计划", "实验室例会纪要_2026-04-15"], ["前提", "证据"], 2, True, premise_expectation="false"),
+    ComplexResearchQuery("C35", "跨论文比较并验证 Caladan 与 Shenango 使用完全相同调度机制这一前提，说明冲突证据", "false_premise", ["Caladan", "Shenango"], ["前提", "差异"], 2, True, True, premise_expectation="false"),
+    ComplexResearchQuery("C36", "综合制度和项目资料，验证实验室规定所有 RDMA 实验都无需预约设备这一前提是否成立", "false_premise", ["设备预约与共享资源使用流程", "RDMA与高性能网络实验规范"], ["预约", "前提"], 2, True, premise_expectation="false"),
+
+    # 有充分证据支持的强前提对照（5）
+    ComplexResearchQuery(
+        "C37",
+        "综合设备预约制度和常见问题，验证所有需要占用共享 RDMA 测试节点的实验是否都必须先完成预约登记这一前提",
+        "supported_premise",
+        ["设备预约与共享资源使用流程", "实验室常见问题FAQ"],
+        ["前提", "预约", "支持"],
+        2,
+        premise_expectation="supported",
+    ),
+    ComplexResearchQuery(
+        "C38",
+        "结合高性能计算集群规范和组会纪要，验证所有长时间运行任务都必须提前登记并保留可追踪日志这一前提是否成立",
+        "supported_premise",
+        ["高性能计算集群使用说明", "实验室例会纪要_2026-04-15"],
+        ["前提", "登记", "日志"],
+        2,
+        premise_expectation="supported",
+    ),
+    ComplexResearchQuery(
+        "C39",
+        "综合论文投稿流程和实验记录要求，验证所有投稿图表都必须注明来源与实验条件这一前提是否成立",
+        "supported_premise",
+        ["论文投稿与对外汇报流程", "论文阅读与实验记录要求"],
+        ["前提", "图表", "实验条件"],
+        2,
+        premise_expectation="supported",
+    ),
+    ComplexResearchQuery(
+        "C40",
+        "结合成员分工制度和安全规范，验证任何对公共环境配置的改动都必须记录或登记这一前提是否成立",
+        "supported_premise",
+        ["实验室成员与分工说明", "实验室安全与值班制度"],
+        ["前提", "公共环境", "记录"],
+        2,
+        premise_expectation="supported",
+    ),
+    ComplexResearchQuery(
+        "C41",
+        "综合 RDMA 实验规范和论文实验记录要求，验证每次 RDMA 实验都必须保留环境、版本和参数记录这一前提是否成立",
+        "supported_premise",
+        ["RDMA与高性能网络实验规范", "论文阅读与实验记录要求"],
+        ["前提", "版本", "参数"],
+        2,
+        premise_expectation="supported",
+    ),
 ]
 
 

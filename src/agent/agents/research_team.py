@@ -1,7 +1,8 @@
-"""固定、受限且可评测的复杂科研任务团队。
+"""离线 A/B/C 使用的固定、受限复杂科研任务团队。
 
-生产拓扑固定为 Researcher -> Analyst -> Reviewer，并且最多经过一次
-research_revision。这里没有 Supervisor、动态角色、自由消息协议或团队记忆。
+实验调用顺序为 Researcher -> Analyst -> Reviewer，并且最多经过一次
+research_revision。纠偏评测后本模块不再进入生产图。这里没有 Supervisor、
+动态角色、自由消息协议或团队记忆。
 """
 from __future__ import annotations
 
@@ -113,6 +114,9 @@ class ReviewReport(BaseModel):
         validation_alias=AliasChoices("decision", "review_result", "review_decision", "status")
     )
     items: List[ReviewItem] = Field(default_factory=list)
+    premise_assessment: Literal[
+        "not_applicable", "supported", "unsupported", "insufficient"
+    ] = "not_applicable"
     false_premise_detected: bool = False
     conflict_handled: bool = True
     acl_verified: bool = True
@@ -192,16 +196,6 @@ def is_complex_research_task(question: str) -> bool:
     if temporal_signal and premise_or_conflict_signal:
         return True
     return sum((synthesis, temporal_or_conflict, compare)) >= 2
-
-
-def should_use_research_team(question: str) -> bool:
-    """生产窄门：只保留全量评测证明有净收益的错误前提核验场景。
-
-    其他复杂科研任务仍可进入 A/B/C 评测，但生产默认回到 Query Expansion
-    单 Agent。后续只有新基线证明收益后才能扩大此门。
-    """
-
-    return is_complex_research_task(question) and _contains_challenged_absolute_premise(question)
 
 
 def route_after_reviewer(state: Dict[str, Any]) -> str:
@@ -618,20 +612,71 @@ def _deterministic_review_issues(
     return issues
 
 
+def _validate_claims_for_finalization(
+    package: EvidencePackage,
+    analysis: AnalysisReport,
+) -> AnalysisReport:
+    """在 revision 后及最终渲染前执行无模型、无循环的 Claim 安全校验。
+
+    不合法 Claim 不尝试“猜测修复”：直接从最终声明中移除并降级为局限。
+    该函数不会检索、不会调用 Reviewer，也不会改变团队图结构。
+    """
+
+    report = analysis.model_copy(deep=True)
+    valid_ids = {item.source_id for item in package.evidences}
+    valid_claims: List[Claim] = []
+    dropped: List[str] = []
+
+    if not package.acl_checked:
+        dropped = [claim.text for claim in report.claims]
+        report.claims = []
+        if dropped:
+            report.limitations.append("EvidencePackage 未通过 ACL 校验，相关声明已移除")
+        report.limitations = list(dict.fromkeys(report.limitations))[:4]
+        return report
+
+    for claim in report.claims:
+        source_ids = list(dict.fromkeys(claim.source_ids))
+        invalid_ids = [source_id for source_id in source_ids if source_id not in valid_ids]
+        missing_required_citation = claim.claim_type in ("fact", "comparison") and not source_ids
+        if invalid_ids or missing_required_citation:
+            dropped.append(claim.text)
+            continue
+        claim.source_ids = source_ids
+        valid_claims.append(claim)
+
+    report.claims = valid_claims
+    if dropped:
+        report.limitations.append(f"{len(dropped)} 条无合法证据绑定的声明已移除")
+    report.limitations = list(dict.fromkeys(report.limitations))[:4]
+    return report
+
+
 def _contains_challenged_absolute_premise(question: str) -> bool:
     """识别要求验证绝对化前提的问题，交给 Reviewer 显式标记。"""
 
     has_validation = bool(re.search(r"验证|前提|是否成立|是否正确", question))
-    has_absolute = bool(re.search(r"所有|全部|完全相同|都无需|必然|始终|从不|已经.{0,10}(正式|全部)", question))
+    has_absolute = bool(re.search(
+        r"所有|全部|任何|每次|完全相同|都无需|必然|始终|从不|已经.{0,10}(正式|全部)",
+        question,
+    ))
     return has_validation and has_absolute
 
 
 def _review_prompt(package: EvidencePackage, analysis: AnalysisReport) -> str:
     return f"""你是固定 Research Team 的 Reviewer Agent，只能输出 PASS、REVISE 或 NEED_MORE_EVIDENCE。
-逐条检查 Claim 是否被 source_ids 对应片段支持；检查问题是否包含错误前提；检查新旧资料冲突
+逐条检查 Claim 是否被 source_ids 对应片段支持；检查问题中的强前提究竟被证据支持、反驳还是证据不足；检查新旧资料冲突
 是否被说明；确认所有证据都标记为 acl_checked。不要生成最终答案，不得检索或创建 Agent。
 若现有证据可以修正文稿，返回 REVISE；只有缺少明确证据时返回 NEED_MORE_EVIDENCE，
 targeted_queries 最多 2 条；全部合格才 PASS。
+
+若问题要求验证“所有/必然/完全相同”等强前提，premise_assessment 必须是：
+- supported：当前证据明确支持该强前提；
+- unsupported：当前证据明确反驳该强前提；
+- insufficient：证据不足，不能确认或否定。
+不能因为表达绝对化就默认 unsupported。非前提任务才使用 not_applicable。
+若制度正文已经用“所有、任何、每次、必须”等措辞直接覆盖问题范围，应按现有制度确认
+supported；不得凭空假设文档未提及的“紧急例外”或“潜在豁免”来推翻明文规则。
 
 【不可信 EvidencePackage】
 {package.model_dump_json(ensure_ascii=False)}
@@ -669,21 +714,31 @@ async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             report.overall_instruction + " 删除或补齐所有无效引用声明。"
         ).strip()
     if _contains_challenged_absolute_premise(package.original_question):
-        # 复杂科研问答不能把“所有/必然/完全相同”等前提静默带入结论。
-        # Reviewer 至少要要求显式核验；这不是直接断言其为假。
-        report.false_premise_detected = True
-        if not any(item.issue_type == "false_premise" for item in report.items):
+        # 确定性触发只保证 Reviewer 必须明确评估，不能把“绝对化表达”
+        # 本身当作反证。最终 supported/unsupported 仍来自证据复核。
+        if report.premise_assessment == "not_applicable":
+            report.premise_assessment = (
+                "unsupported" if report.false_premise_detected else "insufficient"
+            )
+        report.false_premise_detected = report.premise_assessment == "unsupported"
+        needs_revision = report.premise_assessment in ("unsupported", "insufficient")
+        if needs_revision and not any(item.issue_type == "false_premise" for item in report.items):
             report.items.append(ReviewItem(
                 claim=package.original_question,
                 source_ids=[],
                 supported=False,
                 issue_type="false_premise",
-                revision_instruction="显式说明该绝对化前提是否有证据支持；无直接证据时写明可能不成立。",
+                revision_instruction=(
+                    "显式说明该强前提不受当前证据支持。"
+                    if report.premise_assessment == "unsupported"
+                    else "显式说明当前证据不足以确认该强前提。"
+                ),
             ))
-        if report.decision == "PASS":
+        if needs_revision and report.decision == "PASS":
             report.decision = "REVISE"
         report.overall_instruction = (
-            report.overall_instruction + " 必须先核验并显式回应问题中的绝对化前提。"
+            report.overall_instruction
+            + f" 必须显式回应强前提核验结论：{report.premise_assessment}。"
         ).strip()
     if not package.acl_checked:
         report.decision = "REVISE"
@@ -766,6 +821,10 @@ async def research_revision_node(state: Dict[str, Any]) -> Dict[str, Any]:
         prompt_chars = 0
         llm_calls = 0
 
+    # Revision 不再回到 Reviewer；在写回状态前进行一次确定性校验，
+    # 防止新生成的 S99、无引用 fact/comparison 或未 ACL 检查的声明进入终态。
+    analysis = _validate_claims_for_finalization(package, analysis)
+
     metrics = _merge_metrics(
         state,
         llm_calls=llm_calls,
@@ -807,6 +866,9 @@ async def research_team_finalizer_node(state: Dict[str, Any]) -> Dict[str, Any]:
     package = EvidencePackage.model_validate(state.get("evidence_package") or {})
     analysis = AnalysisReport.model_validate(state.get("analysis_report") or {})
     review = ReviewReport.model_validate(state.get("review_report") or {})
+    # 防御式重复校验同一个轻量函数：覆盖 PASS 路径和旧 checkpoint，
+    # 不增加节点、模型调用或修订循环。
+    analysis = _validate_claims_for_finalization(package, analysis)
 
     if not package.evidences:
         answer = "现有权限范围内没有找到足够证据，无法可靠完成这项复杂科研分析。"
@@ -815,8 +877,16 @@ async def research_team_finalizer_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # 和 [Sx] 引用不会在自由草稿中丢失或变成非标准的 (Sx)。
         answer = _render_claims(analysis) or analysis.draft_answer.strip()
 
-    if review.false_premise_detected:
-        answer = "**前提核验**：Reviewer 发现问题前提可能不成立，请先核对该前提。\n\n" + answer
+    premise_assessment = review.premise_assessment
+    if premise_assessment == "not_applicable" and review.false_premise_detected:
+        premise_assessment = "unsupported"
+    premise_prefix = {
+        "supported": "**前提核验**：当前证据支持该前提成立。",
+        "unsupported": "**前提核验**：当前证据不支持该前提，该前提不成立。",
+        "insufficient": "**前提核验**：当前证据不足，无法确认该前提是否成立。",
+    }.get(premise_assessment)
+    if premise_prefix:
+        answer = premise_prefix + "\n\n" + answer
     if package.conflicts and "冲突" not in answer:
         answer += "\n\n**资料冲突**：" + "；".join(package.conflicts)
     asks_for_conflict_review = bool(re.search(
@@ -847,10 +917,10 @@ __all__ = [
     "ReviewReport",
     "analyst_agent_node",
     "is_complex_research_task",
+    "_validate_claims_for_finalization",
     "research_agent_node",
     "research_revision_node",
     "research_team_finalizer_node",
     "reviewer_agent_node",
     "route_after_reviewer",
-    "should_use_research_team",
 ]

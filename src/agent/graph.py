@@ -1,6 +1,9 @@
-"""
-LangGraph Multi-Agent 工作流图
-架构：maybe_summarize → retrieve_mem0_memories → Planner → Supervisor → Worker Agents → END
+"""实验室科研协作助手的生产 LangGraph。
+
+当前架构：摘要 → 可选记忆检索 → Planner 唯一路由 → 普通 RAG / 工具 /
+通用分支 → deterministic Finalizer。纠偏评测未证明固定科研团队存在稳定净收益，
+因此它只保留为离线 A/B/C 实验实现，不在生产图中。生产图也不包含 Supervisor、
+动态 Worker、Send fan-out 或 Reviewer 回环。
 """
 import asyncio
 import time as _time
@@ -18,14 +21,6 @@ logger = logging.getLogger(__name__)
 _background_memory_tasks: set[asyncio.Task] = set()
 
 from .agents.knowledge import retrieval_agent_node, generation_agent_node
-from .agents.research_team import (
-    analyst_agent_node,
-    research_agent_node,
-    research_revision_node,
-    research_team_finalizer_node,
-    reviewer_agent_node,
-    route_after_reviewer,
-)
 from src.rag.retrieval.acl_filter import UserContext
 from .agents.operation import operation_agent_node
 from .agents.general import general_agent_node
@@ -42,7 +37,7 @@ class AgentState(MessagesState):
     Agent 状态定义
     继承 MessagesState 以支持自动消息管理
     """
-    # 路由决策
+    # Legacy checkpoint 兼容字段；生产图不再注册 Supervisor。
     next_agent: str
     supervisor_reasoning: str
     supervisor_reason: str
@@ -72,24 +67,14 @@ class AgentState(MessagesState):
     plan_results: list     # 各步骤的执行结果
     _quick_agent: str      # Planner 的单一路由结果
 
-    # ==================== Supervisor 决策 ====================
+    # ==================== Planner / RAG 决策 ====================
     needs_expansion: bool          # 是否需要 Query Expansion
     agent_inject_prompt: str      # 透传给子 agent 的 prompt 注入内容
-    use_research_team: bool       # 是否进入固定复杂科研团队
-
-    # ==================== 固定 Research Team 状态 ====================
-    research_question: str
-    evidence_package: dict
-    analysis_report: dict
-    review_report: dict
-    research_revision_count: int
-    research_team_metrics: dict
-
     # ==================== Retrieval Pipeline 状态 ====================
     # retrieval_agent_node 执行后写入，供 generation_agent_node 读取
     retrieval_context: str          # 格式化后的检索上下文（供生成用）
     retrieved_docs: list           # 原始检索文档列表（用于冲突检测）
-    retrieval_decision: str         # HIGH / MEDIUM / LOW / NO_RESULTS（用于 Supervisor 感知）
+    retrieval_decision: str         # HIGH / MEDIUM / LOW / NO_RESULTS
     retrieval_decision_reason: str # 评估理由
     retrieval_avg_score: float     # 平均相关分
     retrieval_rewrite_history: list # 查询改写/分解历史
@@ -305,11 +290,6 @@ def create_multi_agent_graph() -> StateGraph:
     # Worker Agent 节点
     workflow.add_node("retrieval_agent", retrieval_agent_node)   # 新增：检索阶段
     workflow.add_node("generation_agent", generation_agent_node) # 新增：生成阶段
-    workflow.add_node("research_agent", research_agent_node)
-    workflow.add_node("analyst_agent", analyst_agent_node)
-    workflow.add_node("reviewer_agent", reviewer_agent_node)
-    workflow.add_node("research_revision", research_revision_node)
-    workflow.add_node("research_team_finalizer", research_team_finalizer_node)
     workflow.add_node("operation_agent", operation_agent_node)
     workflow.add_node("general_agent", general_agent_node)
     workflow.add_node("finalize_response", finalize_response_node)
@@ -328,7 +308,6 @@ def create_multi_agent_graph() -> StateGraph:
         route_from_planner,
         {
             "retrieval_agent": "retrieval_agent",
-            "research_agent": "research_agent",
             "general_agent": "general_agent",
             "operation_agent": "operation_agent",
         }
@@ -337,25 +316,10 @@ def create_multi_agent_graph() -> StateGraph:
     # retrieval_agent → generation_agent（检索完成后生成）
     workflow.add_edge("retrieval_agent", "generation_agent")
 
-    # 固定团队无动态角色和自由循环。Reviewer 最多触发一次受限修订，
-    # research_revision 随后强制进入团队终态，不再回到 Reviewer。
-    workflow.add_edge("research_agent", "analyst_agent")
-    workflow.add_edge("analyst_agent", "reviewer_agent")
-    workflow.add_conditional_edges(
-        "reviewer_agent",
-        route_after_reviewer,
-        {
-            "research_revision": "research_revision",
-            "research_team_finalizer": "research_team_finalizer",
-        },
-    )
-    workflow.add_edge("research_revision", "research_team_finalizer")
-
     # Worker Agent → 统一终态 → END。Mem0 不属于用户响应关键路径。
     workflow.add_edge("generation_agent", "finalize_response")
     workflow.add_edge("operation_agent", "finalize_response")
     workflow.add_edge("general_agent", "finalize_response")
-    workflow.add_edge("research_team_finalizer", "finalize_response")
     workflow.add_edge("finalize_response", END)
 
     return workflow

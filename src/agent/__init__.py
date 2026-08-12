@@ -9,7 +9,7 @@ from .graph import (
     AgentState,
 )
 
-# 并行执行模块
+# Legacy / Deprecated 兼容导出；生产图不调用并行计划执行器。
 try:
     from .agents.parallel_executor import (
         ParallelExecutor,

@@ -1068,7 +1068,7 @@ textarea {
   background: var(--text-muted);
 }
 
-.status-dot.supervisor { background: #f59e0b; }
+.status-dot.planner { background: #f59e0b; }
 .status-dot.knowledge { background: #10b981; }
 .status-dot.operation { background: #3b82f6; }
 .status-dot.general { background: #8b5cf6; }
@@ -1363,7 +1363,7 @@ textarea {
   color: var(--primary-light);
 }
 
-.agent-badge.supervisor { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.agent-badge.planner { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
 .agent-badge.knowledge_agent { background: rgba(16, 185, 129, 0.2); color: #34d399; }
 .agent-badge.operation_agent { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
 .agent-badge.general_agent { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }

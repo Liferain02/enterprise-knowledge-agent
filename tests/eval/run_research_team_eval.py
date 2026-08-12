@@ -18,9 +18,10 @@ import os
 import sys
 import re
 import time
+from datetime import datetime
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import jieba
 
@@ -72,7 +73,9 @@ class VariantRun:
     keyword_correctness: float = 0.0
     citation_coverage: float = 0.0
     citation_support_rate: float = 0.0
-    false_premise_accuracy: float = 0.0
+    # 只对 false_premise / supported_premise 样本赋值；普通样本保持 null，
+    # 防止用大量“默认 1.0”稀释真正的前提核验错误。
+    premise_accuracy: Optional[float] = None
     conflict_accuracy: float = 0.0
     acl_leak_count: int = 0
     retrieved_doc_recall: float = 0.0
@@ -112,7 +115,9 @@ def _sentences(answer: str) -> List[str]:
     return [part.strip() for part in re.split(r"[。！？!?；;\n]+", answer) if len(part.strip()) >= 6]
 
 
-_CITATION_RE = re.compile(r"\[(?:文档(\d+)|S(\d+))\]")
+# 兼容产品真实输出中的可选空白，不要求模型为了评测改变回答格式。
+# 支持：[文档1]、[文档 1]、[文档   1]、[S1]、[S 1]。
+_CITATION_RE = re.compile(r"\[(?:文档\s*(\d+)|S\s*(\d+))\]")
 
 
 def _citation_coverage(answer: str) -> float:
@@ -169,12 +174,35 @@ def _citation_support_team(analysis: AnalysisReport, package: EvidencePackage) -
     return supported / len(analysis.claims)
 
 
-def _false_premise_accuracy(answer: str, case: ComplexResearchQuery) -> float:
-    if not case.should_flag_false_premise:
-        return 1.0
-    has_boundary = bool(re.search(r"前提.{0,12}(不成立|不准确|缺乏|没有|无法|未被)|"
-                                  r"(没有|缺乏|无法).{0,10}(证据|证明)", answer))
-    return float(has_boundary)
+def _premise_accuracy(answer: str, case: ComplexResearchQuery) -> Optional[float]:
+    """只评价 premise 样本；返回 None 表示该样本不属于此前提指标。"""
+
+    expectation = case.premise_expectation
+    if expectation == "none":
+        return None
+    if expectation == "false":
+        has_boundary = bool(re.search(
+            r"^\s*(否|不是|不成立)|"
+            r"前提.{0,16}(不成立|不准确|不受支持|缺乏|没有|无法|未被)|"
+            r"(没有|缺乏|无法|不足).{0,12}(证据|证明|支持)|"
+            r"证据.{0,12}(不支持|不足以支持|无法支持)",
+            answer,
+        ))
+        return float(has_boundary)
+
+    # 成立前提必须被明确确认；“可能成立”或只复述制度内容不算确认。
+    has_confirmation = bool(re.search(
+        r"^\s*(是的|成立|可以确认|当前证据支持)|"
+        r"前提.{0,16}(成立|得到支持|获得支持|有充分证据|可以确认|可确认)|"
+        r"(当前|现有|检索到的)?证据.{0,12}(支持|表明|确认).{0,12}(该前提|这一前提|上述前提)|"
+        r"可以确认.{0,16}(所有|每次|任何)",
+        answer,
+    ))
+    has_negation = bool(re.search(
+        r"前提.{0,16}(不成立|不受支持|可能不成立)|证据.{0,12}(不支持|不足)",
+        answer,
+    ))
+    return float(has_confirmation and not has_negation)
 
 
 def _conflict_accuracy(answer: str, case: ComplexResearchQuery) -> float:
@@ -269,7 +297,7 @@ def _score_run(
         if analysis is not None and package is not None
         else _citation_support_single(run.answer, docs)
     )
-    run.false_premise_accuracy = _false_premise_accuracy(run.answer, case)
+    run.premise_accuracy = _premise_accuracy(run.answer, case)
     run.conflict_accuracy = _conflict_accuracy(run.answer, case)
     run.acl_leak_count = _acl_leaks(docs, user)
     run.retrieved_doc_recall = _doc_recall(docs, case.relevant_doc_ids)
@@ -341,7 +369,7 @@ def aggregate(results: Sequence[Dict[str, Any]], variants: Sequence[str]) -> Dic
     output: Dict[str, Any] = {}
     metrics = (
         "keyword_correctness", "citation_coverage", "citation_support_rate",
-        "false_premise_accuracy", "conflict_accuracy", "retrieved_doc_recall",
+        "conflict_accuracy", "retrieved_doc_recall",
     )
     for variant in variants:
         rows = [row["variants"][variant] for row in results]
@@ -360,34 +388,111 @@ def aggregate(results: Sequence[Dict[str, Any]], variants: Sequence[str]) -> Dic
         }
         for metric in metrics:
             summary[f"avg_{metric}"] = sum(row[metric] for row in valid) / len(valid) if valid else 0
+        valid_by_id = {
+            result["case"]["case_id"]: result["variants"][variant]
+            for result in results
+            if not result["variants"][variant]["error"]
+        }
+        premise_rows: Dict[str, List[Dict[str, Any]]] = {"false": [], "supported": []}
+        for result in results:
+            expectation = result["case"].get("premise_expectation", "none")
+            row = valid_by_id.get(result["case"]["case_id"])
+            if expectation in premise_rows and row is not None and row.get("premise_accuracy") is not None:
+                premise_rows[expectation].append(row)
+
+        false_rows = premise_rows["false"]
+        supported_rows = premise_rows["supported"]
+        all_premise_rows = false_rows + supported_rows
+        summary.update({
+            "false_premise_cases": len(false_rows),
+            "false_premise_detection_accuracy": (
+                sum(row["premise_accuracy"] for row in false_rows) / len(false_rows)
+                if false_rows else None
+            ),
+            "supported_premise_cases": len(supported_rows),
+            "supported_premise_confirmation_accuracy": (
+                sum(row["premise_accuracy"] for row in supported_rows) / len(supported_rows)
+                if supported_rows else None
+            ),
+            "premise_cases": len(all_premise_rows),
+            "premise_overall_accuracy": (
+                sum(row["premise_accuracy"] for row in all_premise_rows) / len(all_premise_rows)
+                if all_premise_rows else None
+            ),
+        })
         output[variant] = summary
     return output
+
+
+def aggregate_by_category(
+    results: Sequence[Dict[str, Any]], variants: Sequence[str],
+) -> Dict[str, Dict[str, Any]]:
+    categories = sorted({row["case"]["category"] for row in results})
+    return {
+        category: aggregate(
+            [row for row in results if row["case"]["category"] == category], variants,
+        )
+        for category in categories
+    }
+
+
+def _format_optional(value: Optional[float]) -> str:
+    return "—" if value is None else f"{value:.3f}"
 
 
 def render_markdown(payload: Dict[str, Any]) -> str:
     lines = [
         "# 复杂科研任务 A/B/C 评测报告",
         "",
-        "> Token 为模型接口可观测 usage；logical API calls 是逻辑调用估计，未完整包含 CRAG 内部 grader，不能当作账单。",
+        f"- 生成时间：{payload.get('generated_at', '未记录')}",
+        f"- 完整运行耗时：{payload.get('run_duration_seconds', 0):.1f} 秒",
+        f"- 数据集：{payload.get('case_count', 0)} 条；方案：{', '.join(payload.get('variants', []))}",
         "",
-        "| 方案 | 成功/总数 | 关键词正确性 | 引用覆盖 | 引用支持 | 错误前提 | 冲突处理 | ACL 泄漏 | P50(ms) | P95(ms) | 估计调用 |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "> Token 为模型接口可观测 usage；logical API calls 是逻辑调用估计，未完整包含 CRAG 内部 grader，不能当作账单。引用支持率是词汇重叠自动代理指标，不等价于严格的事实蕴含判断。",
+        "",
+        "| 方案 | 成功/总数 | 关键词正确性 | 引用覆盖 | 引用支持 proxy | 错误前提识别 | 成立前提确认 | 前提总体 | 文档召回 | 冲突处理 | ACL 泄漏 | P50/P95(ms) | 平均输入/输出 Token | 估计调用 |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for key in payload["variants"]:
         item = payload["aggregate"][key]
         lines.append(
             f"| {item['label']} | {item['success_cases']}/{item['cases']} | "
             f"{item['avg_keyword_correctness']:.3f} | {item['avg_citation_coverage']:.3f} | "
-            f"{item['avg_citation_support_rate']:.3f} | {item['avg_false_premise_accuracy']:.3f} | "
-            f"{item['avg_conflict_accuracy']:.3f} | {item['acl_leak_count']} | "
-            f"{item['latency_p50_ms']:.0f} | {item['latency_p95_ms']:.0f} | "
+            f"{item['avg_citation_support_rate']:.3f} | "
+            f"{_format_optional(item['false_premise_detection_accuracy'])} | "
+            f"{_format_optional(item['supported_premise_confirmation_accuracy'])} | "
+            f"{_format_optional(item['premise_overall_accuracy'])} | "
+            f"{item['avg_retrieved_doc_recall']:.3f} | {item['avg_conflict_accuracy']:.3f} | "
+            f"{item['acl_leak_count']} | {item['latency_p50_ms']:.0f}/{item['latency_p95_ms']:.0f} | "
+            f"{item['avg_input_tokens']:.0f}/{item['avg_output_tokens']:.0f} | "
             f"{item['avg_logical_api_calls_estimate']:.2f} |"
         )
+    lines.extend(["", "## 按任务类别", ""])
+    for category, category_aggregate in payload["aggregate_by_category"].items():
+        lines.extend([
+            f"### {category}",
+            "",
+            "| 方案 | 样本 | 关键词正确性 | 引用覆盖 | 引用支持 proxy | 错误前提 | 成立前提 | 前提总体 | 文档召回 | 冲突处理 | P50(ms) |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ])
+        for key in payload["variants"]:
+            item = category_aggregate[key]
+            lines.append(
+                f"| {item['label']} | {item['success_cases']}/{item['cases']} | "
+                f"{item['avg_keyword_correctness']:.3f} | {item['avg_citation_coverage']:.3f} | "
+                f"{item['avg_citation_support_rate']:.3f} | "
+                f"{_format_optional(item['false_premise_detection_accuracy'])} | "
+                f"{_format_optional(item['supported_premise_confirmation_accuracy'])} | "
+                f"{_format_optional(item['premise_overall_accuracy'])} | "
+                f"{item['avg_retrieved_doc_recall']:.3f} | {item['avg_conflict_accuracy']:.3f} | "
+                f"{item['latency_p50_ms']:.0f} |"
+            )
+        lines.append("")
     lines.extend([
         "",
-        "## 保留判据",
+        "## 当前生产决策",
         "",
-        "C 方案只应在复杂任务的正确性、声明级引用覆盖/支持、错误前提或冲突处理上取得明确收益，且 ACL 泄漏为 0；否则应简化或删除固定团队。",
+        "修正 citation 统计后，C 在任何类别都没有同时保持正确性、引用质量、前提可靠性和可接受成本；固定团队不进入生产图，仅保留为离线可复现实验。生产知识与复杂科研请求统一使用 Query Expansion + 单 Agent。",
     ])
     return "\n".join(lines) + "\n"
 
@@ -406,12 +511,17 @@ def _select_dataset(mode: str) -> List[ComplexResearchQuery]:
 
 
 async def main() -> None:
+    evaluation_started = time.perf_counter()
     parser = argparse.ArgumentParser(description="复杂科研任务固定 Research Team A/B/C 评测")
     parser.add_argument("--dataset", choices=["quick", "full"], default="quick")
     parser.add_argument("--variants", default="A,B,C", help="逗号分隔：A,B,C")
     parser.add_argument("--output", default="data/复杂科研评测结果.json")
     parser.add_argument("--report", default="data/复杂科研评测报告.md")
     parser.add_argument("--case-id", default="", help="只运行指定 case_id，例如 C10")
+    parser.add_argument(
+        "--categories", default="",
+        help="只运行逗号分隔的类别，例如 false_premise,supported_premise",
+    )
     parser.add_argument("--limit", type=int, default=0, help="只运行前 N 条，0 表示不限制")
     parser.add_argument("--dry-run", action="store_true", help="只校验数据集和路由，不调用模型")
     parser.add_argument("--merge-existing", default="", help="保留已有报告中本次未运行的方案")
@@ -428,6 +538,13 @@ async def main() -> None:
         cases = [case for case in COMPLEX_RESEARCH_DATASET if case.case_id == args.case_id]
         if not cases:
             parser.error(f"不存在 case_id={args.case_id}")
+    if args.categories:
+        selected_categories = {
+            item.strip() for item in args.categories.split(",") if item.strip()
+        }
+        cases = [case for case in cases if case.category in selected_categories]
+        if not cases:
+            parser.error(f"没有匹配类别：{args.categories}")
     if args.limit > 0:
         cases = cases[:args.limit]
     if args.dry_run:
@@ -483,10 +600,12 @@ async def main() -> None:
                 }, ensure_ascii=False, indent=2), encoding="utf-8")
 
     report_variants = list(variants)
+    previous_duration_seconds = 0.0
     if args.merge_existing:
         existing_path = Path(args.merge_existing)
         if existing_path.exists():
             existing_payload = json.loads(existing_path.read_text(encoding="utf-8"))
+            previous_duration_seconds = float(existing_payload.get("run_duration_seconds", 0) or 0)
             existing_by_id = {
                 row["case"]["case_id"]: row for row in existing_payload.get("results", [])
             }
@@ -511,8 +630,25 @@ async def main() -> None:
         # 实际落盘的用例数，而不是本次执行的子集大小。
         "case_count": len(results),
         "variants": report_variants,
-        "methodology_note": "token usage 不完整包含 CRAG 内部 grader；logical API calls 为可比较估计而非账单。",
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        # 合并局部复测时累计墙钟耗时，避免把“9 条复测”误写成完整评测耗时。
+        "run_duration_seconds": round(
+            previous_duration_seconds + time.perf_counter() - evaluation_started, 3,
+        ),
+        "configuration": {
+            "llm_provider": settings.llm_provider,
+            "llm_model": settings.dashscope_model,
+            "embedding_model": settings.embedding_model,
+            "reranker_provider": settings.reranker_provider,
+            "reranker_model": settings.reranker_model,
+            "knowledge_store": "Chroma lab_knowledge（当前本地快照）",
+        },
+        "methodology_note": (
+            "token usage 不完整包含 CRAG 内部 grader；logical API calls 为可比较估计而非账单；"
+            "citation support 为词汇重叠回归 proxy，不等价于严格事实蕴含。"
+        ),
         "aggregate": aggregate(results, report_variants),
+        "aggregate_by_category": aggregate_by_category(results, report_variants),
         "results": results,
     }
     output = Path(args.output)

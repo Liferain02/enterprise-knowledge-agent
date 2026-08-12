@@ -1,6 +1,7 @@
-"""
-Supervisor 节点
-负责路由决策
+"""Legacy / Deprecated Supervisor 兼容模块。
+
+当前生产图以 Planner 为唯一入口，不导入或注册本节点。这里仅因
+``src.agent.agents`` 的历史公开导入而暂时保留，禁止重新接回生产链。
 """
 import json
 from typing import Dict, Any

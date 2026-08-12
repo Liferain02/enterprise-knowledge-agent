@@ -12,6 +12,7 @@ from src.agent.agents import research_team as team
 from src.agent.graph import create_multi_agent_graph
 from src.rag.retrieval.acl_filter import UserContext
 from tests.eval.complex_research_dataset import COMPLEX_RESEARCH_DATASET
+from tests.eval import run_research_team_eval as eval_module
 
 
 def _student() -> UserContext:
@@ -42,32 +43,59 @@ def test_complex_research_task_boundary(query, expected):
 def test_complex_research_eval_dataset_has_required_size_categories_and_routes():
     assert 30 <= len(COMPLEX_RESEARCH_DATASET) <= 50
     assert {case.category for case in COMPLEX_RESEARCH_DATASET} == {
-        "cross_scope", "multi_evidence", "temporal_conflict", "recommendation", "false_premise",
+        "cross_scope", "multi_evidence", "temporal_conflict", "recommendation",
+        "false_premise", "supported_premise",
     }
     assert all(team.is_complex_research_task(case.query) for case in COMPLEX_RESEARCH_DATASET)
+    assert sum(case.premise_expectation == "false" for case in COMPLEX_RESEARCH_DATASET) == 4
+    assert sum(case.premise_expectation == "supported" for case in COMPLEX_RESEARCH_DATASET) == 5
 
 
-def test_production_team_gate_keeps_only_proven_false_premise_scenario():
-    assert team.should_use_research_team(
-        "综合多份论文和实验记录，验证 RDMA 在所有负载下都优于本地内存这一前提"
+@pytest.mark.parametrize("citation", ["[文档1]", "[文档 1]", "[文档   1]", "[S1]", "[S 1]"])
+def test_citation_metrics_accept_real_output_whitespace_variants(citation):
+    answer = f"RDMA 实验必须记录驱动版本{citation}。"
+    docs = [Document(page_content="RDMA 实验必须记录驱动版本和固件版本")]
+    assert eval_module._citation_coverage(answer) == 1.0
+    assert eval_module._citation_support_single(answer, docs) == 1.0
+
+
+def test_premise_metric_is_scoped_and_distinguishes_false_from_supported():
+    ordinary = COMPLEX_RESEARCH_DATASET[0]
+    false_case = next(case for case in COMPLEX_RESEARCH_DATASET if case.case_id == "C33")
+    supported_case = next(case for case in COMPLEX_RESEARCH_DATASET if case.case_id == "C37")
+
+    assert eval_module._premise_accuracy("普通答案", ordinary) is None
+    assert eval_module._premise_accuracy("当前证据不支持该前提，该前提不成立。", false_case) == 1.0
+    assert eval_module._premise_accuracy("不成立。资料并未证明这个判断。", false_case) == 1.0
+    assert eval_module._premise_accuracy("当前证据支持该前提成立。", false_case) == 0.0
+    assert eval_module._premise_accuracy("当前证据支持该前提成立。", supported_case) == 1.0
+    assert eval_module._premise_accuracy("是的，根据制度该要求适用于所有共享节点。", supported_case) == 1.0
+    assert eval_module._premise_accuracy("当前证据不足，无法确认该前提。", supported_case) == 0.0
+
+
+def test_unproven_team_has_no_production_gate():
+    assert not hasattr(team, "should_use_research_team")
+
+
+@pytest.mark.parametrize("quantifier", ["所有", "任何", "每次", "必然", "始终"])
+def test_absolute_premise_trigger_covers_supported_and_false_quantifiers(quantifier):
+    assert team._contains_challenged_absolute_premise(
+        f"综合两份制度，验证{quantifier}共享资源改动都必须登记这一前提是否成立"
     ) is True
-    assert team.should_use_research_team(
-        "综合比较多个项目的论文和实验记录，并基于证据给出下一步研究建议"
-    ) is False
 
 
 @pytest.mark.asyncio
 async def test_planner_remains_single_entry_and_routes_only_real_research_tasks(monkeypatch):
     monkeypatch.setattr(planner_module, "get_llm", lambda: (_ for _ in ()).throw(
-        AssertionError("窄规则命中时不应调用 Planner LLM")
+        AssertionError("规则命中时不应调用 Planner LLM")
     ))
-    team_state = await planner_module.planner_node({
+    premise_state = await planner_module.planner_node({
         "messages": [HumanMessage(content=(
             "综合多份论文和实验记录，验证 RDMA 在所有负载下都优于本地内存这一前提"
         ))]
     })
-    assert team_state["use_research_team"] is True
-    assert planner_module.route_from_planner(team_state) == "research_agent"
+    assert premise_state.get("use_research_team") is not True
+    assert planner_module.route_from_planner(premise_state) == "retrieval_agent"
 
     general_research_state = await planner_module.planner_node({
         "messages": [HumanMessage(content=(
@@ -84,7 +112,7 @@ async def test_planner_remains_single_entry_and_routes_only_real_research_tasks(
     assert planner_module.route_from_planner(ordinary_state) == "retrieval_agent"
 
 
-def test_graph_has_fixed_team_without_supervisor_or_review_loop():
+def test_production_graph_excludes_unproven_team_supervisor_and_review_loop():
     graph = create_multi_agent_graph().compile().get_graph()
     mermaid = graph.draw_mermaid()
 
@@ -92,10 +120,8 @@ def test_graph_has_fixed_team_without_supervisor_or_review_loop():
         "research_agent", "analyst_agent", "reviewer_agent",
         "research_revision", "research_team_finalizer",
     ):
-        assert node in mermaid
+        assert node not in mermaid
     assert "supervisor" not in mermaid
-    assert "reviewer_agent -.-> research_revision" in mermaid
-    assert "research_revision --> research_team_finalizer" in mermaid
     assert "research_revision --> reviewer_agent" not in mermaid
 
 
@@ -187,7 +213,7 @@ async def test_reviewer_overrides_pass_when_claim_has_invalid_citation(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_reviewer_explicitly_flags_challenged_absolute_premise(monkeypatch):
+async def test_reviewer_requires_explicit_assessment_for_challenged_absolute_premise(monkeypatch):
     package = team.EvidencePackage(
         original_question="验证 RDMA 在所有负载下都优于本地内存这一前提",
         evidences=[team.EvidenceItem(
@@ -214,9 +240,48 @@ async def test_reviewer_explicitly_flags_challenged_absolute_premise(monkeypatch
         "analysis_report": analysis.model_dump(),
     })
     report = team.ReviewReport.model_validate(result["review_report"])
-    assert report.false_premise_detected is True
+    assert report.premise_assessment == "insufficient"
+    assert report.false_premise_detected is False
     assert report.decision == "REVISE"
     assert any(item.issue_type == "false_premise" for item in report.items)
+
+
+@pytest.mark.asyncio
+async def test_reviewer_does_not_reject_supported_absolute_premise(monkeypatch):
+    package = team.EvidencePackage(
+        original_question="验证所有长时间任务都必须提前登记这一前提是否成立",
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="验证前提", title="集群说明", source="集群说明.md",
+            excerpt="所有长时间运行任务必须提前登记",
+        )],
+    )
+    analysis = team.AnalysisReport(claims=[team.Claim(
+        claim_id="C1", text="制度要求所有长任务提前登记", claim_type="fact", source_ids=["S1"],
+    )])
+    monkeypatch.setattr(
+        team,
+        "_invoke_structured",
+        AsyncMock(return_value=(team.ReviewReport(
+            decision="PASS", premise_assessment="supported",
+        ), {"input_tokens": 1, "output_tokens": 1})),
+    )
+
+    result = await team.reviewer_agent_node({
+        "evidence_package": package.model_dump(),
+        "analysis_report": analysis.model_dump(),
+    })
+    report = team.ReviewReport.model_validate(result["review_report"])
+    assert report.decision == "PASS"
+    assert report.premise_assessment == "supported"
+    assert report.false_premise_detected is False
+
+    final = await team.research_team_finalizer_node({
+        "evidence_package": package.model_dump(),
+        "analysis_report": analysis.model_dump(),
+        "review_report": report.model_dump(),
+    })
+    assert "当前证据支持该前提成立" in final["final_answer"]
+    assert "可能不成立" not in final["final_answer"]
 
 
 def test_reviewer_can_trigger_at_most_one_revision():
@@ -229,6 +294,82 @@ def test_reviewer_can_trigger_at_most_one_revision():
         "review_report": report.model_dump(),
         "research_revision_count": 1,
     }) == "research_team_finalizer"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "claim",
+    [
+        team.Claim(claim_id="C1", text="错误 S99 声明", claim_type="fact", source_ids=["S99"]),
+        team.Claim(claim_id="C2", text="没有引用的资料事实", claim_type="fact", source_ids=[]),
+    ],
+)
+async def test_post_revision_validation_blocks_invalid_claim_from_finalizer(claim):
+    package = team.EvidencePackage(
+        original_question="问题",
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="问题", title="资料", source="资料.md", excerpt="合法证据",
+        )],
+    )
+    result = await team.research_team_finalizer_node({
+        "evidence_package": package.model_dump(),
+        "analysis_report": team.AnalysisReport(claims=[claim]).model_dump(),
+        "review_report": team.ReviewReport(decision="REVISE").model_dump(),
+        "research_revision_count": 1,
+    })
+    assert claim.text not in result["final_answer"]
+    assert "无合法证据绑定的声明已移除" in result["final_answer"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "claim",
+    [
+        team.Claim(claim_id="C1", text="修订新造的 S99 事实", claim_type="fact", source_ids=["S99"]),
+        team.Claim(claim_id="C2", text="修订生成的无引用事实", claim_type="fact", source_ids=[]),
+    ],
+)
+async def test_revision_node_validates_new_claims_before_writing_state(monkeypatch, claim):
+    package = team.EvidencePackage(
+        original_question="核验问题",
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="问题", title="资料", source="资料.md", excerpt="合法证据",
+        )],
+    )
+    monkeypatch.setattr(
+        team,
+        "_run_analyst",
+        AsyncMock(return_value=(
+            team.AnalysisReport(claims=[claim]),
+            {"input_tokens": 1, "output_tokens": 1},
+            10,
+        )),
+    )
+    revised = await team.research_revision_node({
+        "evidence_package": package.model_dump(),
+        "analysis_report": team.AnalysisReport().model_dump(),
+        "review_report": team.ReviewReport(decision="REVISE").model_dump(),
+    })
+    analysis = team.AnalysisReport.model_validate(revised["analysis_report"])
+    assert analysis.claims == []
+    assert analysis.limitations == ["1 条无合法证据绑定的声明已移除"]
+    assert revised["research_revision_count"] == 1
+
+
+def test_final_claim_validation_drops_everything_when_acl_is_unchecked():
+    package = team.EvidencePackage(
+        original_question="问题",
+        acl_checked=False,
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="问题", title="资料", source="资料.md", excerpt="证据",
+        )],
+    )
+    analysis = team.AnalysisReport(claims=[team.Claim(
+        claim_id="C1", text="看似有合法编号的事实", claim_type="fact", source_ids=["S1"],
+    )])
+    validated = team._validate_claims_for_finalization(package, analysis)
+    assert validated.claims == []
+    assert "未通过 ACL 校验" in validated.limitations[0]
 
 
 @pytest.mark.asyncio

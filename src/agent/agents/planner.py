@@ -1,7 +1,7 @@
-"""
-Planner 节点
-负责分析任务复杂度并拆解步骤
-支持并行执行独立步骤以提高效率
+"""生产 Planner 唯一路由节点。
+
+规则优先选择普通 RAG、工具或通用分支；复杂科研也进入查询扩展 RAG。LLM 返回
+的步骤仅作复杂度解释，生产图不会执行固定科研团队或旧 execute_plan / Send fan-out。
 """
 import re
 import json
@@ -132,15 +132,15 @@ def _quick_complexity_check(message: str) -> str:
 
 async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Planner 节点 - 分析任务复杂度并拆解步骤
+    Planner 节点 - 规则优先地选择唯一生产分支
 
     工作逻辑：
     1. 快速规则预判（无 LLM，< 1ms）
        - 确定简单 → 直接返回，跳过 LLM（节省 5-10 秒）
        - 确定复杂 / 不确定 → 走 LLM 精确判断
-    2. LLM 判断（仅对 complex / uncertain 触发）
-       - 简单任务 → 返回空步骤，后续由 Supervisor 处理
-       - 复杂任务 → 拆解成步骤序列，由 execute_plan 执行
+    2. LLM 判断（仅对 uncertain 触发）
+       - 简单任务 → 直接设置唯一业务分支
+       - 复杂任务 → 步骤仅作可观测解释，实际统一进入 ACL-aware RAG 查询扩展
 
     复杂任务示例：
     - "对比 A 政策和 B 政策的差异" → 需要两步：查A政策，查B政策
@@ -158,27 +158,12 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "plan_reasoning": "无用户消息输入"
         }
 
-    # 固定 Research Team 只服务真正的复杂科研综合任务。该窄路由必须先于
-    # 普通“对比/列举”复杂度判断；后者仍走原 Query Expansion + 单 Agent。
-    from .research_team import should_use_research_team
-    if should_use_research_team(last_user_message):
-        logger.info("复杂科研综合任务进入固定 Research Team")
-        return {
-            "is_complex": True,
-            "use_research_team": True,
-            "plan_steps": [],
-            "plan_reasoning": "需要多来源证据、结构化分析与独立复核",
-            "current_step": 0,
-            "_quick_agent": "research_team",
-            "needs_expansion": False,
-        }
-
     # ── 快速路径：规则预判 ──────────────────────────────────────────
     quick_result = _quick_complexity_check(last_user_message)
 
     if quick_result == "simple":
         logger.debug("快速判断: 简单任务（跳过 LLM）")
-        # 简单任务也可快速确定 Agent → 设置 _quick_agent，跳过 Supervisor
+        # 简单任务直接设置唯一分支，不叠加第二层路由器。
         agent = _quick_route(last_user_message)
         return {
             "is_complex": False,
@@ -308,7 +293,7 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
             result["_quick_agent"] = "knowledge_agent"
             result["needs_expansion"] = True
         else:
-            # Planner 已完成判断，直接给出路由，避免再调用 Supervisor。
+            # Planner 已完成判断，直接给出唯一分支。
             result["_quick_agent"] = _quick_route(last_user_message)
         return result
         
@@ -375,9 +360,7 @@ def _get_last_user_message(messages: list) -> str:
 
 # ==================== 路由函数 ====================
 
-# Planner 返回的 state 中包含 is_complex 标记，
-# Supervisor / Agent 节点可以通过 state["is_complex"] 访问此信息，
-# 用于下游决策（如 knowledge_search 是否需要 Query Expansion）。
+# Planner 返回的 is_complex 供 RAG 判断是否需要 Query Expansion。
 def route_from_planner(state: Dict[str, Any]) -> str:
     """
     从 Planner 路由到下一个节点
@@ -387,15 +370,12 @@ def route_from_planner(state: Dict[str, Any]) -> str:
     - 简单任务 -> 直接跳转到对应 Worker
     - 无法识别 -> 默认进入知识检索
     """
-    if state.get("use_research_team", False):
-        return "research_agent"
-
     is_complex = state.get("is_complex", False)
 
     if is_complex:
         return "retrieval_agent"
 
-    # Planner 已经通过快速路由确定了 Agent → 直接跳转，跳过 Supervisor（省去一次 LLM 调用）
+    # Planner 已经通过快速路由确定了 Agent → 直接跳转。
     quick_agent = state.get("_quick_agent")
     if quick_agent:
         logger.debug("快速路由: %s", quick_agent)
@@ -408,9 +388,10 @@ def route_from_planner(state: Dict[str, Any]) -> str:
     return "retrieval_agent"
 
 
-# ==================== 计划执行节点 ====================
-
-# ==================== Send-based Fan-out/Fan-in 执行节点 ====================
+# ==================== Legacy / Deprecated 计划执行兼容代码 ====================
+# 下方 execute_plan / Send / fan-out 函数不在 create_multi_agent_graph() 的生产图中，
+# 仅因 src.agent 仍公开旧 ParallelExecutor 导入而保留兼容。不得重新接回生产链；
+# 确认外部兼容入口无人使用后，应在独立清理提交中整体删除。
 
 # 是否使用 LangGraph Send 模式（替代 asyncio.gather）
 # Send 模式：LangGraph 自动完成 fan-out（并行分发）和 fan-in（结果收集）

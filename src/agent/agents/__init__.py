@@ -1,5 +1,6 @@
-"""
-Agent 节点模块
+"""Agent 节点兼容导出。
+
+``supervisor_node`` 仅为旧外部导入保留，当前生产图不注册 Supervisor。
 """
 from langgraph.graph import MessagesState
 

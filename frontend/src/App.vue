@@ -70,8 +70,8 @@
 
       <div v-if="activeWorkspace === 'chat'" class="agent-status">
         <div class="status-title">当前 Agent</div>
-        <div class="status-item" :class="{ active: currentAgent === 'supervisor' }">
-          <span class="status-dot supervisor"></span>
+        <div class="status-item" :class="{ active: currentAgent === 'planner' }">
+          <span class="status-dot planner"></span>
           路由调度
         </div>
         <div class="status-item" :class="{ active: currentAgent === 'knowledge_agent' }">
@@ -1056,7 +1056,7 @@ const sessionId = ref('default')
 const inputMessage = ref('')
 const messages = ref<Message[]>([])
 const loading = ref(false)
-const currentAgent = ref('supervisor')
+const currentAgent = ref('planner')
 const apiConnected = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 const sessions = ref<Session[]>([])
@@ -1083,7 +1083,7 @@ const workspaceTitle = computed(() => {
 
 const getAgentName = (agent?: string) => {
   const map: Record<string, string> = {
-    supervisor: '路由调度',
+    planner: '路由调度',
     knowledge_agent: '资料检索',
     operation_agent: '任务执行',
     general_agent: '学术助手'
@@ -1093,7 +1093,7 @@ const getAgentName = (agent?: string) => {
 
 const getAgentBadge = (agent: string) => {
   const map: Record<string, string> = {
-    supervisor: '调度',
+    planner: '调度',
     knowledge_agent: '资料',
     operation_agent: '执行',
     general_agent: '辅助'
@@ -1677,7 +1677,7 @@ const sendMessage = async () => {
   messages.value.push({ role: 'user', content: text })
   inputMessage.value = ''
   loading.value = true
-  currentAgent.value = 'supervisor'
+  currentAgent.value = 'planner'
   pendingSources.value = []
   pendingVersionSource.value = ''
   scrollToBottom()

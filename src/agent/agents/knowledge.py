@@ -8,12 +8,12 @@ Knowledge Retrieval Pipeline - 知识检索管线
 
 核心改进：
 1. 消除 ReAct 循环开销：检索阶段直接调用 pipeline，不经过 LLM 决策循环
-2. 评估是独立的：CRAG Grading Agent 作为独立阶段，Supervisor 可感知评估结果
+2. 评估是独立的：CRAG Grading 结果写入 state，供生成与诊断使用
 3. 查询改写是可选的预处理：在检索前判断，评估失败后才触发重写
 4. 冲突检测可插拔：作为可选节点，不影响主流程性能
 
 流程：
-  Supervisor → retrieval_agent_node → (conflict_detection_node) → generation_agent_node → save_to_mem0 → END
+  Planner → retrieval_agent_node → generation_agent_node → finalize_response → END
 """
 import asyncio
 import time
@@ -41,7 +41,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     职责：
     1. 直接调用 CorrectiveRAGPipeline.retrieve()
        流程：Hybrid 检索 → Rerank 精排 → CRAG LLM 评估 → 查询改写/分解（条件触发）
-    2. 将评估结果写入 state，供 Supervisor 感知和 generation_agent_node 使用
+    2. 将评估结果写入 state，供 generation_agent_node 和诊断使用
     3. 生成检索上下文字符串（供生成阶段用）
 
     不再：
@@ -61,7 +61,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "final_answer": "抱歉，我无法理解您的问题。",
         }
 
-    # Supervisor 的 expansion 判断（优先使用；若为空则内部判断）
+    # Planner 的 expansion 判断（优先使用；若为空则内部判断）
     needs_expansion = state.get("needs_expansion", False)
 
     try:

@@ -473,10 +473,6 @@ class ChatService:
                     status_text = {
                         "retrieval_agent": "正在检索实验室资料...",
                         "generation_agent": "正在根据资料组织回答...",
-                        "research_agent": "正在拆分问题并收集多来源科研证据...",
-                        "analyst_agent": "正在区分资料事实、模型推断与研究建议...",
-                        "reviewer_agent": "正在独立复核引用、错误前提和资料冲突...",
-                        "research_revision": "正在按复核意见完成一次受限修订...",
                     }.get(name)
                     if status_text:
                         yield self._sse_event("thinking", status_text)
