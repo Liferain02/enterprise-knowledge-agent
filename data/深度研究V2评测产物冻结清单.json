@@ -1,0 +1,14 @@
+{
+  "version": "Deep Research V2",
+  "status": "automatic_eval_complete_independent_human_review_pending",
+  "frozen_at": "2026-08-13T22:55:00+08:00",
+  "rule": "Blind V2 数据集、正式结果、自动报告、人工盲评表和密封映射不得覆盖或用于调参；新一轮必须使用新版本和新 Holdout。",
+  "mapping_policy": "Codex 未打开密封映射；独立评分完成前不解盲。",
+  "files_sha256": {
+    "tests/eval/deep_research_v2_blind_dataset.py": "f537a2b328aecb868f0030d255fb2d305a1e40a590dc17fa99f820f80c9c3721",
+    "data/深度研究V2盲测结果.json": "3894de95d444b38da2dfb36b633b1df3eff53454d5df31d4e6f667c02315b316",
+    "data/深度研究V2盲测自动报告.md": "47b190a26fe2e24b9fa8383014aa98216dd03c495723cb9feb2c4f8e2aae1811",
+    "data/深度研究V2盲评表.md": "40796fd0e7c229066ad76b2e14cb93c82b21c654acd7becd7adab0ce8e05d3dd",
+    "data/深度研究V2盲评密封映射.json": "39048e9801702105d27731112fc10b4aad7bd0ee80e3b623a0f8b41f3cdc3555"
+  }
+}
