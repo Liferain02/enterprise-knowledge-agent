@@ -115,7 +115,9 @@ class ReviewReport(BaseModel):
     """Reviewer -> Finalizer/Analyst 的唯一主要协议。"""
 
     decision: Literal["PASS", "REVISE", "NEED_MORE_EVIDENCE"] = Field(
-        validation_alias=AliasChoices("decision", "review_result", "review_decision", "status")
+        validation_alias=AliasChoices(
+            "decision", "review_result", "review_decision", "reviewer_decision", "status",
+        )
     )
     items: List[ReviewItem] = Field(default_factory=list)
     premise_assessment: Literal[
@@ -257,6 +259,20 @@ def _merge_trace(
     return trace
 
 
+def _finalize_trace(trace: Dict[str, Any], failure_attribution: str) -> Dict[str, Any]:
+    """汇总阶段耗时和唯一的当前失败归因，仍只写入现有 state。"""
+
+    result = dict(trace)
+    stages = result.get("stages") or {}
+    result["stage_latency_ms"] = {
+        name: int(payload.get("latency_ms", 0) or 0)
+        for name, payload in stages.items()
+        if isinstance(payload, dict)
+    }
+    result["failure_attribution"] = failure_attribution
+    return result
+
+
 def _usage_from_raw(raw: Any) -> Dict[str, int]:
     usage = getattr(raw, "usage_metadata", None) or {}
     if not isinstance(usage, dict):
@@ -367,7 +383,7 @@ async def _retrieve_evidence(
     user_context: Any,
     *,
     top_k: int = 5,
-) -> tuple[EvidencePackage, List[Document], int]:
+) -> tuple[EvidencePackage, List[Document], int, List[Dict[str, Any]]]:
     from src.rag.evaluation.conflict_detector import detect_document_conflicts
     from src.rag.evaluation.retrieval_grader import get_corrective_rag_pipeline
     from src.rag.retrieval.acl_filter import UserContext, check_doc_access
@@ -376,10 +392,11 @@ async def _retrieve_evidence(
     user_context = user_context or UserContext.anonymous()
     gathered: List[tuple[str, Document, float]] = []
     missing: List[str] = []
+    query_runs: List[Dict[str, Any]] = []
 
     for subquestion in subquestions[:MAX_SUBQUESTIONS]:
         try:
-            results, grade_result, _history = await pipeline.retrieve(
+            results, grade_result, history = await pipeline.retrieve(
                 query=subquestion,
                 top_k=top_k,
                 needs_expansion=False,
@@ -388,12 +405,29 @@ async def _retrieve_evidence(
         except Exception as exc:
             logger.warning("Researcher 子问题检索失败: query=%s error=%s", subquestion[:80], exc)
             missing.append(subquestion)
+            query_runs.append({
+                "query": subquestion,
+                "decision": "error",
+                "rewrite_history": [],
+                "returned_titles": [],
+                "error": f"{type(exc).__name__}: {exc}",
+            })
             continue
         decision = getattr(getattr(grade_result, "decision", None), "value", "no_results")
         allowed_results = [
             (doc, score) for doc, score in results
             if check_doc_access(doc.metadata or {}, user_context)
         ]
+        query_runs.append({
+            "query": subquestion,
+            "decision": decision,
+            "rewrite_history": list(history),
+            "returned_titles": [
+                str((doc.metadata or {}).get("title") or _display_source(doc.metadata or {}))
+                for doc, _score in allowed_results
+            ],
+            "error": "",
+        })
         if decision == "no_results" or not allowed_results:
             missing.append(subquestion)
             continue
@@ -433,7 +467,7 @@ async def _retrieve_evidence(
         conflicts=conflicts,
         acl_checked=True,
     )
-    return package, docs, len(subquestions[:MAX_SUBQUESTIONS])
+    return package, docs, len(subquestions[:MAX_SUBQUESTIONS]), query_runs
 
 
 def _documents_from_package(package: EvidencePackage) -> List[Document]:
@@ -463,7 +497,7 @@ async def research_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         return {"research_question": "", "evidence_package": package.model_dump()}
 
     subquestions, usage = await _plan_subquestions(question)
-    package, docs, retrieval_calls = await _retrieve_evidence(
+    package, docs, retrieval_calls, query_runs = await _retrieve_evidence(
         subquestions,
         state.get("user_context"),
         top_k=int(state.get("retrieval_top_k", 5)),
@@ -492,6 +526,9 @@ async def research_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         "subquestions": list(package.subquestions),
         "retrieved_document_ids": [item.source_id for item in package.evidences],
         "retrieved_document_titles": [item.title for item in package.evidences],
+        "evidence_count": len(package.evidences),
+        "missing_subquestions": list(package.missing_evidence),
+        "query_runs": query_runs,
         "evidence_package": package.model_dump(),
         "latency_ms": elapsed_ms,
         "llm_calls": 1,
@@ -724,18 +761,40 @@ def _validate_claims_for_finalization(
     return report
 
 
-def _contains_challenged_absolute_premise(question: str) -> bool:
-    """识别要求验证绝对化前提的问题，交给 Reviewer 显式标记。"""
+def _is_premise_task(question: str) -> bool:
+    """判断用户是否明确要求核验一个可判真假的前提。
 
-    has_validation = bool(re.search(r"验证|前提|是否成立|是否正确", question))
-    has_absolute = bool(re.search(
-        r"所有|全部|任何|每次|完全相同|都无需|必然|始终|从不|已经.{0,10}(正式|全部)",
-        question,
+    这里只识别用户的任务形式，不判断前提真假。比较、总结和提出建议即使
+    包含“判断”二字，也不能被强行转成 premise task。
+    """
+
+    normalized = re.sub(r"\s+", "", question or "")
+    if not normalized:
+        return False
+    if re.search(r"验证|核验|这一前提|该前提|前提是否", normalized):
+        return True
+    if re.search(r"是否(?:已经|已)?(?:成立|属实|正确|得到证实|可以认为)", normalized):
+        return True
+    if re.search(r"(?:能否|可否)认为", normalized):
+        return True
+    # “判断所有成员是否必须……”是 premise；“判断两份资料是冲突还是互补”不是。
+    return bool(re.search(
+        r"判断.{0,24}(?:所有|全部|任何|每次|每个|必然|始终|从不).{0,24}(?:是否|都|必须|无需)",
+        normalized,
     ))
-    return has_validation and has_absolute
+
+
+def _contains_challenged_absolute_premise(question: str) -> bool:
+    """V1 兼容入口；V2 的实际边界由 `_is_premise_task` 统一定义。"""
+
+    return _is_premise_task(question) and bool(re.search(
+        r"所有|全部|任何|每次|每个|完全相同|都无需|必然|始终|从不",
+        question or "",
+    ))
 
 
 def _review_prompt(package: EvidencePackage, analysis: AnalysisReport) -> str:
+    premise_task = _is_premise_task(package.original_question)
     return f"""你是固定 Research Team 的 Reviewer Agent，只能输出 PASS、REVISE 或 NEED_MORE_EVIDENCE。
 逐条检查 Claim 是否被 source_ids 对应片段支持；检查问题中的强前提究竟被证据支持、反驳还是证据不足；检查新旧资料冲突
 是否被说明；确认所有证据都标记为 acl_checked。不要生成最终答案，不得检索或创建 Agent。
@@ -743,6 +802,10 @@ def _review_prompt(package: EvidencePackage, analysis: AnalysisReport) -> str:
 REVISE 并要求 Analyst 补成 Claim，而不是为了保守而删除已有受支持 Claim。
 若现有证据可以修正文稿，返回 REVISE；只有缺少明确证据时返回 NEED_MORE_EVIDENCE，
 targeted_queries 最多 2 条；全部合格才 PASS。
+
+本题是否为明确前提核验任务：{str(premise_task).lower()}。
+当该值为 false 时，premise_assessment 必须为 not_applicable，premise_source_ids 必须为空，
+不得增加 false_premise issue，也不得要求最终答案输出“前提核验”。
 
 若问题要求验证“所有/必然/完全相同”等强前提，premise_assessment 必须是：
 - supported：当前证据明确支持该强前提；
@@ -794,9 +857,9 @@ async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         report.overall_instruction = (
             report.overall_instruction + " 删除或补齐所有无效引用声明。"
         ).strip()
-    if _contains_challenged_absolute_premise(package.original_question):
-        # 确定性触发只保证 Reviewer 必须明确评估，不能把“绝对化表达”
-        # 本身当作反证。最终 supported/unsupported 仍来自证据复核。
+    premise_task = _is_premise_task(package.original_question)
+    if premise_task:
+        # 确定性触发只保证 Reviewer 必须明确评估，最终真假仍由证据复核。
         if report.premise_assessment == "not_applicable":
             report.premise_assessment = (
                 "unsupported" if report.false_premise_detected else "insufficient"
@@ -821,6 +884,13 @@ async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             report.overall_instruction
             + f" 必须显式回应强前提核验结论：{report.premise_assessment}。"
         ).strip()
+    else:
+        # 模型偶尔会把普通比较/总结误判为真假前提。产品边界由用户任务形式
+        # 确定，因此这里做无模型归一化，而不是维护具体案例黑名单。
+        report.premise_assessment = "not_applicable"
+        report.premise_source_ids = []
+        report.false_premise_detected = False
+        report.items = [item for item in report.items if item.issue_type != "false_premise"]
     if not package.acl_checked:
         report.decision = "REVISE"
         report.acl_verified = False
@@ -849,6 +919,15 @@ async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     )
     trace = _merge_trace(state, "reviewer", {
         "review_report": report.model_dump(),
+        "premise_task": premise_task,
+        "rejected_claims": [
+            {
+                "claim": item.claim,
+                "reason": item.revision_instruction or item.issue_type,
+                "issue_type": item.issue_type,
+            }
+            for item in report.items if not item.supported
+        ],
         "latency_ms": elapsed_ms,
         "llm_calls": 1,
         "retrieval_calls": 0,
@@ -891,7 +970,7 @@ async def research_revision_node(state: Dict[str, Any]) -> Dict[str, Any]:
     retrieval_calls = 0
 
     if review.decision == "NEED_MORE_EVIDENCE" and review.targeted_queries:
-        extra, extra_docs, retrieval_calls = await _retrieve_evidence(
+        extra, extra_docs, retrieval_calls, query_runs = await _retrieve_evidence(
             review.targeted_queries[:MAX_TARGETED_QUERIES],
             state.get("user_context"),
             top_k=int(state.get("retrieval_top_k", 5)),
@@ -899,6 +978,8 @@ async def research_revision_node(state: Dict[str, Any]) -> Dict[str, Any]:
         extra.original_question = package.original_question
         package = _merge_packages(package, extra)
         del extra_docs
+    else:
+        query_runs = []
 
     before_analysis = AnalysisReport.model_validate(state.get("analysis_report") or {})
     if package.evidences:
@@ -945,6 +1026,20 @@ async def research_revision_node(state: Dict[str, Any]) -> Dict[str, Any]:
             if claim.claim_id not in validated_ids
         ],
         "validated_claims": [claim.model_dump() for claim in analysis.claims],
+        "targeted_queries": list(review.targeted_queries[:MAX_TARGETED_QUERIES]),
+        "query_runs": query_runs,
+        "added_evidence_ids": [
+            item.source_id for item in package.evidences
+            if item.source_id not in {old.source_id for old in EvidencePackage.model_validate(state.get("evidence_package") or {}).evidences}
+        ],
+        "added_claim_ids": sorted(
+            {claim.claim_id for claim in analysis.claims}
+            - {claim.claim_id for claim in before_analysis.claims}
+        ),
+        "removed_claim_ids": sorted(
+            {claim.claim_id for claim in before_analysis.claims}
+            - {claim.claim_id for claim in analysis.claims}
+        ),
         "latency_ms": elapsed_ms,
         "llm_calls": llm_calls,
         "retrieval_calls": retrieval_calls,
@@ -1000,6 +1095,51 @@ def _analysis_after_review(
     return _validate_claims_for_finalization(package, filtered), reviewer_dropped
 
 
+def _claim_mentioned_in_answer(answer: str, claim_text: str) -> bool:
+    """确定性覆盖 proxy：避免把“引用同一文档”误当成已写出该 Claim。"""
+
+    answer_lower = (answer or "").casefold()
+    claim_lower = (claim_text or "").casefold()
+    latin_terms = re.findall(r"[a-z0-9_+.-]{3,}", claim_lower)
+    chinese_runs = re.findall(r"[\u4e00-\u9fff]{2,}", claim_lower)
+    chinese_bigrams = {
+        run[index:index + 2]
+        for run in chinese_runs
+        for index in range(max(0, len(run) - 1))
+    }
+    terms = set(latin_terms) | chinese_bigrams
+    if not terms:
+        return False
+    matched = sum(1 for term in terms if term in answer_lower)
+    return matched / len(terms) >= 0.35
+
+
+def _failure_attribution(
+    package: EvidencePackage,
+    analysis: AnalysisReport,
+    review: ReviewReport,
+    reviewer_dropped: List[Claim],
+    omitted_claim_ids: List[str],
+) -> str:
+    """运行时的单层故障归因；数据集 gold 可在 eval 中进一步细分。"""
+
+    if not package.acl_checked or not review.acl_verified or any(
+        item.issue_type == "acl" for item in review.items
+    ):
+        return "acl"
+    if not package.evidences:
+        return "knowledge_gap"
+    if package.missing_evidence:
+        return "retrieval"
+    if not analysis.claims:
+        return "analysis"
+    if reviewer_dropped:
+        return "review"
+    if omitted_claim_ids:
+        return "generation"
+    return "none"
+
+
 def _build_deep_research_context(
     package: EvidencePackage,
     analysis: AnalysisReport,
@@ -1042,16 +1182,18 @@ def _build_deep_research_context(
     limitations = "；".join(analysis.limitations) or "无额外局限"
     conflicts = "；".join(package.conflicts) or "未发现明确冲突"
 
-    return "\n".join([
+    context_lines = [
         *evidence_lines,
         "【已验证 Claim Map】",
         *(claim_lines or ["- 无可进入最终答案的已验证 Claim"]),
         "",
-        f"【前提核验】{premise}",
         f"【证据冲突】{conflicts}",
         f"【证据局限】{limitations}",
         "生成时只能重组上述已验证 Claim；不得从原始证据另造新结论。",
-    ])
+    ]
+    if review.premise_assessment != "not_applicable":
+        context_lines.insert(-3, f"【前提核验】{premise}")
+    return "\n".join(context_lines)
 
 
 _RESEARCH_BRIEF_INSTRUCTIONS = """严格按以下七个标题输出，不能增删标题：
@@ -1133,23 +1275,56 @@ async def deep_research_generation_node(state: Dict[str, Any]) -> Dict[str, Any]
         for index, item in enumerate(package.evidences, 1)
     }
     covered_claims = 0
+    omitted_claim_ids: List[str] = []
     for claim in analysis.claims:
-        if any(id_to_number.get(source_id) in cited_doc_numbers for source_id in claim.source_ids):
+        has_source_citation = any(
+            id_to_number.get(source_id) in cited_doc_numbers for source_id in claim.source_ids
+        )
+        if has_source_citation and _claim_mentioned_in_answer(answer, claim.text):
             covered_claims += 1
+        else:
+            omitted_claim_ids.append(claim.claim_id)
+
+    rejected_reason_by_text = {
+        item.claim.strip(): {
+            "issue_type": item.issue_type,
+            "reason": item.revision_instruction or item.issue_type,
+        }
+        for item in review.items if not item.supported and item.claim.strip()
+    }
+    attribution = _failure_attribution(
+        package, analysis, review, reviewer_dropped, omitted_claim_ids,
+    )
 
     trace = _merge_trace(state, "generation", {
-        "reviewer_dropped_claims": [claim.model_dump() for claim in reviewer_dropped],
+        "reviewer_dropped_claims": [
+            {
+                **claim.model_dump(),
+                **rejected_reason_by_text.get(claim.text.strip(), {
+                    "issue_type": "unsupported",
+                    "reason": "Reviewer 未批准该 Claim",
+                }),
+            }
+            for claim in reviewer_dropped
+        ],
         "validated_claims": [claim.model_dump() for claim in analysis.claims],
         "final_answer": answer,
+        "omitted_validated_claim_ids": omitted_claim_ids,
+        "final_validated_claim_coverage_proxy": (
+            covered_claims / len(analysis.claims) if analysis.claims else 0.0
+        ),
+        # 保留 V1 字段以兼容旧评测读取；V2 明确把它标为 proxy。
         "final_claim_citation_coverage": (
             covered_claims / len(analysis.claims) if analysis.claims else 0.0
         ),
+        "failure_attribution": attribution,
         "latency_ms": elapsed_ms,
         "llm_calls": int(generation_metrics.get("llm_calls", 0)),
         "retrieval_calls": 0,
         "input_tokens": int(generation_metrics.get("input_tokens", 0)),
         "output_tokens": int(generation_metrics.get("output_tokens", 0)),
     })
+    trace = _finalize_trace(trace, attribution)
 
     return {
         "analysis_report": analysis.model_dump(),

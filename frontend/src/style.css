@@ -1142,6 +1142,53 @@ textarea {
   flex-shrink: 0;
 }
 
+/* ===== 当前请求回答模式 ===== */
+.answer-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  color: var(--text-secondary);
+}
+
+.answer-mode legend {
+  float: left;
+  margin-right: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.answer-mode label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 3px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  background: var(--bg-card);
+}
+
+.answer-mode label.active {
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.answer-mode input {
+  margin: 0;
+  accent-color: var(--primary-color);
+}
+
+.answer-mode small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .user-info {
   display: flex;
   align-items: center;

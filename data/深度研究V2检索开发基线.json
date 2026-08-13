@@ -1,0 +1,3664 @@
+{
+  "dataset": "deep_research_retrieval_development",
+  "label": "before",
+  "case_count": 26,
+  "generated_at": "2026-08-13T01:47:28+08:00",
+  "run_duration_seconds": 204.646,
+  "configuration": {
+    "git_commit": "7d61acf14a276f08a364fe367ed7974cb8e26d08",
+    "llm_provider": "qwen",
+    "llm_model": "qwen3.5-flash",
+    "embedding_model": "text-embedding-v2",
+    "reranker_provider": "qwen",
+    "reranker_model": "gte-rerank-v2",
+    "top_k": 5
+  },
+  "corpus": {
+    "chunk_count": 40,
+    "document_count": 18,
+    "titles": [
+      "实验室例会纪要_2026-04-15",
+      "RDMA与高性能网络实验规范",
+      "实验室安全与值班制度",
+      "实验室常见问题FAQ",
+      "实验室成员与分工说明",
+      "实验室组会制度与汇报要求",
+      "实验室考勤与请假制度",
+      "报销与采购说明",
+      "新生入组第一周任务清单",
+      "论文投稿与对外汇报流程",
+      "论文阅读与实验记录要求",
+      "设备预约与共享资源使用流程",
+      "高性能计算集群使用说明",
+      "实验室研究方向与课题地图",
+      "全局变量实现2",
+      "分布式NUMA研究计划",
+      "分布式NUMA课题组会模板",
+      "知识目录索引"
+    ]
+  },
+  "aggregate": {
+    "normal": {
+      "cases": 26,
+      "hit_at_k": 0.8076923076923077,
+      "recall_at_k": 0.6858974358974359,
+      "mrr": 0.7884615384615384,
+      "expected_document_coverage": 0.6858974358974359,
+      "avg_query_count": 1,
+      "latency_p50_ms": 2357.376,
+      "latency_p95_ms": 3805.84,
+      "failure_types": {
+        "lexical/title_failure": 1,
+        "missing_document": 4,
+        "semantic_retrieval_failure": 9
+      }
+    },
+    "deep_researcher": {
+      "cases": 26,
+      "hit_at_k": 0.8076923076923077,
+      "recall_at_k": 0.7051282051282052,
+      "mrr": 0.7884615384615384,
+      "expected_document_coverage": 0.7051282051282052,
+      "avg_query_count": 2.6153846153846154,
+      "latency_p50_ms": 5627.581,
+      "latency_p95_ms": 6535.626,
+      "failure_types": {
+        "lexical/title_failure": 1,
+        "missing_document": 4,
+        "query_planning_failure": 3,
+        "semantic_retrieval_failure": 4
+      }
+    }
+  },
+  "aggregate_by_category": {
+    "exact_named_document": {
+      "normal": {
+        "cases": 6,
+        "hit_at_k": 0.5,
+        "recall_at_k": 0.5,
+        "mrr": 0.5,
+        "expected_document_coverage": 0.5,
+        "avg_query_count": 1,
+        "latency_p50_ms": 2316.3525,
+        "latency_p95_ms": 3805.84,
+        "failure_types": {
+          "missing_document": 3
+        }
+      },
+      "deep_researcher": {
+        "cases": 6,
+        "hit_at_k": 0.5,
+        "recall_at_k": 0.5,
+        "mrr": 0.5,
+        "expected_document_coverage": 0.5,
+        "avg_query_count": 2.8333333333333335,
+        "latency_p50_ms": 5832.713,
+        "latency_p95_ms": 6003.103,
+        "failure_types": {
+          "missing_document": 3
+        }
+      }
+    },
+    "multi_evidence": {
+      "normal": {
+        "cases": 5,
+        "hit_at_k": 1,
+        "recall_at_k": 0.7333333333333333,
+        "mrr": 1.0,
+        "expected_document_coverage": 0.7333333333333333,
+        "avg_query_count": 1,
+        "latency_p50_ms": 2578.166,
+        "latency_p95_ms": 2617.126,
+        "failure_types": {
+          "semantic_retrieval_failure": 4
+        }
+      },
+      "deep_researcher": {
+        "cases": 5,
+        "hit_at_k": 1,
+        "recall_at_k": 0.9333333333333333,
+        "mrr": 1.0,
+        "expected_document_coverage": 0.9333333333333333,
+        "avg_query_count": 3.2,
+        "latency_p50_ms": 6161.686,
+        "latency_p95_ms": 6438.09,
+        "failure_types": {
+          "semantic_retrieval_failure": 1
+        }
+      }
+    },
+    "named_entity_alias": {
+      "normal": {
+        "cases": 5,
+        "hit_at_k": 0.6,
+        "recall_at_k": 0.6,
+        "mrr": 0.6,
+        "expected_document_coverage": 0.6,
+        "avg_query_count": 1,
+        "latency_p50_ms": 2270.037,
+        "latency_p95_ms": 2604.736,
+        "failure_types": {
+          "lexical/title_failure": 1,
+          "missing_document": 1
+        }
+      },
+      "deep_researcher": {
+        "cases": 5,
+        "hit_at_k": 0.6,
+        "recall_at_k": 0.6,
+        "mrr": 0.6,
+        "expected_document_coverage": 0.6,
+        "avg_query_count": 2.2,
+        "latency_p50_ms": 4513.304,
+        "latency_p95_ms": 4622.137,
+        "failure_types": {
+          "lexical/title_failure": 1,
+          "missing_document": 1
+        }
+      }
+    },
+    "semantic_query": {
+      "normal": {
+        "cases": 5,
+        "hit_at_k": 1,
+        "recall_at_k": 0.8,
+        "mrr": 0.9,
+        "expected_document_coverage": 0.8,
+        "avg_query_count": 1,
+        "latency_p50_ms": 1994.711,
+        "latency_p95_ms": 2371.275,
+        "failure_types": {
+          "semantic_retrieval_failure": 3
+        }
+      },
+      "deep_researcher": {
+        "cases": 5,
+        "hit_at_k": 1,
+        "recall_at_k": 0.6,
+        "mrr": 0.9,
+        "expected_document_coverage": 0.6,
+        "avg_query_count": 2.6,
+        "latency_p50_ms": 5471.965,
+        "latency_p95_ms": 6064.513,
+        "failure_types": {
+          "query_planning_failure": 3,
+          "semantic_retrieval_failure": 2
+        }
+      }
+    },
+    "temporal_version": {
+      "normal": {
+        "cases": 5,
+        "hit_at_k": 1,
+        "recall_at_k": 0.8333333333333334,
+        "mrr": 1.0,
+        "expected_document_coverage": 0.8333333333333334,
+        "avg_query_count": 1,
+        "latency_p50_ms": 1552.809,
+        "latency_p95_ms": 2548.012,
+        "failure_types": {
+          "semantic_retrieval_failure": 2
+        }
+      },
+      "deep_researcher": {
+        "cases": 5,
+        "hit_at_k": 1,
+        "recall_at_k": 0.9333333333333333,
+        "mrr": 1.0,
+        "expected_document_coverage": 0.9333333333333333,
+        "avg_query_count": 2.2,
+        "latency_p50_ms": 4364.14,
+        "latency_p95_ms": 4425.172,
+        "failure_types": {
+          "semantic_retrieval_failure": 1
+        }
+      }
+    }
+  },
+  "results": [
+    {
+      "case": {
+        "case_id": "R01",
+        "query": "请从《RDMA与高性能网络实验规范》中定位网卡、驱动和 NUMA 拓扑的记录要求。",
+        "category": "exact_named_document",
+        "relevant_doc_ids": [
+          "RDMA与高性能网络实验规范"
+        ],
+        "minimum_expected_docs": 1,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "RDMA与高性能网络实验规范": 1
+          },
+          "query_count": 1,
+          "latency_ms": 5009.647,
+          "failures": [],
+          "actual_docs": [
+            "RDMA与高性能网络实验规范",
+            "分布式NUMA课题组会模板",
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图"
+          ],
+          "queries": [
+            "请从《RDMA与高性能网络实验规范》中定位网卡、驱动和 NUMA 拓扑的记录要求。"
+          ],
+          "query_runs": [
+            {
+              "query": "请从《RDMA与高性能网络实验规范》中定位网卡、驱动和 NUMA 拓扑的记录要求。",
+              "titles": [
+                "RDMA与高性能网络实验规范",
+                "分布式NUMA课题组会模板",
+                "实验室例会纪要_2026-04-15",
+                "分布式NUMA研究计划",
+                "实验室研究方向与课题地图"
+              ],
+              "scores": [
+                0.4200509652856256,
+                0.2973778714536212,
+                0.19511273421395678,
+                0.18041909944956197,
+                0.17667455032461704
+              ],
+              "rewrite_history": [
+                "请从《RDMA与高性能网络实验规范》中定位网卡、驱动和 NUMA 拓扑的记录要求。",
+                "请从《RDMA与高性能网络实验规范》中定位网卡、驱动",
+                "NUMA 拓扑"
+              ],
+              "decision": "high",
+              "latency_ms": 5009.647
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "RDMA与高性能网络实验规范": 1
+          },
+          "query_count": 3,
+          "latency_ms": 6429.859,
+          "failures": [],
+          "actual_docs": [
+            "RDMA与高性能网络实验规范",
+            "高性能计算集群使用说明",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "queries": [
+            "《RDMA与高性能网络实验规范》中网卡的记录要求",
+            "《RDMA与高性能网络实验规范》中驱动的记录要求",
+            "《RDMA与高性能网络实验规范》中NUMA拓扑的记录要求"
+          ],
+          "query_runs": [
+            {
+              "query": "《RDMA与高性能网络实验规范》中网卡的记录要求",
+              "titles": [
+                "RDMA与高性能网络实验规范",
+                "高性能计算集群使用说明",
+                "实验室例会纪要_2026-04-15"
+              ],
+              "scores": [
+                0.5985713960115324,
+                0.2524769465188869,
+                0.1985563235111614
+              ],
+              "rewrite_history": [
+                "《RDMA与高性能网络实验规范》中网卡的记录要求"
+              ],
+              "decision": "high",
+              "latency_ms": 1552.837
+            },
+            {
+              "query": "《RDMA与高性能网络实验规范》中驱动的记录要求",
+              "titles": [
+                "RDMA与高性能网络实验规范",
+                "实验室例会纪要_2026-04-15",
+                "高性能计算集群使用说明"
+              ],
+              "scores": [
+                0.4594248614829026,
+                0.24227765143804444,
+                0.18511493393637068
+              ],
+              "rewrite_history": [
+                "《RDMA与高性能网络实验规范》中驱动的记录要求"
+              ],
+              "decision": "high",
+              "latency_ms": 1557.009
+            },
+            {
+              "query": "《RDMA与高性能网络实验规范》中NUMA拓扑的记录要求",
+              "titles": [
+                "RDMA与高性能网络实验规范",
+                "实验室例会纪要_2026-04-15",
+                "RDMA与高性能网络实验规范"
+              ],
+              "scores": [
+                0.6545413742720324,
+                0.4432902683634617,
+                0.19810527743617534
+              ],
+              "rewrite_history": [
+                "《RDMA与高性能网络实验规范》中NUMA拓扑的记录要求"
+              ],
+              "decision": "high",
+              "latency_ms": 1660.188
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R02",
+        "query": "《高性能计算集群使用说明》对 sudo 和长时间任务有什么要求？",
+        "category": "exact_named_document",
+        "relevant_doc_ids": [
+          "高性能计算集群使用说明"
+        ],
+        "minimum_expected_docs": 1,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "高性能计算集群使用说明": 1
+          },
+          "query_count": 1,
+          "latency_ms": 3805.84,
+          "failures": [],
+          "actual_docs": [
+            "高性能计算集群使用说明",
+            "实验室研究方向与课题地图"
+          ],
+          "queries": [
+            "《高性能计算集群使用说明》对 sudo 和长时间任务有什么要求？"
+          ],
+          "query_runs": [
+            {
+              "query": "《高性能计算集群使用说明》对 sudo 和长时间任务有什么要求？",
+              "titles": [
+                "高性能计算集群使用说明",
+                "实验室研究方向与课题地图"
+              ],
+              "scores": [
+                0.7597423798923143,
+                0.11684417810750618
+              ],
+              "rewrite_history": [
+                "《高性能计算集群使用说明》对 sudo 和长时间任务有什么要求？",
+                "《高性能计算集群使用说明》中关于 sudo 的要求是什么？",
+                "《高性能计算集群使用说明》中关于长时间任务的要求是什么？"
+              ],
+              "decision": "high",
+              "latency_ms": 3805.84
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "高性能计算集群使用说明": 1
+          },
+          "query_count": 2,
+          "latency_ms": 4110.156,
+          "failures": [],
+          "actual_docs": [
+            "高性能计算集群使用说明"
+          ],
+          "queries": [
+            "《高性能计算集群使用说明》中关于 sudo 的要求是什么？",
+            "《高性能计算集群使用说明》中关于长时间任务的要求是什么？"
+          ],
+          "query_runs": [
+            {
+              "query": "《高性能计算集群使用说明》中关于 sudo 的要求是什么？",
+              "titles": [
+                "高性能计算集群使用说明"
+              ],
+              "scores": [
+                0.7589153891154955
+              ],
+              "rewrite_history": [
+                "《高性能计算集群使用说明》中关于 sudo 的要求是什么？"
+              ],
+              "decision": "high",
+              "latency_ms": 1568.188
+            },
+            {
+              "query": "《高性能计算集群使用说明》中关于长时间任务的要求是什么？",
+              "titles": [
+                "高性能计算集群使用说明"
+              ],
+              "scores": [
+                0.7090416222738427
+              ],
+              "rewrite_history": [
+                "《高性能计算集群使用说明》中关于长时间任务的要求是什么？"
+              ],
+              "decision": "high",
+              "latency_ms": 1435.384
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R03",
+        "query": "《分布式NUMA研究计划》目前定义了哪些核心研究问题？",
+        "category": "exact_named_document",
+        "relevant_doc_ids": [
+          "分布式NUMA研究计划"
+        ],
+        "minimum_expected_docs": 1,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "分布式NUMA研究计划": 1
+          },
+          "query_count": 1,
+          "latency_ms": 1731.256,
+          "failures": [],
+          "actual_docs": [
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划"
+          ],
+          "queries": [
+            "《分布式NUMA研究计划》目前定义了哪些核心研究问题？"
+          ],
+          "query_runs": [
+            {
+              "query": "《分布式NUMA研究计划》目前定义了哪些核心研究问题？",
+              "titles": [
+                "分布式NUMA研究计划",
+                "实验室研究方向与课题地图",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.6394981671644583,
+                0.35771886663077496,
+                0.3199065208614391
+              ],
+              "rewrite_history": [
+                "《分布式NUMA研究计划》目前定义了哪些核心研究问题？"
+              ],
+              "decision": "high",
+              "latency_ms": 1731.256
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "分布式NUMA研究计划": 1
+          },
+          "query_count": 3,
+          "latency_ms": 5882.229,
+          "failures": [],
+          "actual_docs": [
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "queries": [
+            "《分布式NUMA研究计划》目前定义了哪些核心研究问题？",
+            "《分布式NUMA研究计划》目前定义了哪些核心研究问题？所涉及资料中的事实、时间与实验条件",
+            "《分布式NUMA研究计划》目前定义了哪些核心研究问题？所需的冲突证据、缺失证据与建议依据"
+          ],
+          "query_runs": [
+            {
+              "query": "《分布式NUMA研究计划》目前定义了哪些核心研究问题？",
+              "titles": [
+                "分布式NUMA研究计划",
+                "实验室研究方向与课题地图",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.6394981671644583,
+                0.35771886663077496,
+                0.31946814196162066
+              ],
+              "rewrite_history": [
+                "《分布式NUMA研究计划》目前定义了哪些核心研究问题？"
+              ],
+              "decision": "high",
+              "latency_ms": 901.774
+            },
+            {
+              "query": "《分布式NUMA研究计划》目前定义了哪些核心研究问题？所涉及资料中的事实、时间与实验条件",
+              "titles": [
+                "分布式NUMA研究计划",
+                "实验室研究方向与课题地图",
+                "实验室例会纪要_2026-04-15"
+              ],
+              "scores": [
+                0.41359587275168735,
+                0.27992220018970543,
+                0.24583642585357118
+              ],
+              "rewrite_history": [
+                "《分布式NUMA研究计划》目前定义了哪些核心研究问题？所涉及资料中的事实、时间与实验条件"
+              ],
+              "decision": "high",
+              "latency_ms": 2545.158
+            },
+            {
+              "query": "《分布式NUMA研究计划》目前定义了哪些核心研究问题？所需的冲突证据、缺失证据与建议依据",
+              "titles": [
+                "分布式NUMA研究计划",
+                "实验室研究方向与课题地图",
+                "实验室例会纪要_2026-04-15"
+              ],
+              "scores": [
+                0.4062838892098244,
+                0.2445743878214151,
+                0.21660648392879012
+              ],
+              "rewrite_history": [
+                "《分布式NUMA研究计划》目前定义了哪些核心研究问题？所需的冲突证据、缺失证据与建议依据"
+              ],
+              "decision": "high",
+              "latency_ms": 1544.288
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R04",
+        "query": "请定位 Argo 论文中与远程内存原型有关的设计依据。",
+        "category": "exact_named_document",
+        "relevant_doc_ids": [
+          "Argo"
+        ],
+        "minimum_expected_docs": 1,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 0,
+          "recall_at_k": 0.0,
+          "expected_document_coverage": 0.0,
+          "mrr": 0.0,
+          "ranks": {
+            "Argo": null
+          },
+          "query_count": 1,
+          "latency_ms": 2901.449,
+          "failures": [
+            {
+              "expected_doc": "Argo",
+              "failure_type": "missing_document",
+              "reason": "目标资料不在当前向量库 snapshot 中"
+            }
+          ],
+          "actual_docs": [
+            "实验室研究方向与课题地图",
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "论文投稿与对外汇报流程",
+            "论文阅读与实验记录要求"
+          ],
+          "queries": [
+            "请定位 Argo 论文中与远程内存原型有关的设计依据。"
+          ],
+          "query_runs": [
+            {
+              "query": "请定位 Argo 论文中与远程内存原型有关的设计依据。",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "实验室研究方向与课题地图",
+                "分布式NUMA研究计划",
+                "论文投稿与对外汇报流程",
+                "论文阅读与实验记录要求"
+              ],
+              "scores": [
+                0.23514059254828382,
+                0.1803180617257138,
+                0.16958079835572612,
+                0.11466751810375957,
+                0.1097253467921715
+              ],
+              "rewrite_history": [
+                "请定位 Argo 论文中与远程内存原型有关的设计依据。",
+                "请定位 Argo 论文中",
+                "远程内存原型有关"
+              ],
+              "decision": "high",
+              "latency_ms": 2901.449
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 0,
+          "recall_at_k": 0.0,
+          "expected_document_coverage": 0.0,
+          "mrr": 0.0,
+          "ranks": {
+            "Argo": null
+          },
+          "query_count": 3,
+          "latency_ms": 5783.197,
+          "failures": [
+            {
+              "expected_doc": "Argo",
+              "failure_type": "missing_document",
+              "reason": "目标资料不在当前向量库 snapshot 中"
+            }
+          ],
+          "actual_docs": [
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划"
+          ],
+          "queries": [
+            "请定位 Argo 论文中与远程内存原型有关的设计依据。",
+            "请定位 Argo 论文中与远程内存原型有关的设计依据",
+            "请定位 Argo 论文中与远程内存原型有关的设计依据。所需的冲突证据、缺失证据与建议依据"
+          ],
+          "query_runs": [
+            {
+              "query": "请定位 Argo 论文中与远程内存原型有关的设计依据。",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "实验室研究方向与课题地图"
+              ],
+              "scores": [
+                0.17450897501392854,
+                0.1714362786818032
+              ],
+              "rewrite_history": [
+                "请定位 Argo 论文中与远程内存原型有关的设计依据。"
+              ],
+              "decision": "high",
+              "latency_ms": 1539.45
+            },
+            {
+              "query": "请定位 Argo 论文中与远程内存原型有关的设计依据",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "实验室研究方向与课题地图"
+              ],
+              "scores": [
+                0.17284872497788836,
+                0.17277761414354004
+              ],
+              "rewrite_history": [
+                "请定位 Argo 论文中与远程内存原型有关的设计依据"
+              ],
+              "decision": "medium",
+              "latency_ms": 1614.011
+            },
+            {
+              "query": "请定位 Argo 论文中与远程内存原型有关的设计依据。所需的冲突证据、缺失证据与建议依据",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.16792167834571156,
+                0.1480676963561689
+              ],
+              "rewrite_history": [
+                "请定位 Argo 论文中与远程内存原型有关的设计依据。所需的冲突证据、缺失证据与建议依据"
+              ],
+              "decision": "medium",
+              "latency_ms": 1746.599
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R05",
+        "query": "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？",
+        "category": "exact_named_document",
+        "relevant_doc_ids": [
+          "Nu Achieving"
+        ],
+        "minimum_expected_docs": 1,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 0,
+          "recall_at_k": 0.0,
+          "expected_document_coverage": 0.0,
+          "mrr": 0.0,
+          "ranks": {
+            "Nu Achieving": null
+          },
+          "query_count": 1,
+          "latency_ms": 1521.297,
+          "failures": [
+            {
+              "expected_doc": "Nu Achieving",
+              "failure_type": "missing_document",
+              "reason": "目标资料不在当前向量库 snapshot 中"
+            }
+          ],
+          "actual_docs": [
+            "分布式NUMA研究计划"
+          ],
+          "queries": [
+            "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？"
+          ],
+          "query_runs": [
+            {
+              "query": "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？",
+              "titles": [
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.19672961401820704
+              ],
+              "rewrite_history": [
+                "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？"
+              ],
+              "decision": "high",
+              "latency_ms": 1521.297
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 0,
+          "recall_at_k": 0.0,
+          "expected_document_coverage": 0.0,
+          "mrr": 0.0,
+          "ranks": {
+            "Nu Achieving": null
+          },
+          "query_count": 3,
+          "latency_ms": 5130.067,
+          "failures": [
+            {
+              "expected_doc": "Nu Achieving",
+              "failure_type": "missing_document",
+              "reason": "目标资料不在当前向量库 snapshot 中"
+            }
+          ],
+          "actual_docs": [
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "分布式NUMA课题组会模板",
+            "RDMA与高性能网络实验规范"
+          ],
+          "queries": [
+            "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？",
+            "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？所涉及资料中的事实、时间与实验条件",
+            "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？所需的冲突证据、缺失证据与建议依据"
+          ],
+          "query_runs": [
+            {
+              "query": "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？",
+              "titles": [
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.1967099304816451
+              ],
+              "rewrite_history": [
+                "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？"
+              ],
+              "decision": "high",
+              "latency_ms": 870.066
+            },
+            {
+              "query": "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？所涉及资料中的事实、时间与实验条件",
+              "titles": [
+                "分布式NUMA研究计划",
+                "实验室研究方向与课题地图"
+              ],
+              "scores": [
+                0.18055043326553363,
+                0.118218848993549
+              ],
+              "rewrite_history": [
+                "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？所涉及资料中的事实、时间与实验条件"
+              ],
+              "decision": "high",
+              "latency_ms": 1697.41
+            },
+            {
+              "query": "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？所需的冲突证据、缺失证据与建议依据",
+              "titles": [
+                "分布式NUMA研究计划",
+                "分布式NUMA课题组会模板",
+                "RDMA与高性能网络实验规范"
+              ],
+              "scores": [
+                0.17703939209889769,
+                0.1356795799770095,
+                0.12942334845857414
+              ],
+              "rewrite_history": [
+                "Nu Achieving Microsecond-Scale Resource Fungibility 讨论了什么资源抽象？所需的冲突证据、缺失证据与建议依据"
+              ],
+              "decision": "high",
+              "latency_ms": 1592.21
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R06",
+        "query": "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？",
+        "category": "exact_named_document",
+        "relevant_doc_ids": [
+          "Quicksand"
+        ],
+        "minimum_expected_docs": 1,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 0,
+          "recall_at_k": 0.0,
+          "expected_document_coverage": 0.0,
+          "mrr": 0.0,
+          "ranks": {
+            "Quicksand": null
+          },
+          "query_count": 1,
+          "latency_ms": 1653.887,
+          "failures": [
+            {
+              "expected_doc": "Quicksand",
+              "failure_type": "missing_document",
+              "reason": "目标资料不在当前向量库 snapshot 中"
+            }
+          ],
+          "actual_docs": [],
+          "queries": [
+            "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？"
+          ],
+          "query_runs": [
+            {
+              "query": "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？",
+              "titles": [],
+              "scores": [],
+              "rewrite_history": [
+                "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？",
+                "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？"
+              ],
+              "decision": "no_results",
+              "latency_ms": 1653.887
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 0,
+          "recall_at_k": 0.0,
+          "expected_document_coverage": 0.0,
+          "mrr": 0.0,
+          "ranks": {
+            "Quicksand": null
+          },
+          "query_count": 3,
+          "latency_ms": 6003.103,
+          "failures": [
+            {
+              "expected_doc": "Quicksand",
+              "failure_type": "missing_document",
+              "reason": "目标资料不在当前向量库 snapshot 中"
+            }
+          ],
+          "actual_docs": [
+            "RDMA与高性能网络实验规范"
+          ],
+          "queries": [
+            "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？",
+            "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？所涉及资料中的事实、时间与实验条件",
+            "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？所需的冲突证据、缺失证据与建议依据"
+          ],
+          "query_runs": [
+            {
+              "query": "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？",
+              "titles": [],
+              "scores": [],
+              "rewrite_history": [
+                "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？",
+                "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？"
+              ],
+              "decision": "no_results",
+              "latency_ms": 1756.871
+            },
+            {
+              "query": "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？所涉及资料中的事实、时间与实验条件",
+              "titles": [],
+              "scores": [],
+              "rewrite_history": [
+                "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？所涉及资料中的事实、时间与实验条件",
+                "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？所涉及资料中的事实、时间与实验条件"
+              ],
+              "decision": "no_results",
+              "latency_ms": 1638.658
+            },
+            {
+              "query": "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？所需的冲突证据、缺失证据与建议依据",
+              "titles": [
+                "RDMA与高性能网络实验规范"
+              ],
+              "scores": [
+                0.11463079160559295
+              ],
+              "rewrite_history": [
+                "Quicksand Harnessing Stranded Datacenter Resources 的粒度机制是什么？所需的冲突证据、缺失证据与建议依据"
+              ],
+              "decision": "high",
+              "latency_ms": 1653.22
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R07",
+        "query": "GAM 当前原型怎样组织全局变量和远程访问？",
+        "category": "named_entity_alias",
+        "relevant_doc_ids": [
+          "全局变量实现2"
+        ],
+        "minimum_expected_docs": 1,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 0,
+          "recall_at_k": 0.0,
+          "expected_document_coverage": 0.0,
+          "mrr": 0.0,
+          "ranks": {
+            "全局变量实现2": null
+          },
+          "query_count": 1,
+          "latency_ms": 2735.537,
+          "failures": [
+            {
+              "expected_doc": "全局变量实现2",
+              "failure_type": "lexical/title_failure",
+              "reason": "目标资料已入库且可见，但命名/别名查询未召回到最终结果"
+            }
+          ],
+          "actual_docs": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "实验室研究方向与课题地图",
+            "实验室研究方向与课题地图"
+          ],
+          "queries": [
+            "GAM 当前原型怎样组织全局变量和远程访问？"
+          ],
+          "query_runs": [
+            {
+              "query": "GAM 当前原型怎样组织全局变量和远程访问？",
+              "titles": [
+                "分布式NUMA研究计划",
+                "分布式NUMA研究计划",
+                "分布式NUMA研究计划",
+                "实验室研究方向与课题地图",
+                "实验室研究方向与课题地图"
+              ],
+              "scores": [
+                0.3848680891071432,
+                0.35067302243502596,
+                0.3128761257136568,
+                0.16786700398544593,
+                0.14049742984000738
+              ],
+              "rewrite_history": [
+                "GAM 当前原型怎样组织全局变量和远程访问？",
+                "GAM 当前原型怎样组织全局变量",
+                "远程访问？"
+              ],
+              "decision": "high",
+              "latency_ms": 2735.537
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 0,
+          "recall_at_k": 0.0,
+          "expected_document_coverage": 0.0,
+          "mrr": 0.0,
+          "ranks": {
+            "全局变量实现2": null
+          },
+          "query_count": 2,
+          "latency_ms": 4622.137,
+          "failures": [
+            {
+              "expected_doc": "全局变量实现2",
+              "failure_type": "lexical/title_failure",
+              "reason": "目标资料已入库且可见，但命名/别名查询未召回到最终结果"
+            }
+          ],
+          "actual_docs": [
+            "分布式NUMA研究计划"
+          ],
+          "queries": [
+            "GAM 当前原型如何组织全局变量？",
+            "GAM 当前原型如何支持远程访问？"
+          ],
+          "query_runs": [
+            {
+              "query": "GAM 当前原型如何组织全局变量？",
+              "titles": [
+                "分布式NUMA研究计划",
+                "分布式NUMA研究计划",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.3549480338712546,
+                0.3364621480823255,
+                0.27089739131518276
+              ],
+              "rewrite_history": [
+                "GAM 当前原型如何组织全局变量？"
+              ],
+              "decision": "high",
+              "latency_ms": 1650.662
+            },
+            {
+              "query": "GAM 当前原型如何支持远程访问？",
+              "titles": [
+                "分布式NUMA研究计划",
+                "分布式NUMA研究计划",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.3201256589709036,
+                0.281721299374765,
+                0.26931308951132
+              ],
+              "rewrite_history": [
+                "GAM 当前原型如何支持远程访问？"
+              ],
+              "decision": "high",
+              "latency_ms": 1802.831
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R08",
+        "query": "四月中旬那次实验室例会记录了哪些 RDMA 压测波动？",
+        "category": "named_entity_alias",
+        "relevant_doc_ids": [
+          "实验室例会纪要_2026-04-15"
+        ],
+        "minimum_expected_docs": 1,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室例会纪要_2026-04-15": 1
+          },
+          "query_count": 1,
+          "latency_ms": 1580.361,
+          "failures": [],
+          "actual_docs": [
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范"
+          ],
+          "queries": [
+            "四月中旬那次实验室例会记录了哪些 RDMA 压测波动？"
+          ],
+          "query_runs": [
+            {
+              "query": "四月中旬那次实验室例会记录了哪些 RDMA 压测波动？",
+              "titles": [
+                "实验室例会纪要_2026-04-15",
+                "RDMA与高性能网络实验规范"
+              ],
+              "scores": [
+                0.3157364132252403,
+                0.16105863646439572
+              ],
+              "rewrite_history": [
+                "四月中旬那次实验室例会记录了哪些 RDMA 压测波动？"
+              ],
+              "decision": "high",
+              "latency_ms": 1580.361
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室例会纪要_2026-04-15": 1
+          },
+          "query_count": 2,
+          "latency_ms": 4513.304,
+          "failures": [],
+          "actual_docs": [
+            "实验室例会纪要_2026-04-15",
+            "知识目录索引",
+            "RDMA与高性能网络实验规范"
+          ],
+          "queries": [
+            "四月中旬实验室例会记录内容",
+            "RDMA 压测波动情况"
+          ],
+          "query_runs": [
+            {
+              "query": "四月中旬实验室例会记录内容",
+              "titles": [
+                "实验室例会纪要_2026-04-15",
+                "知识目录索引"
+              ],
+              "scores": [
+                0.31485693283944244,
+                0.16837177685140145
+              ],
+              "rewrite_history": [
+                "四月中旬实验室例会记录内容"
+              ],
+              "decision": "high",
+              "latency_ms": 1612.915
+            },
+            {
+              "query": "RDMA 压测波动情况",
+              "titles": [
+                "实验室例会纪要_2026-04-15",
+                "RDMA与高性能网络实验规范",
+                "RDMA与高性能网络实验规范"
+              ],
+              "scores": [
+                0.1873921669619327,
+                0.1682840475331384,
+                0.15010972197950204
+              ],
+              "rewrite_history": [
+                "RDMA 压测波动情况"
+              ],
+              "decision": "high",
+              "latency_ms": 1751.63
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R09",
+        "query": "共享大内存节点和 RDMA 节点申请、占用与归还按什么流程？",
+        "category": "named_entity_alias",
+        "relevant_doc_ids": [
+          "设备预约与共享资源使用流程",
+          "高性能计算集群使用说明"
+        ],
+        "minimum_expected_docs": 2,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "设备预约与共享资源使用流程": 1,
+            "高性能计算集群使用说明": 2
+          },
+          "query_count": 1,
+          "latency_ms": 2604.736,
+          "failures": [],
+          "actual_docs": [
+            "设备预约与共享资源使用流程",
+            "高性能计算集群使用说明",
+            "RDMA与高性能网络实验规范",
+            "实验室研究方向与课题地图"
+          ],
+          "queries": [
+            "共享大内存节点和 RDMA 节点申请、占用与归还按什么流程？"
+          ],
+          "query_runs": [
+            {
+              "query": "共享大内存节点和 RDMA 节点申请、占用与归还按什么流程？",
+              "titles": [
+                "设备预约与共享资源使用流程",
+                "高性能计算集群使用说明",
+                "RDMA与高性能网络实验规范",
+                "实验室研究方向与课题地图"
+              ],
+              "scores": [
+                0.2955964359042207,
+                0.18879277561037397,
+                0.1671110778448461,
+                0.16691033028090682
+              ],
+              "rewrite_history": [
+                "共享大内存节点和 RDMA 节点申请、占用与归还按什么流程？",
+                "共享大内存节点",
+                "RDMA 节点申请、占用与归还按什么流程？"
+              ],
+              "decision": "high",
+              "latency_ms": 2604.736
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "设备预约与共享资源使用流程": 1,
+            "高性能计算集群使用说明": 2
+          },
+          "query_count": 2,
+          "latency_ms": 4307.183,
+          "failures": [],
+          "actual_docs": [
+            "设备预约与共享资源使用流程",
+            "高性能计算集群使用说明",
+            "全局变量实现2",
+            "RDMA与高性能网络实验规范",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "queries": [
+            "共享大内存节点的申请、占用与归还流程是什么？",
+            "RDMA 节点的申请、占用与归还流程是什么？"
+          ],
+          "query_runs": [
+            {
+              "query": "共享大内存节点的申请、占用与归还流程是什么？",
+              "titles": [
+                "设备预约与共享资源使用流程",
+                "高性能计算集群使用说明",
+                "全局变量实现2"
+              ],
+              "scores": [
+                0.17877096868915412,
+                0.1437416225951147,
+                0.12435868227298154
+              ],
+              "rewrite_history": [
+                "共享大内存节点的申请、占用与归还流程是什么？"
+              ],
+              "decision": "high",
+              "latency_ms": 1556.781
+            },
+            {
+              "query": "RDMA 节点的申请、占用与归还流程是什么？",
+              "titles": [
+                "设备预约与共享资源使用流程",
+                "RDMA与高性能网络实验规范",
+                "实验室例会纪要_2026-04-15"
+              ],
+              "scores": [
+                0.1745292749040471,
+                0.16657638550687714,
+                0.15778937452871022
+              ],
+              "rewrite_history": [
+                "RDMA 节点的申请、占用与归还流程是什么？"
+              ],
+              "decision": "high",
+              "latency_ms": 1679.457
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R10",
+        "query": "新同学入组头七天需要完成哪些账号、阅读和环境准备？",
+        "category": "named_entity_alias",
+        "relevant_doc_ids": [
+          "新生入组第一周任务清单"
+        ],
+        "minimum_expected_docs": 1,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "新生入组第一周任务清单": 1
+          },
+          "query_count": 1,
+          "latency_ms": 2270.037,
+          "failures": [],
+          "actual_docs": [
+            "新生入组第一周任务清单",
+            "实验室常见问题FAQ",
+            "实验室成员与分工说明"
+          ],
+          "queries": [
+            "新同学入组头七天需要完成哪些账号、阅读和环境准备？"
+          ],
+          "query_runs": [
+            {
+              "query": "新同学入组头七天需要完成哪些账号、阅读和环境准备？",
+              "titles": [
+                "新生入组第一周任务清单",
+                "实验室常见问题FAQ",
+                "实验室成员与分工说明"
+              ],
+              "scores": [
+                0.19843870575622352,
+                0.1571707364237537,
+                0.1551291599082134
+              ],
+              "rewrite_history": [
+                "新同学入组头七天需要完成哪些账号、阅读和环境准备？",
+                "新同学入组头七天需要完成哪些账号、阅读",
+                "环境准备？"
+              ],
+              "decision": "high",
+              "latency_ms": 2270.037
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "新生入组第一周任务清单": 1
+          },
+          "query_count": 3,
+          "latency_ms": 6311.093,
+          "failures": [],
+          "actual_docs": [
+            "新生入组第一周任务清单",
+            "实验室常见问题FAQ",
+            "实验室成员与分工说明",
+            "知识目录索引"
+          ],
+          "queries": [
+            "新同学入组头七天需要开通哪些账号？",
+            "新同学入组头七天需要阅读哪些资料？",
+            "新同学入组头七天需要做哪些环境准备？"
+          ],
+          "query_runs": [
+            {
+              "query": "新同学入组头七天需要开通哪些账号？",
+              "titles": [
+                "新生入组第一周任务清单",
+                "实验室常见问题FAQ",
+                "实验室成员与分工说明"
+              ],
+              "scores": [
+                0.17797130404917383,
+                0.15186405850587475,
+                0.15075458562921978
+              ],
+              "rewrite_history": [
+                "新同学入组头七天需要开通哪些账号？"
+              ],
+              "decision": "high",
+              "latency_ms": 1409.056
+            },
+            {
+              "query": "新同学入组头七天需要阅读哪些资料？",
+              "titles": [
+                "新生入组第一周任务清单",
+                "知识目录索引",
+                "实验室成员与分工说明"
+              ],
+              "scores": [
+                0.19382711468027078,
+                0.16812384389099488,
+                0.1593065479093132
+              ],
+              "rewrite_history": [
+                "新同学入组头七天需要阅读哪些资料？"
+              ],
+              "decision": "high",
+              "latency_ms": 1460.47
+            },
+            {
+              "query": "新同学入组头七天需要做哪些环境准备？",
+              "titles": [
+                "新生入组第一周任务清单",
+                "实验室成员与分工说明",
+                "实验室常见问题FAQ"
+              ],
+              "scores": [
+                0.18785270514896435,
+                0.1566131724497688,
+                0.14824854367859613
+              ],
+              "rewrite_history": [
+                "新同学入组头七天需要做哪些环境准备？"
+              ],
+              "decision": "high",
+              "latency_ms": 1889.085
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R11",
+        "query": "application-integrated far memory 的对象语义来自哪篇 AIFM 资料？",
+        "category": "named_entity_alias",
+        "relevant_doc_ids": [
+          "AIFM"
+        ],
+        "minimum_expected_docs": 1,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 0,
+          "recall_at_k": 0.0,
+          "expected_document_coverage": 0.0,
+          "mrr": 0.0,
+          "ranks": {
+            "AIFM": null
+          },
+          "query_count": 1,
+          "latency_ms": 1806.737,
+          "failures": [
+            {
+              "expected_doc": "AIFM",
+              "failure_type": "missing_document",
+              "reason": "目标资料不在当前向量库 snapshot 中"
+            }
+          ],
+          "actual_docs": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划"
+          ],
+          "queries": [
+            "application-integrated far memory 的对象语义来自哪篇 AIFM 资料？"
+          ],
+          "query_runs": [
+            {
+              "query": "application-integrated far memory 的对象语义来自哪篇 AIFM 资料？",
+              "titles": [
+                "分布式NUMA研究计划",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.18223596696367333,
+                0.1626391305991758
+              ],
+              "rewrite_history": [
+                "application-integrated far memory 的对象语义来自哪篇 AIFM 资料？"
+              ],
+              "decision": "high",
+              "latency_ms": 1806.737
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 0,
+          "recall_at_k": 0.0,
+          "expected_document_coverage": 0.0,
+          "mrr": 0.0,
+          "ranks": {
+            "AIFM": null
+          },
+          "query_count": 2,
+          "latency_ms": 4489.908,
+          "failures": [
+            {
+              "expected_doc": "AIFM",
+              "failure_type": "missing_document",
+              "reason": "目标资料不在当前向量库 snapshot 中"
+            }
+          ],
+          "actual_docs": [
+            "分布式NUMA研究计划"
+          ],
+          "queries": [
+            "application-integrated far memory 的对象语义定义是什么",
+            "AIFM 资料中关于 application-integrated far memory 的文档有哪些"
+          ],
+          "query_runs": [
+            {
+              "query": "application-integrated far memory 的对象语义定义是什么",
+              "titles": [
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.16102307319009312
+              ],
+              "rewrite_history": [
+                "application-integrated far memory 的对象语义定义是什么"
+              ],
+              "decision": "high",
+              "latency_ms": 1623.941
+            },
+            {
+              "query": "AIFM 资料中关于 application-integrated far memory 的文档有哪些",
+              "titles": [
+                "分布式NUMA研究计划",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.17169799471726627,
+                0.16363304585702745
+              ],
+              "rewrite_history": [
+                "AIFM 资料中关于 application-integrated far memory 的文档有哪些"
+              ],
+              "decision": "high",
+              "latency_ms": 1541.693
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R12",
+        "query": "公共服务器发生故障并需要修改系统配置时，结合值班制度和集群说明给出处理依据。",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "实验室安全与值班制度",
+          "高性能计算集群使用说明"
+        ],
+        "minimum_expected_docs": 2,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室安全与值班制度": 1,
+            "高性能计算集群使用说明": 2
+          },
+          "query_count": 1,
+          "latency_ms": 2617.126,
+          "failures": [],
+          "actual_docs": [
+            "实验室安全与值班制度",
+            "高性能计算集群使用说明",
+            "实验室成员与分工说明",
+            "知识目录索引",
+            "实验室常见问题FAQ"
+          ],
+          "queries": [
+            "公共服务器发生故障并需要修改系统配置时，结合值班制度和集群说明给出处理依据。"
+          ],
+          "query_runs": [
+            {
+              "query": "公共服务器发生故障并需要修改系统配置时，结合值班制度和集群说明给出处理依据。",
+              "titles": [
+                "实验室安全与值班制度",
+                "高性能计算集群使用说明",
+                "实验室成员与分工说明",
+                "知识目录索引",
+                "实验室常见问题FAQ"
+              ],
+              "scores": [
+                0.2434263608686836,
+                0.23733049162251924,
+                0.17087211332445382,
+                0.13668245865685014,
+                0.11840517419731368
+              ],
+              "rewrite_history": [
+                "公共服务器发生故障并需要修改系统配置时，结合值班制度和集群说明给出处理依据。",
+                "公共服务器发生故障并需要修改系统配置时，结合值班制度",
+                "集群说明给出处理依据。"
+              ],
+              "decision": "high",
+              "latency_ms": 2617.126
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室安全与值班制度": 1,
+            "高性能计算集群使用说明": 6
+          },
+          "query_count": 3,
+          "latency_ms": 5823.593,
+          "failures": [],
+          "actual_docs": [
+            "实验室安全与值班制度",
+            "报销与采购说明",
+            "设备预约与共享资源使用流程",
+            "实验室考勤与请假制度",
+            "实验室常见问题FAQ",
+            "高性能计算集群使用说明"
+          ],
+          "queries": [
+            "公共服务器故障处理流程与依据",
+            "系统配置修改的值班制度要求",
+            "集群说明中关于故障处理的定义"
+          ],
+          "query_runs": [
+            {
+              "query": "公共服务器故障处理流程与依据",
+              "titles": [
+                "实验室安全与值班制度",
+                "报销与采购说明",
+                "设备预约与共享资源使用流程"
+              ],
+              "scores": [
+                0.18003510258735267,
+                0.12913353033381159,
+                0.12356029856693501
+              ],
+              "rewrite_history": [
+                "公共服务器故障处理流程与依据"
+              ],
+              "decision": "high",
+              "latency_ms": 1507.525
+            },
+            {
+              "query": "系统配置修改的值班制度要求",
+              "titles": [
+                "实验室安全与值班制度",
+                "实验室考勤与请假制度",
+                "实验室常见问题FAQ"
+              ],
+              "scores": [
+                0.1873921669619327,
+                0.12940401985039493,
+                0.10623238457430038
+              ],
+              "rewrite_history": [
+                "系统配置修改的值班制度要求"
+              ],
+              "decision": "high",
+              "latency_ms": 1437.293
+            },
+            {
+              "query": "集群说明中关于故障处理的定义",
+              "titles": [
+                "高性能计算集群使用说明"
+              ],
+              "scores": [
+                0.15604063738231705
+              ],
+              "rewrite_history": [
+                "集群说明中关于故障处理的定义"
+              ],
+              "decision": "high",
+              "latency_ms": 1421.782
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R13",
+        "query": "结合最近例会、RDMA 规范和实验记录要求，找出压测复现所需的全部资料。",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "实验室例会纪要_2026-04-15",
+          "RDMA与高性能网络实验规范",
+          "论文阅读与实验记录要求"
+        ],
+        "minimum_expected_docs": 3,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室例会纪要_2026-04-15": 1,
+            "RDMA与高性能网络实验规范": 3,
+            "论文阅读与实验记录要求": 2
+          },
+          "query_count": 1,
+          "latency_ms": 2481.624,
+          "failures": [],
+          "actual_docs": [
+            "实验室例会纪要_2026-04-15",
+            "论文阅读与实验记录要求",
+            "RDMA与高性能网络实验规范",
+            "实验室常见问题FAQ",
+            "实验室研究方向与课题地图"
+          ],
+          "queries": [
+            "结合最近例会、RDMA 规范和实验记录要求，找出压测复现所需的全部资料。"
+          ],
+          "query_runs": [
+            {
+              "query": "结合最近例会、RDMA 规范和实验记录要求，找出压测复现所需的全部资料。",
+              "titles": [
+                "实验室例会纪要_2026-04-15",
+                "论文阅读与实验记录要求",
+                "RDMA与高性能网络实验规范",
+                "实验室常见问题FAQ",
+                "实验室研究方向与课题地图"
+              ],
+              "scores": [
+                0.5188077535972315,
+                0.25270551040213024,
+                0.19672961401820704,
+                0.17579245865126455,
+                0.14799737879292005
+              ],
+              "rewrite_history": [
+                "结合最近例会、RDMA 规范和实验记录要求，找出压测复现所需的全部资料。",
+                "结合最近例会、RDMA 规范",
+                "实验记录要求，找出压测复现所需"
+              ],
+              "decision": "high",
+              "latency_ms": 2481.624
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室例会纪要_2026-04-15": 1,
+            "RDMA与高性能网络实验规范": 2,
+            "论文阅读与实验记录要求": 3
+          },
+          "query_count": 3,
+          "latency_ms": 6438.09,
+          "failures": [],
+          "actual_docs": [
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范",
+            "论文阅读与实验记录要求",
+            "实验室安全与值班制度",
+            "实验室常见问题FAQ"
+          ],
+          "queries": [
+            "获取最近例会中关于压测复现的记录和要求",
+            "查找 RDMA 规范中涉及压测复现的条款",
+            "查询实验记录要求中压测复现的具体标准"
+          ],
+          "query_runs": [
+            {
+              "query": "获取最近例会中关于压测复现的记录和要求",
+              "titles": [
+                "实验室例会纪要_2026-04-15",
+                "RDMA与高性能网络实验规范",
+                "论文阅读与实验记录要求"
+              ],
+              "scores": [
+                0.16314241180488473,
+                0.1347378112230471,
+                0.12594252713931628
+              ],
+              "rewrite_history": [
+                "获取最近例会中关于压测复现的记录和要求"
+              ],
+              "decision": "high",
+              "latency_ms": 1536.728
+            },
+            {
+              "query": "查找 RDMA 规范中涉及压测复现的条款",
+              "titles": [
+                "RDMA与高性能网络实验规范",
+                "RDMA与高性能网络实验规范",
+                "实验室安全与值班制度"
+              ],
+              "scores": [
+                0.3102308124264926,
+                0.1665639877449241,
+                0.16546632934788744
+              ],
+              "rewrite_history": [
+                "查找 RDMA 规范中涉及压测复现的条款"
+              ],
+              "decision": "high",
+              "latency_ms": 1713.812
+            },
+            {
+              "query": "查询实验记录要求中压测复现的具体标准",
+              "titles": [
+                "论文阅读与实验记录要求",
+                "RDMA与高性能网络实验规范",
+                "实验室常见问题FAQ"
+              ],
+              "scores": [
+                0.18435090745920626,
+                0.17271666022554613,
+                0.15959592145163123
+              ],
+              "rewrite_history": [
+                "查询实验记录要求中压测复现的具体标准"
+              ],
+              "decision": "high",
+              "latency_ms": 1500.037
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R14",
+        "query": "阶段成果从组内汇报到论文提交，需要同时查阅哪些模板、记录规范和投稿流程？",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "分布式NUMA课题组会模板",
+          "论文阅读与实验记录要求",
+          "论文投稿与对外汇报流程"
+        ],
+        "minimum_expected_docs": 3,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.3333333333333333,
+          "expected_document_coverage": 0.3333333333333333,
+          "mrr": 1.0,
+          "ranks": {
+            "分布式NUMA课题组会模板": null,
+            "论文阅读与实验记录要求": null,
+            "论文投稿与对外汇报流程": 1
+          },
+          "query_count": 1,
+          "latency_ms": 2578.166,
+          "failures": [
+            {
+              "expected_doc": "分布式NUMA课题组会模板",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            },
+            {
+              "expected_doc": "论文阅读与实验记录要求",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            }
+          ],
+          "actual_docs": [
+            "论文投稿与对外汇报流程",
+            "实验室组会制度与汇报要求",
+            "实验室常见问题FAQ",
+            "实验室成员与分工说明"
+          ],
+          "queries": [
+            "阶段成果从组内汇报到论文提交，需要同时查阅哪些模板、记录规范和投稿流程？"
+          ],
+          "query_runs": [
+            {
+              "query": "阶段成果从组内汇报到论文提交，需要同时查阅哪些模板、记录规范和投稿流程？",
+              "titles": [
+                "论文投稿与对外汇报流程",
+                "实验室组会制度与汇报要求",
+                "实验室常见问题FAQ",
+                "实验室成员与分工说明"
+              ],
+              "scores": [
+                0.2875546519298821,
+                0.1960401782811197,
+                0.18741219710071064,
+                0.16062683225211732
+              ],
+              "rewrite_history": [
+                "阶段成果从组内汇报到论文提交，需要同时查阅哪些模板、记录规范和投稿流程？",
+                "阶段成果从组内汇报到论文提交，需要同时查阅哪些模板、记录规范",
+                "投稿流程？"
+              ],
+              "decision": "high",
+              "latency_ms": 2578.166
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "分布式NUMA课题组会模板": 5,
+            "论文阅读与实验记录要求": 6,
+            "论文投稿与对外汇报流程": 1
+          },
+          "query_count": 3,
+          "latency_ms": 5838.092,
+          "failures": [],
+          "actual_docs": [
+            "论文投稿与对外汇报流程",
+            "实验室成员与分工说明",
+            "实验室常见问题FAQ",
+            "实验室组会制度与汇报要求",
+            "分布式NUMA课题组会模板",
+            "论文阅读与实验记录要求",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "queries": [
+            "组内汇报到论文提交的投稿流程是什么",
+            "组内汇报到论文提交需要的模板有哪些",
+            "组内汇报到论文提交的记录规范要求是什么"
+          ],
+          "query_runs": [
+            {
+              "query": "组内汇报到论文提交的投稿流程是什么",
+              "titles": [
+                "论文投稿与对外汇报流程",
+                "实验室成员与分工说明",
+                "实验室常见问题FAQ"
+              ],
+              "scores": [
+                0.2971553049082543,
+                0.17963074106096183,
+                0.17591922868047738
+              ],
+              "rewrite_history": [
+                "组内汇报到论文提交的投稿流程是什么"
+              ],
+              "decision": "high",
+              "latency_ms": 1438.44
+            },
+            {
+              "query": "组内汇报到论文提交需要的模板有哪些",
+              "titles": [
+                "实验室常见问题FAQ",
+                "实验室组会制度与汇报要求",
+                "分布式NUMA课题组会模板"
+              ],
+              "scores": [
+                0.19426262757411142,
+                0.1938469190380432,
+                0.1794285023987932
+              ],
+              "rewrite_history": [
+                "组内汇报到论文提交需要的模板有哪些"
+              ],
+              "decision": "high",
+              "latency_ms": 1449.207
+            },
+            {
+              "query": "组内汇报到论文提交的记录规范要求是什么",
+              "titles": [
+                "实验室组会制度与汇报要求",
+                "论文阅读与实验记录要求",
+                "实验室例会纪要_2026-04-15"
+              ],
+              "scores": [
+                0.24583642585357118,
+                0.1930938041046243,
+                0.19052908644829383
+              ],
+              "rewrite_history": [
+                "组内汇报到论文提交的记录规范要求是什么"
+              ],
+              "decision": "high",
+              "latency_ms": 1560.862
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R15",
+        "query": "远程内存课题从方向选择、研究计划到现有原型代码分别有哪些证据？",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "实验室研究方向与课题地图",
+          "分布式NUMA研究计划",
+          "全局变量实现2"
+        ],
+        "minimum_expected_docs": 3,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.6666666666666666,
+          "expected_document_coverage": 0.6666666666666666,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室研究方向与课题地图": 1,
+            "分布式NUMA研究计划": 4,
+            "全局变量实现2": null
+          },
+          "query_count": 1,
+          "latency_ms": 4969.431,
+          "failures": [
+            {
+              "expected_doc": "全局变量实现2",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            }
+          ],
+          "actual_docs": [
+            "实验室研究方向与课题地图",
+            "实验室例会纪要_2026-04-15",
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "分布式NUMA课题组会模板"
+          ],
+          "queries": [
+            "远程内存课题从方向选择、研究计划到现有原型代码分别有哪些证据？"
+          ],
+          "query_runs": [
+            {
+              "query": "远程内存课题从方向选择、研究计划到现有原型代码分别有哪些证据？",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "实验室例会纪要_2026-04-15",
+                "实验室研究方向与课题地图",
+                "分布式NUMA研究计划",
+                "分布式NUMA课题组会模板"
+              ],
+              "scores": [
+                0.1877926534386895,
+                0.1686057169482594,
+                0.16224519865173478,
+                0.16173443212744915,
+                0.15383404307156068
+              ],
+              "rewrite_history": [
+                "远程内存课题从方向选择、研究计划到现有原型代码分别有哪些证据？",
+                "远程内存课题方向选择的证据有哪些？",
+                "远程内存课题研究计划的证据有哪些？",
+                "远程内存课题现有原型代码的证据有哪些？"
+              ],
+              "decision": "high",
+              "latency_ms": 4969.431
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.6666666666666666,
+          "expected_document_coverage": 0.6666666666666666,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室研究方向与课题地图": 1,
+            "分布式NUMA研究计划": 2,
+            "全局变量实现2": null
+          },
+          "query_count": 3,
+          "latency_ms": 6161.686,
+          "failures": [
+            {
+              "expected_doc": "全局变量实现2",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            }
+          ],
+          "actual_docs": [
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA课题组会模板"
+          ],
+          "queries": [
+            "远程内存课题方向选择的证据有哪些？",
+            "远程内存课题研究计划的证据有哪些？",
+            "远程内存课题现有原型代码的证据有哪些？"
+          ],
+          "query_runs": [
+            {
+              "query": "远程内存课题方向选择的证据有哪些？",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "实验室研究方向与课题地图",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.1877926534386895,
+                0.15861122121896984,
+                0.13511034536260333
+              ],
+              "rewrite_history": [
+                "远程内存课题方向选择的证据有哪些？"
+              ],
+              "decision": "high",
+              "latency_ms": 1589.297
+            },
+            {
+              "query": "远程内存课题研究计划的证据有哪些？",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "实验室例会纪要_2026-04-15",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.17383387456106378,
+                0.16855740382833703,
+                0.16174459576304553
+              ],
+              "rewrite_history": [
+                "远程内存课题研究计划的证据有哪些？"
+              ],
+              "decision": "high",
+              "latency_ms": 1721.634
+            },
+            {
+              "query": "远程内存课题现有原型代码的证据有哪些？",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "实验室研究方向与课题地图",
+                "分布式NUMA课题组会模板"
+              ],
+              "scores": [
+                0.16638485617473614,
+                0.16224519865173478,
+                0.15383404307156068
+              ],
+              "rewrite_history": [
+                "远程内存课题现有原型代码的证据有哪些？"
+              ],
+              "decision": "high",
+              "latency_ms": 1572.264
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R16",
+        "query": "共享设备冲突发生后，谁负责登记、协调、升级和交接？",
+        "category": "multi_evidence",
+        "relevant_doc_ids": [
+          "设备预约与共享资源使用流程",
+          "实验室成员与分工说明",
+          "实验室安全与值班制度"
+        ],
+        "minimum_expected_docs": 3,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.6666666666666666,
+          "expected_document_coverage": 0.6666666666666666,
+          "mrr": 1.0,
+          "ranks": {
+            "设备预约与共享资源使用流程": 1,
+            "实验室成员与分工说明": null,
+            "实验室安全与值班制度": 2
+          },
+          "query_count": 1,
+          "latency_ms": 2343.477,
+          "failures": [
+            {
+              "expected_doc": "实验室成员与分工说明",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            }
+          ],
+          "actual_docs": [
+            "设备预约与共享资源使用流程",
+            "实验室安全与值班制度",
+            "高性能计算集群使用说明"
+          ],
+          "queries": [
+            "共享设备冲突发生后，谁负责登记、协调、升级和交接？"
+          ],
+          "query_runs": [
+            {
+              "query": "共享设备冲突发生后，谁负责登记、协调、升级和交接？",
+              "titles": [
+                "设备预约与共享资源使用流程",
+                "实验室安全与值班制度",
+                "高性能计算集群使用说明"
+              ],
+              "scores": [
+                0.17443792356599547,
+                0.15064371491395173,
+                0.10983319562264801
+              ],
+              "rewrite_history": [
+                "共享设备冲突发生后，谁负责登记、协调、升级和交接？",
+                "共享设备冲突发生后，谁负责登记、协调、升级",
+                "交接？"
+              ],
+              "decision": "high",
+              "latency_ms": 2343.477
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "设备预约与共享资源使用流程": 1,
+            "实验室成员与分工说明": 4,
+            "实验室安全与值班制度": 3
+          },
+          "query_count": 4,
+          "latency_ms": 7718.709,
+          "failures": [],
+          "actual_docs": [
+            "设备预约与共享资源使用流程",
+            "高性能计算集群使用说明",
+            "实验室安全与值班制度",
+            "实验室成员与分工说明"
+          ],
+          "queries": [
+            "共享设备冲突发生后谁负责登记？",
+            "共享设备冲突发生后谁负责协调？",
+            "共享设备冲突发生后谁负责升级？",
+            "共享设备冲突发生后谁负责交接？"
+          ],
+          "query_runs": [
+            {
+              "query": "共享设备冲突发生后谁负责登记？",
+              "titles": [
+                "设备预约与共享资源使用流程",
+                "高性能计算集群使用说明",
+                "实验室安全与值班制度"
+              ],
+              "scores": [
+                0.17783966255173614,
+                0.1295006734315262,
+                0.12470148568614613
+              ],
+              "rewrite_history": [
+                "共享设备冲突发生后谁负责登记？"
+              ],
+              "decision": "high",
+              "latency_ms": 1491.978
+            },
+            {
+              "query": "共享设备冲突发生后谁负责协调？",
+              "titles": [
+                "设备预约与共享资源使用流程",
+                "实验室成员与分工说明"
+              ],
+              "scores": [
+                0.16453309588823986,
+                0.1284389447367718
+              ],
+              "rewrite_history": [
+                "共享设备冲突发生后谁负责协调？"
+              ],
+              "decision": "high",
+              "latency_ms": 1550.778
+            },
+            {
+              "query": "共享设备冲突发生后谁负责升级？",
+              "titles": [
+                "设备预约与共享资源使用流程"
+              ],
+              "scores": [
+                0.1464922315212873
+              ],
+              "rewrite_history": [
+                "共享设备冲突发生后谁负责升级？"
+              ],
+              "decision": "high",
+              "latency_ms": 1418.871
+            },
+            {
+              "query": "共享设备冲突发生后谁负责交接？",
+              "titles": [
+                "设备预约与共享资源使用流程",
+                "实验室安全与值班制度"
+              ],
+              "scores": [
+                0.14708387190259914,
+                0.1259999233615658
+              ],
+              "rewrite_history": [
+                "共享设备冲突发生后谁负责交接？"
+              ],
+              "decision": "high",
+              "latency_ms": 1536.039
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R17",
+        "query": "对照最初的分布式 NUMA 计划与 2026 年 4 月进展记录，哪些目标仍停留在计划阶段？",
+        "category": "temporal_version",
+        "relevant_doc_ids": [
+          "分布式NUMA研究计划",
+          "实验室例会纪要_2026-04-15"
+        ],
+        "minimum_expected_docs": 2,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "分布式NUMA研究计划": 1,
+            "实验室例会纪要_2026-04-15": 3
+          },
+          "query_count": 1,
+          "latency_ms": 2742.112,
+          "failures": [],
+          "actual_docs": [
+            "分布式NUMA研究计划",
+            "分布式NUMA研究计划",
+            "实验室例会纪要_2026-04-15",
+            "实验室组会制度与汇报要求"
+          ],
+          "queries": [
+            "对照最初的分布式 NUMA 计划与 2026 年 4 月进展记录，哪些目标仍停留在计划阶段？"
+          ],
+          "query_runs": [
+            {
+              "query": "对照最初的分布式 NUMA 计划与 2026 年 4 月进展记录，哪些目标仍停留在计划阶段？",
+              "titles": [
+                "分布式NUMA研究计划",
+                "分布式NUMA研究计划",
+                "实验室例会纪要_2026-04-15",
+                "实验室组会制度与汇报要求"
+              ],
+              "scores": [
+                0.43876725164687896,
+                0.29247397729063385,
+                0.2868826509080726,
+                0.11844245506378878
+              ],
+              "rewrite_history": [
+                "对照最初的分布式 NUMA 计划与 2026 年 4 月进展记录，哪些目标仍停留在计划阶段？",
+                "对照最初的分布式 NUMA 计划",
+                "2026 年 4 月进展记录，哪些目标仍停留在计划阶段？"
+              ],
+              "decision": "low",
+              "latency_ms": 2742.112
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "分布式NUMA研究计划": 1,
+            "实验室例会纪要_2026-04-15": 2
+          },
+          "query_count": 2,
+          "latency_ms": 4425.172,
+          "failures": [],
+          "actual_docs": [
+            "分布式NUMA研究计划",
+            "实验室例会纪要_2026-04-15",
+            "RDMA与高性能网络实验规范"
+          ],
+          "queries": [
+            "获取最初的分布式 NUMA 计划中的目标列表",
+            "获取 2026 年 4 月的分布式 NUMA 进展记录"
+          ],
+          "query_runs": [
+            {
+              "query": "获取最初的分布式 NUMA 计划中的目标列表",
+              "titles": [
+                "分布式NUMA研究计划",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.29849021906273987,
+                0.1943219858292805
+              ],
+              "rewrite_history": [
+                "获取最初的分布式 NUMA 计划中的目标列表"
+              ],
+              "decision": "high",
+              "latency_ms": 1583.369
+            },
+            {
+              "query": "获取 2026 年 4 月的分布式 NUMA 进展记录",
+              "titles": [
+                "分布式NUMA研究计划",
+                "实验室例会纪要_2026-04-15",
+                "RDMA与高性能网络实验规范"
+              ],
+              "scores": [
+                0.7179107461170267,
+                0.6069647491440736,
+                0.2915806960959756
+              ],
+              "rewrite_history": [
+                "获取 2026 年 4 月的分布式 NUMA 进展记录"
+              ],
+              "decision": "high",
+              "latency_ms": 1559.201
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R18",
+        "query": "当前公共环境变更规则应同时参考安全值班制度还是集群使用说明？请定位两份现行材料。",
+        "category": "temporal_version",
+        "relevant_doc_ids": [
+          "实验室安全与值班制度",
+          "高性能计算集群使用说明"
+        ],
+        "minimum_expected_docs": 2,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室安全与值班制度": 1,
+            "高性能计算集群使用说明": 2
+          },
+          "query_count": 1,
+          "latency_ms": 1540.975,
+          "failures": [],
+          "actual_docs": [
+            "实验室安全与值班制度",
+            "高性能计算集群使用说明",
+            "实验室成员与分工说明"
+          ],
+          "queries": [
+            "当前公共环境变更规则应同时参考安全值班制度还是集群使用说明？请定位两份现行材料。"
+          ],
+          "query_runs": [
+            {
+              "query": "当前公共环境变更规则应同时参考安全值班制度还是集群使用说明？请定位两份现行材料。",
+              "titles": [
+                "实验室安全与值班制度",
+                "高性能计算集群使用说明",
+                "实验室成员与分工说明"
+              ],
+              "scores": [
+                0.18696137283150682,
+                0.16862860199706992,
+                0.1593065479093132
+              ],
+              "rewrite_history": [
+                "当前公共环境变更规则应同时参考安全值班制度还是集群使用说明？请定位两份现行材料。"
+              ],
+              "decision": "high",
+              "latency_ms": 1540.975
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室安全与值班制度": 1,
+            "高性能计算集群使用说明": 2
+          },
+          "query_count": 2,
+          "latency_ms": 4364.14,
+          "failures": [],
+          "actual_docs": [
+            "实验室安全与值班制度",
+            "高性能计算集群使用说明",
+            "实验室成员与分工说明"
+          ],
+          "queries": [
+            "现行安全值班制度中关于公共环境变更的规则是什么",
+            "现行集群使用说明中关于公共环境变更的规则是什么"
+          ],
+          "query_runs": [
+            {
+              "query": "现行安全值班制度中关于公共环境变更的规则是什么",
+              "titles": [
+                "实验室安全与值班制度"
+              ],
+              "scores": [
+                0.21590831545577727
+              ],
+              "rewrite_history": [
+                "现行安全值班制度中关于公共环境变更的规则是什么"
+              ],
+              "decision": "high",
+              "latency_ms": 1558.901
+            },
+            {
+              "query": "现行集群使用说明中关于公共环境变更的规则是什么",
+              "titles": [
+                "高性能计算集群使用说明",
+                "实验室成员与分工说明",
+                "实验室安全与值班制度"
+              ],
+              "scores": [
+                0.1940449191591697,
+                0.17278269356304382,
+                0.15861629560772306
+              ],
+              "rewrite_history": [
+                "现行集群使用说明中关于公共环境变更的规则是什么"
+              ],
+              "decision": "high",
+              "latency_ms": 1490.106
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R19",
+        "query": "从研究方向地图、课题计划和当前实现记录还原分布式 NUMA 原型的阶段演进。",
+        "category": "temporal_version",
+        "relevant_doc_ids": [
+          "实验室研究方向与课题地图",
+          "分布式NUMA研究计划",
+          "全局变量实现2"
+        ],
+        "minimum_expected_docs": 3,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.6666666666666666,
+          "expected_document_coverage": 0.6666666666666666,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室研究方向与课题地图": 1,
+            "分布式NUMA研究计划": 5,
+            "全局变量实现2": null
+          },
+          "query_count": 1,
+          "latency_ms": 2548.012,
+          "failures": [
+            {
+              "expected_doc": "全局变量实现2",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            }
+          ],
+          "actual_docs": [
+            "实验室研究方向与课题地图",
+            "知识目录索引",
+            "实验室成员与分工说明",
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA研究计划"
+          ],
+          "queries": [
+            "从研究方向地图、课题计划和当前实现记录还原分布式 NUMA 原型的阶段演进。"
+          ],
+          "query_runs": [
+            {
+              "query": "从研究方向地图、课题计划和当前实现记录还原分布式 NUMA 原型的阶段演进。",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "知识目录索引",
+                "实验室成员与分工说明",
+                "实验室例会纪要_2026-04-15",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.3517431551611255,
+                0.3414322575374745,
+                0.24767062964942135,
+                0.2262414758031745,
+                0.19853672283795099
+              ],
+              "rewrite_history": [
+                "从研究方向地图、课题计划和当前实现记录还原分布式 NUMA 原型的阶段演进。",
+                "从研究方向地图、课题计划",
+                "当前实现记录还原分布式 NUMA 原型"
+              ],
+              "decision": "high",
+              "latency_ms": 2548.012
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.6666666666666666,
+          "expected_document_coverage": 0.6666666666666666,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室研究方向与课题地图": 1,
+            "分布式NUMA研究计划": 2,
+            "全局变量实现2": null
+          },
+          "query_count": 3,
+          "latency_ms": 6535.626,
+          "failures": [
+            {
+              "expected_doc": "全局变量实现2",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            }
+          ],
+          "actual_docs": [
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划",
+            "实验室例会纪要_2026-04-15"
+          ],
+          "queries": [
+            "获取研究方向地图中关于分布式 NUMA 原型的信息",
+            "获取课题计划中关于分布式 NUMA 原型的信息",
+            "获取当前实现记录中关于分布式 NUMA 原型的信息"
+          ],
+          "query_runs": [
+            {
+              "query": "获取研究方向地图中关于分布式 NUMA 原型的信息",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "分布式NUMA研究计划",
+                "实验室例会纪要_2026-04-15"
+              ],
+              "scores": [
+                0.5481428752898373,
+                0.5101912477346542,
+                0.3904691953366433
+              ],
+              "rewrite_history": [
+                "获取研究方向地图中关于分布式 NUMA 原型的信息"
+              ],
+              "decision": "high",
+              "latency_ms": 1566.107
+            },
+            {
+              "query": "获取课题计划中关于分布式 NUMA 原型的信息",
+              "titles": [
+                "分布式NUMA研究计划",
+                "实验室例会纪要_2026-04-15",
+                "实验室研究方向与课题地图"
+              ],
+              "scores": [
+                0.38798334955701813,
+                0.37840207031201717,
+                0.3536670779035987
+              ],
+              "rewrite_history": [
+                "获取课题计划中关于分布式 NUMA 原型的信息"
+              ],
+              "decision": "high",
+              "latency_ms": 1565.962
+            },
+            {
+              "query": "获取当前实现记录中关于分布式 NUMA 原型的信息",
+              "titles": [
+                "分布式NUMA研究计划",
+                "实验室研究方向与课题地图",
+                "实验室例会纪要_2026-04-15"
+              ],
+              "scores": [
+                0.3792384913056456,
+                0.34229468846621935,
+                0.32450120446133435
+              ],
+              "rewrite_history": [
+                "获取当前实现记录中关于分布式 NUMA 原型的信息"
+              ],
+              "decision": "high",
+              "latency_ms": 1818.476
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R20",
+        "query": "从入组第一周到第一次组会汇报，新成员应依次遵循哪些现行资料？",
+        "category": "temporal_version",
+        "relevant_doc_ids": [
+          "新生入组第一周任务清单",
+          "实验室组会制度与汇报要求"
+        ],
+        "minimum_expected_docs": 2,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "新生入组第一周任务清单": 1,
+            "实验室组会制度与汇报要求": 2
+          },
+          "query_count": 1,
+          "latency_ms": 1510.377,
+          "failures": [],
+          "actual_docs": [
+            "新生入组第一周任务清单",
+            "实验室组会制度与汇报要求",
+            "实验室成员与分工说明"
+          ],
+          "queries": [
+            "从入组第一周到第一次组会汇报，新成员应依次遵循哪些现行资料？"
+          ],
+          "query_runs": [
+            {
+              "query": "从入组第一周到第一次组会汇报，新成员应依次遵循哪些现行资料？",
+              "titles": [
+                "新生入组第一周任务清单",
+                "实验室组会制度与汇报要求",
+                "实验室成员与分工说明"
+              ],
+              "scores": [
+                0.5220121199728015,
+                0.30934797019944277,
+                0.18650021851214543
+              ],
+              "rewrite_history": [
+                "从入组第一周到第一次组会汇报，新成员应依次遵循哪些现行资料？"
+              ],
+              "decision": "high",
+              "latency_ms": 1510.377
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "新生入组第一周任务清单": 1,
+            "实验室组会制度与汇报要求": 3
+          },
+          "query_count": 2,
+          "latency_ms": 4173.739,
+          "failures": [],
+          "actual_docs": [
+            "新生入组第一周任务清单",
+            "知识目录索引",
+            "实验室组会制度与汇报要求",
+            "实验室成员与分工说明"
+          ],
+          "queries": [
+            "入组第一周新成员应遵循的现行资料有哪些？",
+            "第一次组会汇报前新成员应遵循的现行资料有哪些？"
+          ],
+          "query_runs": [
+            {
+              "query": "入组第一周新成员应遵循的现行资料有哪些？",
+              "titles": [
+                "新生入组第一周任务清单",
+                "知识目录索引",
+                "实验室组会制度与汇报要求"
+              ],
+              "scores": [
+                0.5913162001263083,
+                0.1845118187350752,
+                0.17450390000493765
+              ],
+              "rewrite_history": [
+                "入组第一周新成员应遵循的现行资料有哪些？"
+              ],
+              "decision": "high",
+              "latency_ms": 1502.085
+            },
+            {
+              "query": "第一次组会汇报前新成员应遵循的现行资料有哪些？",
+              "titles": [
+                "实验室组会制度与汇报要求",
+                "新生入组第一周任务清单",
+                "实验室成员与分工说明"
+              ],
+              "scores": [
+                0.3002682887797465,
+                0.19080800992925287,
+                0.17900367884306184
+              ],
+              "rewrite_history": [
+                "第一次组会汇报前新成员应遵循的现行资料有哪些？"
+              ],
+              "decision": "high",
+              "latency_ms": 1393.527
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R21",
+        "query": "内部阶段汇报转为对外投稿时，材料要求在哪两份流程中发生变化？",
+        "category": "temporal_version",
+        "relevant_doc_ids": [
+          "实验室组会制度与汇报要求",
+          "论文投稿与对外汇报流程"
+        ],
+        "minimum_expected_docs": 2,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.5,
+          "expected_document_coverage": 0.5,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室组会制度与汇报要求": null,
+            "论文投稿与对外汇报流程": 1
+          },
+          "query_count": 1,
+          "latency_ms": 1552.809,
+          "failures": [
+            {
+              "expected_doc": "实验室组会制度与汇报要求",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            }
+          ],
+          "actual_docs": [
+            "论文投稿与对外汇报流程"
+          ],
+          "queries": [
+            "内部阶段汇报转为对外投稿时，材料要求在哪两份流程中发生变化？"
+          ],
+          "query_runs": [
+            {
+              "query": "内部阶段汇报转为对外投稿时，材料要求在哪两份流程中发生变化？",
+              "titles": [
+                "论文投稿与对外汇报流程"
+              ],
+              "scores": [
+                0.3207828677203908
+              ],
+              "rewrite_history": [
+                "内部阶段汇报转为对外投稿时，材料要求在哪两份流程中发生变化？"
+              ],
+              "decision": "medium",
+              "latency_ms": 1552.809
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室组会制度与汇报要求": 1,
+            "论文投稿与对外汇报流程": 2
+          },
+          "query_count": 2,
+          "latency_ms": 4206.432,
+          "failures": [],
+          "actual_docs": [
+            "实验室组会制度与汇报要求",
+            "论文投稿与对外汇报流程",
+            "实验室成员与分工说明",
+            "论文阅读与实验记录要求"
+          ],
+          "queries": [
+            "内部阶段汇报的材料要求是什么？",
+            "对外投稿的材料要求是什么？"
+          ],
+          "query_runs": [
+            {
+              "query": "内部阶段汇报的材料要求是什么？",
+              "titles": [
+                "实验室组会制度与汇报要求",
+                "论文投稿与对外汇报流程",
+                "实验室成员与分工说明"
+              ],
+              "scores": [
+                0.18523549882447662,
+                0.17718124825849002,
+                0.16077414485704025
+              ],
+              "rewrite_history": [
+                "内部阶段汇报的材料要求是什么？"
+              ],
+              "decision": "high",
+              "latency_ms": 1551.366
+            },
+            {
+              "query": "对外投稿的材料要求是什么？",
+              "titles": [
+                "论文投稿与对外汇报流程",
+                "实验室成员与分工说明",
+                "论文阅读与实验记录要求"
+              ],
+              "scores": [
+                0.2028360007485653,
+                0.13601361865404898,
+                0.10779336711401119
+              ],
+              "rewrite_history": [
+                "对外投稿的材料要求是什么？"
+              ],
+              "decision": "high",
+              "latency_ms": 1542.923
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R22",
+        "query": "在共享机器上动内核参数之前，需要向谁说明并留下哪些记录？",
+        "category": "semantic_query",
+        "relevant_doc_ids": [
+          "实验室安全与值班制度",
+          "高性能计算集群使用说明"
+        ],
+        "minimum_expected_docs": 2,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室安全与值班制度": 1,
+            "高性能计算集群使用说明": 2
+          },
+          "query_count": 1,
+          "latency_ms": 1871.505,
+          "failures": [],
+          "actual_docs": [
+            "实验室安全与值班制度",
+            "高性能计算集群使用说明",
+            "实验室常见问题FAQ"
+          ],
+          "queries": [
+            "在共享机器上动内核参数之前，需要向谁说明并留下哪些记录？"
+          ],
+          "query_runs": [
+            {
+              "query": "在共享机器上动内核参数之前，需要向谁说明并留下哪些记录？",
+              "titles": [
+                "实验室安全与值班制度",
+                "高性能计算集群使用说明",
+                "实验室常见问题FAQ"
+              ],
+              "scores": [
+                0.1767302963583328,
+                0.17092294317804055,
+                0.15960607569507734
+              ],
+              "rewrite_history": [
+                "在共享机器上动内核参数之前，需要向谁说明并留下哪些记录？"
+              ],
+              "decision": "high",
+              "latency_ms": 1871.505
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.5,
+          "expected_document_coverage": 0.5,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室安全与值班制度": null,
+            "高性能计算集群使用说明": 1
+          },
+          "query_count": 2,
+          "latency_ms": 5471.965,
+          "failures": [
+            {
+              "expected_doc": "实验室安全与值班制度",
+              "failure_type": "query_planning_failure",
+              "reason": "normal 找到目标资料，但 Researcher 查询集合未保住召回"
+            }
+          ],
+          "actual_docs": [
+            "高性能计算集群使用说明",
+            "设备预约与共享资源使用流程"
+          ],
+          "queries": [
+            "修改共享机器内核参数前需要向谁说明？",
+            "修改共享机器内核参数前需要留下哪些记录？"
+          ],
+          "query_runs": [
+            {
+              "query": "修改共享机器内核参数前需要向谁说明？",
+              "titles": [
+                "高性能计算集群使用说明",
+                "设备预约与共享资源使用流程"
+              ],
+              "scores": [
+                0.17759659542133444,
+                0.13994211291204411
+              ],
+              "rewrite_history": [
+                "修改共享机器内核参数前需要向谁说明？"
+              ],
+              "decision": "high",
+              "latency_ms": 2189.748
+            },
+            {
+              "query": "修改共享机器内核参数前需要留下哪些记录？",
+              "titles": [
+                "高性能计算集群使用说明",
+                "设备预约与共享资源使用流程"
+              ],
+              "scores": [
+                0.1710042692919141,
+                0.13491423373294806
+              ],
+              "rewrite_history": [
+                "修改共享机器内核参数前需要留下哪些记录？"
+              ],
+              "decision": "high",
+              "latency_ms": 1783.108
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R23",
+        "query": "实验结果不能只留最终图片，还应保存什么才能让他人复现？",
+        "category": "semantic_query",
+        "relevant_doc_ids": [
+          "论文阅读与实验记录要求",
+          "论文投稿与对外汇报流程"
+        ],
+        "minimum_expected_docs": 2,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "论文阅读与实验记录要求": 3,
+            "论文投稿与对外汇报流程": 1
+          },
+          "query_count": 1,
+          "latency_ms": 1994.711,
+          "failures": [],
+          "actual_docs": [
+            "论文投稿与对外汇报流程",
+            "实验室常见问题FAQ",
+            "论文阅读与实验记录要求"
+          ],
+          "queries": [
+            "实验结果不能只留最终图片，还应保存什么才能让他人复现？"
+          ],
+          "query_runs": [
+            {
+              "query": "实验结果不能只留最终图片，还应保存什么才能让他人复现？",
+              "titles": [
+                "论文投稿与对外汇报流程",
+                "实验室常见问题FAQ",
+                "论文阅读与实验记录要求"
+              ],
+              "scores": [
+                0.1708212826880404,
+                0.15620274624398484,
+                0.15581777071840472
+              ],
+              "rewrite_history": [
+                "实验结果不能只留最终图片，还应保存什么才能让他人复现？"
+              ],
+              "decision": "high",
+              "latency_ms": 1994.711
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.5,
+          "expected_document_coverage": 0.5,
+          "mrr": 0.5,
+          "ranks": {
+            "论文阅读与实验记录要求": 2,
+            "论文投稿与对外汇报流程": null
+          },
+          "query_count": 2,
+          "latency_ms": 4337.806,
+          "failures": [
+            {
+              "expected_doc": "论文投稿与对外汇报流程",
+              "failure_type": "query_planning_failure",
+              "reason": "normal 找到目标资料，但 Researcher 查询集合未保住召回"
+            }
+          ],
+          "actual_docs": [
+            "RDMA与高性能网络实验规范",
+            "论文阅读与实验记录要求",
+            "实验室常见问题FAQ"
+          ],
+          "queries": [
+            "实验结果复现需要保存哪些关键数据",
+            "实验过程记录包含哪些必要内容"
+          ],
+          "query_runs": [
+            {
+              "query": "实验结果复现需要保存哪些关键数据",
+              "titles": [
+                "RDMA与高性能网络实验规范",
+                "论文阅读与实验记录要求",
+                "实验室常见问题FAQ"
+              ],
+              "scores": [
+                0.1703434381967006,
+                0.1669019061751689,
+                0.15904767236978037
+              ],
+              "rewrite_history": [
+                "实验结果复现需要保存哪些关键数据"
+              ],
+              "decision": "high",
+              "latency_ms": 1663.794
+            },
+            {
+              "query": "实验过程记录包含哪些必要内容",
+              "titles": [
+                "RDMA与高性能网络实验规范",
+                "论文阅读与实验记录要求",
+                "实验室常见问题FAQ"
+              ],
+              "scores": [
+                0.19279621503595293,
+                0.19263743086706334,
+                0.1763957866929902
+              ],
+              "rewrite_history": [
+                "实验过程记录包含哪些必要内容"
+              ],
+              "decision": "high",
+              "latency_ms": 1435.163
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R24",
+        "query": "第一次选择远程内存方向时，怎样了解可选课题、能力门槛和近期任务？",
+        "category": "semantic_query",
+        "relevant_doc_ids": [
+          "实验室研究方向与课题地图",
+          "新生入组第一周任务清单",
+          "分布式NUMA研究计划"
+        ],
+        "minimum_expected_docs": 2,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.6666666666666666,
+          "expected_document_coverage": 0.6666666666666666,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室研究方向与课题地图": 1,
+            "新生入组第一周任务清单": 5,
+            "分布式NUMA研究计划": null
+          },
+          "query_count": 1,
+          "latency_ms": 2555.386,
+          "failures": [
+            {
+              "expected_doc": "分布式NUMA研究计划",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            }
+          ],
+          "actual_docs": [
+            "实验室研究方向与课题地图",
+            "实验室研究方向与课题地图",
+            "实验室例会纪要_2026-04-15",
+            "分布式NUMA课题组会模板",
+            "新生入组第一周任务清单"
+          ],
+          "queries": [
+            "第一次选择远程内存方向时，怎样了解可选课题、能力门槛和近期任务？"
+          ],
+          "query_runs": [
+            {
+              "query": "第一次选择远程内存方向时，怎样了解可选课题、能力门槛和近期任务？",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "实验室研究方向与课题地图",
+                "实验室例会纪要_2026-04-15",
+                "分布式NUMA课题组会模板",
+                "新生入组第一周任务清单"
+              ],
+              "scores": [
+                0.17291475444937876,
+                0.15658276624965828,
+                0.1497069350389573,
+                0.15287382163954943,
+                0.14328271821466382
+              ],
+              "rewrite_history": [
+                "第一次选择远程内存方向时，怎样了解可选课题、能力门槛和近期任务？",
+                "第一次选择远程内存方向时，怎样了解可选课题、能力门槛",
+                "近期任务？"
+              ],
+              "decision": "high",
+              "latency_ms": 2555.386
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.6666666666666666,
+          "expected_document_coverage": 0.6666666666666666,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室研究方向与课题地图": 1,
+            "新生入组第一周任务清单": null,
+            "分布式NUMA研究计划": 2
+          },
+          "query_count": 3,
+          "latency_ms": 6064.513,
+          "failures": [
+            {
+              "expected_doc": "新生入组第一周任务清单",
+              "failure_type": "query_planning_failure",
+              "reason": "normal 找到目标资料，但 Researcher 查询集合未保住召回"
+            }
+          ],
+          "actual_docs": [
+            "实验室研究方向与课题地图",
+            "分布式NUMA研究计划"
+          ],
+          "queries": [
+            "远程内存方向有哪些可选课题",
+            "远程内存方向的能力门槛是什么",
+            "远程内存方向的近期任务有哪些"
+          ],
+          "query_runs": [
+            {
+              "query": "远程内存方向有哪些可选课题",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "实验室研究方向与课题地图",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.19469775332941294,
+                0.17520918235381017,
+                0.15192461417029676
+              ],
+              "rewrite_history": [
+                "远程内存方向有哪些可选课题"
+              ],
+              "decision": "high",
+              "latency_ms": 1598.513
+            },
+            {
+              "query": "远程内存方向的能力门槛是什么",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "实验室研究方向与课题地图",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.16479881477848346,
+                0.1373128685923861,
+                0.13465942502853537
+              ],
+              "rewrite_history": [
+                "远程内存方向的能力门槛是什么"
+              ],
+              "decision": "high",
+              "latency_ms": 1480.891
+            },
+            {
+              "query": "远程内存方向的近期任务有哪些",
+              "titles": [
+                "实验室研究方向与课题地图",
+                "实验室研究方向与课题地图",
+                "分布式NUMA研究计划"
+              ],
+              "scores": [
+                0.16624450773877764,
+                0.16277638220818144,
+                0.1489321375039346
+              ],
+              "rewrite_history": [
+                "远程内存方向的近期任务有哪些"
+              ],
+              "decision": "high",
+              "latency_ms": 1515.718
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R25",
+        "query": "性能曲线反复波动，应该怎样固定机器拓扑、软件版本、代码和参数来复测？",
+        "category": "semantic_query",
+        "relevant_doc_ids": [
+          "实验室例会纪要_2026-04-15",
+          "RDMA与高性能网络实验规范",
+          "论文阅读与实验记录要求"
+        ],
+        "minimum_expected_docs": 3,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.3333333333333333,
+          "expected_document_coverage": 0.3333333333333333,
+          "mrr": 0.5,
+          "ranks": {
+            "实验室例会纪要_2026-04-15": null,
+            "RDMA与高性能网络实验规范": 2,
+            "论文阅读与实验记录要求": null
+          },
+          "query_count": 1,
+          "latency_ms": 2371.275,
+          "failures": [
+            {
+              "expected_doc": "实验室例会纪要_2026-04-15",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            },
+            {
+              "expected_doc": "论文阅读与实验记录要求",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            }
+          ],
+          "actual_docs": [
+            "实验室常见问题FAQ",
+            "RDMA与高性能网络实验规范",
+            "高性能计算集群使用说明"
+          ],
+          "queries": [
+            "性能曲线反复波动，应该怎样固定机器拓扑、软件版本、代码和参数来复测？"
+          ],
+          "query_runs": [
+            {
+              "query": "性能曲线反复波动，应该怎样固定机器拓扑、软件版本、代码和参数来复测？",
+              "titles": [
+                "实验室常见问题FAQ",
+                "RDMA与高性能网络实验规范",
+                "高性能计算集群使用说明"
+              ],
+              "scores": [
+                0.1347378112230471,
+                0.12674700313812007,
+                0.12333257585620916
+              ],
+              "rewrite_history": [
+                "性能曲线反复波动，应该怎样固定机器拓扑、软件版本、代码和参数来复测？",
+                "性能曲线反复波动，应该怎样固定机器拓扑、软件版本、代码",
+                "参数来复测？"
+              ],
+              "decision": "high",
+              "latency_ms": 2371.275
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 0.3333333333333333,
+          "expected_document_coverage": 0.3333333333333333,
+          "mrr": 1.0,
+          "ranks": {
+            "实验室例会纪要_2026-04-15": null,
+            "RDMA与高性能网络实验规范": 1,
+            "论文阅读与实验记录要求": null
+          },
+          "query_count": 4,
+          "latency_ms": 8507.639,
+          "failures": [
+            {
+              "expected_doc": "实验室例会纪要_2026-04-15",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            },
+            {
+              "expected_doc": "论文阅读与实验记录要求",
+              "failure_type": "semantic_retrieval_failure",
+              "reason": "目标资料已入库且可见，但语义或多证据查询未召回"
+            }
+          ],
+          "actual_docs": [
+            "RDMA与高性能网络实验规范",
+            "实验室常见问题FAQ",
+            "高性能计算集群使用说明"
+          ],
+          "queries": [
+            "如何固定机器拓扑以复测性能曲线波动",
+            "如何固定软件版本以复测性能曲线波动",
+            "如何固定代码以复测性能曲线波动",
+            "如何固定参数以复测性能曲线波动"
+          ],
+          "query_runs": [
+            {
+              "query": "如何固定机器拓扑以复测性能曲线波动",
+              "titles": [
+                "RDMA与高性能网络实验规范"
+              ],
+              "scores": [
+                0.13291919490762177
+              ],
+              "rewrite_history": [
+                "如何固定机器拓扑以复测性能曲线波动"
+              ],
+              "decision": "high",
+              "latency_ms": 1582.545
+            },
+            {
+              "query": "如何固定软件版本以复测性能曲线波动",
+              "titles": [],
+              "scores": [],
+              "rewrite_history": [
+                "如何固定软件版本以复测性能曲线波动",
+                "如何固定软件版本以复测性能曲线波动"
+              ],
+              "decision": "no_results",
+              "latency_ms": 1737.715
+            },
+            {
+              "query": "如何固定代码以复测性能曲线波动",
+              "titles": [
+                "RDMA与高性能网络实验规范",
+                "实验室常见问题FAQ"
+              ],
+              "scores": [
+                0.12065123463441202,
+                0.11334891318976015
+              ],
+              "rewrite_history": [
+                "如何固定代码以复测性能曲线波动"
+              ],
+              "decision": "high",
+              "latency_ms": 1748.59
+            },
+            {
+              "query": "如何固定参数以复测性能曲线波动",
+              "titles": [
+                "RDMA与高性能网络实验规范",
+                "高性能计算集群使用说明",
+                "实验室常见问题FAQ"
+              ],
+              "scores": [
+                0.11048141754977793,
+                0.10598515765618088,
+                0.1001458718825716
+              ],
+              "rewrite_history": [
+                "如何固定参数以复测性能曲线波动"
+              ],
+              "decision": "high",
+              "latency_ms": 1674.827
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "R26",
+        "query": "两个人同时需要同一台公共设备时，如何安排使用顺序并处理无法协商的情况？",
+        "category": "semantic_query",
+        "relevant_doc_ids": [
+          "设备预约与共享资源使用流程",
+          "实验室成员与分工说明"
+        ],
+        "minimum_expected_docs": 2,
+        "description": ""
+      },
+      "variants": {
+        "normal": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "设备预约与共享资源使用流程": 1,
+            "实验室成员与分工说明": 2
+          },
+          "query_count": 1,
+          "latency_ms": 1418.178,
+          "failures": [],
+          "actual_docs": [
+            "设备预约与共享资源使用流程",
+            "实验室成员与分工说明"
+          ],
+          "queries": [
+            "两个人同时需要同一台公共设备时，如何安排使用顺序并处理无法协商的情况？"
+          ],
+          "query_runs": [
+            {
+              "query": "两个人同时需要同一台公共设备时，如何安排使用顺序并处理无法协商的情况？",
+              "titles": [
+                "设备预约与共享资源使用流程",
+                "实验室成员与分工说明"
+              ],
+              "scores": [
+                0.14934459772963973,
+                0.12703479722806113
+              ],
+              "rewrite_history": [
+                "两个人同时需要同一台公共设备时，如何安排使用顺序并处理无法协商的情况？"
+              ],
+              "decision": "high",
+              "latency_ms": 1418.178
+            }
+          ]
+        },
+        "deep_researcher": {
+          "hit_at_k": 1,
+          "recall_at_k": 1.0,
+          "expected_document_coverage": 1.0,
+          "mrr": 1.0,
+          "ranks": {
+            "设备预约与共享资源使用流程": 1,
+            "实验室成员与分工说明": 2
+          },
+          "query_count": 2,
+          "latency_ms": 4270.544,
+          "failures": [],
+          "actual_docs": [
+            "设备预约与共享资源使用流程",
+            "实验室成员与分工说明",
+            "高性能计算集群使用说明",
+            "报销与采购说明",
+            "实验室安全与值班制度"
+          ],
+          "queries": [
+            "多人同时使用公共设备的优先权分配规则是什么",
+            "公共设备使用冲突无法协商时的解决机制"
+          ],
+          "query_runs": [
+            {
+              "query": "多人同时使用公共设备的优先权分配规则是什么",
+              "titles": [
+                "设备预约与共享资源使用流程",
+                "实验室成员与分工说明",
+                "高性能计算集群使用说明"
+              ],
+              "scores": [
+                0.15166223482888086,
+                0.12144170333721244,
+                0.11338544191350428
+              ],
+              "rewrite_history": [
+                "多人同时使用公共设备的优先权分配规则是什么"
+              ],
+              "decision": "high",
+              "latency_ms": 1620.893
+            },
+            {
+              "query": "公共设备使用冲突无法协商时的解决机制",
+              "titles": [
+                "设备预约与共享资源使用流程",
+                "报销与采购说明",
+                "实验室安全与值班制度"
+              ],
+              "scores": [
+                0.1598040938451741,
+                0.12861246088006606,
+                0.12253691696955725
+              ],
+              "rewrite_history": [
+                "公共设备使用冲突无法协商时的解决机制"
+              ],
+              "decision": "high",
+              "latency_ms": 1445.69
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

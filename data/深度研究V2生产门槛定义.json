@@ -1,0 +1,41 @@
+{
+  "version": "Deep Research V2",
+  "status": "frozen_before_blind_v2_results",
+  "frozen_at": "2026-08-13T02:28:00+08:00",
+  "product_invariants": {
+    "normal_default": true,
+    "deep_explicit_opt_in_only": true,
+    "automatic_routing": false,
+    "fourth_agent": false
+  },
+  "gates": {
+    "safety": [
+      "Normal 和 Deep 所有 Blind V2 请求成功",
+      "自动 ACL violation 为 0",
+      "独立 ACL 角色矩阵与 Deep 全阶段传播测试通过",
+      "Deep premise accuracy 不低于 Normal 0.10 以上"
+    ],
+    "temporal_conflict_repeatability": [
+      "至少 8 条 temporal_conflict",
+      "Deep 独立人工平均总分至少高 0.50/6",
+      "Deep 胜出至少 5/8，且错误结论数不高于 Normal",
+      "自动 conflict accuracy 不低于 Normal"
+    ],
+    "named_multi_evidence": [
+      "至少 6 条 named_multi_evidence",
+      "Deep 独立人工平均总分至少高 0.50/6",
+      "Deep 胜出至少 4/6",
+      "relevant document recall 不低于 Normal"
+    ],
+    "recommendation_research_brief": [
+      "至少 6 条 recommendation_or_research_brief",
+      "只有独立人工评分显示 Deep 平均总分不低于 Normal且胜出不少于一半，才可声称无退化"
+    ],
+    "cost": [
+      "P50、P95、logical calls、input/output token 必须完整报告",
+      "成本只用于判断显式模式可接受性，不能被质量平均分隐藏"
+    ]
+  },
+  "decision_rule": "独立人工评分完成前不得作 V2 最终生产收益结论；任何新优势只限于通过对应类别门槛的范围。若 temporal_conflict 不再复现，必须降低既有声明。",
+  "judge_policy": "No LLM-as-a-Judge. Codex 不得充当 V2 最终人工评分者。"
+}

@@ -84,6 +84,21 @@ def test_absolute_premise_trigger_covers_supported_and_false_quantifiers(quantif
     ) is True
 
 
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("验证当前原型是否已经完成这一前提", True),
+        ("是否可以认为所有成员都必须登记", True),
+        ("判断所有成员是否必须登记共享资源", True),
+        ("比较 A 和 B 的机制差异", False),
+        ("总结三份资料并形成建议", False),
+        ("判断两份资料是冲突还是互补", False),
+    ],
+)
+def test_premise_task_boundary_is_about_user_intent_not_topic_keywords(query, expected):
+    assert team._is_premise_task(query) is expected
+
+
 @pytest.mark.asyncio
 async def test_planner_remains_single_entry_and_routes_only_real_research_tasks(monkeypatch):
     monkeypatch.setattr(planner_module, "get_llm", lambda: (_ for _ in ()).throw(
@@ -144,6 +159,14 @@ def test_review_report_accepts_qwen_wrapped_premise_enum():
         "premise_assessment": {"status": "supported", "reason": "有直接证据"},
     })
     assert report.premise_assessment == "supported"
+
+
+def test_review_report_accepts_qwen_reviewer_decision_alias():
+    report = team.ReviewReport.model_validate({
+        "reviewer_decision": "REVISE",
+        "premise_assessment": "not_applicable",
+    })
+    assert report.decision == "REVISE"
 
 
 def test_analysis_normalization_moves_transient_limitation_out_of_claims():
@@ -314,6 +337,48 @@ async def test_reviewer_does_not_reject_supported_absolute_premise(monkeypatch):
     })
     assert "当前证据支持该前提成立" in final["final_answer"]
     assert "可能不成立" not in final["final_answer"]
+
+
+@pytest.mark.asyncio
+async def test_reviewer_forces_not_applicable_for_ordinary_comparison(monkeypatch):
+    package = team.EvidencePackage(
+        original_question="比较 A 和 B，并给出下一步研究建议",
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="比较", title="资料", source="资料.md", excerpt="A 与 B 不同",
+        )],
+    )
+    analysis = team.AnalysisReport(claims=[team.Claim(
+        claim_id="C1", text="A 与 B 采用不同机制", claim_type="comparison", source_ids=["S1"],
+    )])
+    monkeypatch.setattr(
+        team,
+        "_invoke_structured",
+        AsyncMock(return_value=(team.ReviewReport(
+            decision="PASS",
+            premise_assessment="unsupported",
+            premise_source_ids=["S1"],
+            false_premise_detected=True,
+            items=[team.ReviewItem(
+                claim=package.original_question,
+                supported=False,
+                issue_type="false_premise",
+            )],
+        ), {"input_tokens": 1, "output_tokens": 1})),
+    )
+
+    reviewed = await team.reviewer_agent_node({
+        "evidence_package": package.model_dump(),
+        "analysis_report": analysis.model_dump(),
+    })
+    report = team.ReviewReport.model_validate(reviewed["review_report"])
+    assert report.premise_assessment == "not_applicable"
+    assert report.premise_source_ids == []
+    assert report.false_premise_detected is False
+    assert all(item.issue_type != "false_premise" for item in report.items)
+    assert reviewed["research_trace"]["stages"]["reviewer"]["premise_task"] is False
+
+    context = team._build_deep_research_context(package, analysis, report)
+    assert "前提核验" not in context
 
 
 def test_reviewer_can_trigger_at_most_one_revision():
@@ -498,3 +563,11 @@ async def test_deep_generation_reuses_existing_generation_agent_with_validated_c
     assert result["used_agent"] == "deep_research"
     assert result["research_team_metrics"]["llm_calls"] == 1
     assert result["research_trace"]["stages"]["generation"]["validated_claims"]
+    generation_trace = result["research_trace"]["stages"]["generation"]
+    assert generation_trace["reviewer_dropped_claims"][0]["issue_type"] == "unsupported"
+    assert "omitted_validated_claim_ids" in generation_trace
+    assert "final_validated_claim_coverage_proxy" in generation_trace
+    assert result["research_trace"]["failure_attribution"] in {
+        "retrieval", "analysis", "review", "generation", "knowledge_gap", "acl", "none",
+    }
+    assert "generation" in result["research_trace"]["stage_latency_ms"]

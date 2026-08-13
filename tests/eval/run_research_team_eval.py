@@ -18,6 +18,7 @@ import os
 import sys
 import re
 import time
+from collections import Counter
 from datetime import datetime
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -85,6 +86,8 @@ class VariantRun:
     analyst_claim_coverage: float = 0.0
     reviewer_drop_rate: float = 0.0
     final_answer_coverage: float = 0.0
+    final_validated_claim_coverage: float = 0.0
+    failure_attribution: str = "none"
     research_trace: Dict[str, Any] = field(default_factory=dict)
     error: str = ""
 
@@ -189,13 +192,19 @@ def _premise_accuracy(answer: str, case: ComplexResearchQuery) -> Optional[float
     expectation = case.premise_expectation
     if expectation == "none":
         return None
+    # Deep 在首行输出明确的四态核验。只评价这个任务结论，不能让正文中
+    # “某项证据不足”等局部局限反向覆盖已经确认的前提结论。
+    premise_line = next(
+        (line.strip() for line in answer.splitlines() if "前提核验" in line),
+        answer,
+    )
     if expectation == "false":
         has_boundary = bool(re.search(
             r"^\s*(否|不是|不成立)|"
             r"前提.{0,16}(不成立|不准确|不受支持|被反驳)|"
             r"证据.{0,12}(反驳|否定).{0,12}(该前提|这一前提)|"
             r"(与|同).{0,16}(制度|资料|证据).{0,12}(冲突|矛盾)",
-            answer,
+            premise_line,
         ))
         return float(has_boundary)
 
@@ -205,11 +214,11 @@ def _premise_accuracy(answer: str, case: ComplexResearchQuery) -> Optional[float
         r"前提.{0,16}(成立|得到支持|获得支持|有充分证据|可以确认|可确认)|"
         r"(当前|现有|检索到的)?证据.{0,12}(支持|表明|确认).{0,12}(该前提|这一前提|上述前提)|"
         r"可以确认.{0,16}(所有|每次|任何)",
-        answer,
+        premise_line,
     ))
     has_negation = bool(re.search(
         r"前提.{0,16}(不成立|不受支持|可能不成立)|证据.{0,12}(不支持|不足)",
-        answer,
+        premise_line,
     ))
     return float(has_confirmation and not has_negation)
 
@@ -363,6 +372,10 @@ async def evaluate_case(
                         max(0, initial_claims - validated_claims) / initial_claims
                         if initial_claims else 0.0
                     ),
+                    final_validated_claim_coverage=float(
+                        generation_stage.get("final_validated_claim_coverage_proxy", 0.0) or 0.0
+                    ),
+                    failure_attribution=str(trace.get("failure_attribution") or "none"),
                     research_trace=trace,
                 )
                 _score_run(run, case, docs, user, analysis=analysis, package=package)
@@ -412,6 +425,12 @@ def aggregate(results: Sequence[Dict[str, Any]], variants: Sequence[str]) -> Dic
             "avg_analyst_claim_coverage": sum(row.get("analyst_claim_coverage", 0) for row in valid) / len(valid) if valid else 0,
             "avg_reviewer_drop_rate": sum(row.get("reviewer_drop_rate", 0) for row in valid) / len(valid) if valid else 0,
             "avg_final_answer_coverage": sum(row.get("final_answer_coverage", 0) for row in valid) / len(valid) if valid else 0,
+            "avg_final_validated_claim_coverage": sum(
+                row.get("final_validated_claim_coverage", 0) for row in valid
+            ) / len(valid) if valid else 0,
+            "failure_attribution": dict(sorted(Counter(
+                row.get("failure_attribution", "none") for row in valid
+            ).items())),
         }
         for metric in metrics:
             summary[f"avg_{metric}"] = sum(row[metric] for row in valid) / len(valid) if valid else 0
@@ -519,8 +538,8 @@ def render_markdown(payload: Dict[str, Any]) -> str:
         "",
         "## Deep Research 阶段诊断",
         "",
-        "| Researcher 文档覆盖 | Analyst 证据成 Claim 覆盖 | Reviewer Claim 丢弃率 | 最终答案关键点覆盖 |",
-        "|---:|---:|---:|---:|",
+        "| Researcher 文档覆盖 | Analyst 证据成 Claim 覆盖 | Reviewer Claim 丢弃率 | 最终关键点覆盖 | Validated Claim 覆盖 proxy |",
+        "|---:|---:|---:|---:|---:|",
     ])
     if "C" in payload["aggregate"]:
         deep = payload["aggregate"]["C"]
@@ -528,7 +547,14 @@ def render_markdown(payload: Dict[str, Any]) -> str:
             f"| {deep['avg_researcher_coverage']:.3f} | "
             f"{deep['avg_analyst_claim_coverage']:.3f} | "
             f"{deep['avg_reviewer_drop_rate']:.3f} | "
-            f"{deep['avg_final_answer_coverage']:.3f} |"
+            f"{deep['avg_final_answer_coverage']:.3f} | "
+            f"{deep['avg_final_validated_claim_coverage']:.3f} |"
+        )
+        lines.append("")
+        lines.append(
+            "Failure attribution：`"
+            + json.dumps(deep.get("failure_attribution", {}), ensure_ascii=False)
+            + "`"
         )
     lines.extend([
         "",

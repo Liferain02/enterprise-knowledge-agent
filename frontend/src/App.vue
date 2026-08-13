@@ -608,6 +608,18 @@
       </div>
       
       <footer v-if="isAuthed && activeWorkspace === 'chat'" class="input-area">
+        <fieldset class="answer-mode" :disabled="loading" aria-label="回答模式">
+          <legend>回答模式</legend>
+          <label :class="{ active: researchMode === 'normal' }">
+            <input v-model="researchMode" type="radio" value="normal" />
+            <span>普通</span>
+          </label>
+          <label :class="{ active: researchMode === 'deep' }">
+            <input v-model="researchMode" type="radio" value="deep" />
+            <span>深度研究</span>
+            <small>多阶段证据分析，耗时更长</small>
+          </label>
+        </fieldset>
         <div class="input-container">
           <textarea
             v-model="inputMessage"
@@ -1027,6 +1039,7 @@ const logout = () => {
   feedbackIssueStatus.value = 'open'
   searchResults.value = []
   searchStatus.value = ''
+  researchMode.value = 'normal'
   activeWorkspace.value = 'chat'
   knowledgeDocuments.value = []
   knowledgeOverview.value = {
@@ -1054,6 +1067,7 @@ const logout = () => {
 
 const sessionId = ref('default')
 const inputMessage = ref('')
+const researchMode = ref<'normal' | 'deep'>('normal')
 const messages = ref<Message[]>([])
 const loading = ref(false)
 const currentAgent = ref('planner')
@@ -1086,7 +1100,8 @@ const getAgentName = (agent?: string) => {
     planner: '路由调度',
     knowledge_agent: '资料检索',
     operation_agent: '任务执行',
-    general_agent: '学术助手'
+    general_agent: '学术助手',
+    deep_research: '深度研究',
   }
   return map[agent || ''] || 'AI 助手'
 }
@@ -1096,7 +1111,8 @@ const getAgentBadge = (agent: string) => {
     planner: '调度',
     knowledge_agent: '资料',
     operation_agent: '执行',
-    general_agent: '辅助'
+    general_agent: '辅助',
+    deep_research: '深研',
   }
   return map[agent] || agent
 }
@@ -1456,6 +1472,7 @@ const createNewSession = async () => {
     const newSession = response.data
     sessionId.value = newSession.session_id
     messages.value = []
+    researchMode.value = 'normal'
     await loadSessions()
   } catch (error) {
     console.error('创建会话失败:', error)
@@ -1669,6 +1686,9 @@ const sendMessage = async () => {
 
   const text = inputMessage.value.trim()
   if (!text) return
+  // 模式只作用于当前请求。提交后立即恢复 normal，新会话和刷新也不会继承 Deep。
+  const requestResearchMode = researchMode.value
+  researchMode.value = 'normal'
 
   // 创建新的 AbortController
   abortController = new AbortController()
@@ -1707,6 +1727,7 @@ const sendMessage = async () => {
       body: JSON.stringify({
         session_id: sessionId.value,
         message: text,
+        research_mode: requestResearchMode,
       }),
       signal: abortController.signal,
     })
