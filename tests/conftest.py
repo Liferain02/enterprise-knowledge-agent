@@ -112,16 +112,12 @@ def agent_state():
         "user_id": "test-user",
         "summary": "",
         "mem0_memories": "",
-        "next_agent": "",
-        "supervisor_reasoning": "",
         "final_answer": "",
         "sources": "",
         "used_agent": "",
         "is_complex": False,
         "plan_steps": [],
-        "current_step": 0,
-        "completed_steps": [],
-        "plan_results": [],
+        "needs_expansion": False,
     }
 
 

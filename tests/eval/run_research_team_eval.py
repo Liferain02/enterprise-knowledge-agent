@@ -34,7 +34,9 @@ if str(PROJECT_ROOT) not in sys.path:
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.agent.agents.knowledge import _build_generation_prompt, _build_retrieval_context
+from src.agent.agents.knowledge import (
+    _build_generation_prompt, _build_retrieval_context, _retrieve_documents,
+)
 from src.agent.agents.research_team import (
     AnalysisReport,
     EvidencePackage,
@@ -47,7 +49,6 @@ from src.agent.agents.research_team import (
 )
 from src.models.llm import get_llm
 from src.rag.evaluation.conflict_detector import detect_document_conflicts
-from src.rag.evaluation.retrieval_grader import get_corrective_rag_pipeline
 from src.rag.retrieval.acl_filter import UserContext, check_doc_access
 from tests.eval.complex_research_dataset import (
     COMPLEX_RESEARCH_DATASET,
@@ -249,15 +250,13 @@ async def _run_single_agent(
     *,
     expansion: bool,
 ) -> tuple[str, List[Document], int, int, int]:
-    pipeline = get_corrective_rag_pipeline()
-    results, grade, _history = await pipeline.retrieve(
-        query=case.query,
-        top_k=5,
-        needs_expansion=expansion,
-        user=user,
+    results, grade, _history = await _retrieve_documents(
+        case.query, 5, expansion, user,
     )
     docs = [doc for doc, _score in results if check_doc_access(doc.metadata or {}, user)]
-    decision = getattr(getattr(grade, "decision", None), "value", "no_results")
+    decision = getattr(getattr(grade, "decision", None), "value", None)
+    if decision is None:
+        decision = "high" if docs else "no_results"
     if decision == "no_results" or not docs:
         return "现有权限范围内没有找到足够证据，无法可靠回答。", docs, 0, 0, 1
 
@@ -276,7 +275,7 @@ async def _run_single_agent(
         HumanMessage(content=case.query),
     ])
     input_tokens, output_tokens = _usage(response)
-    # 1 次检索管线 + 1 次最终生成。检索管线内部 grader 次数另见报告声明。
+    # 1 次默认检索入口 + 1 次最终生成；Rerank 供应商调用计入检索阶段。
     return str(response.content), docs, input_tokens, output_tokens, 2
 
 

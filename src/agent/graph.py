@@ -1,4 +1,4 @@
-"""实验室科研协作助手的生产 LangGraph。
+"""实验室科研智能助手的 LangGraph。
 
 当前架构：摘要 → 可选记忆检索 → Planner 唯一路由 → 普通 RAG / 工具 /
 通用分支 → deterministic Finalizer。显式 deep 模式进入固定 Researcher → Analyst
@@ -45,11 +45,6 @@ class AgentState(MessagesState):
     Agent 状态定义
     继承 MessagesState 以支持自动消息管理
     """
-    # Legacy checkpoint 兼容字段；生产图不再注册 Supervisor。
-    next_agent: str
-    supervisor_reasoning: str
-    supervisor_reason: str
-
     # 执行结果
     final_answer: str
     sources: str
@@ -66,18 +61,12 @@ class AgentState(MessagesState):
     user_id: str        # 用户ID（用于 Mem0 检索）
     user_context: UserContext = None  # ACL 权限上下文（透传至检索链路）
 
-    # ==================== Planner 状态 ====================
-    is_complex: bool       # 是否复杂任务
-    plan_steps: list       # 计划步骤列表
-    plan_reasoning: str    # 计划决策理由
-    current_step: int      # 当前执行的步骤索引
-    completed_steps: list  # 已完成的步骤
-    plan_results: list     # 各步骤的执行结果
-    _quick_agent: str      # Planner 的单一路由结果
-
-    # ==================== Planner / RAG 决策 ====================
+    # ==================== 请求路由 / RAG 决策 ====================
+    is_complex: bool               # 是否需要规则 Query Expansion
+    plan_steps: list               # 固定为空，兼容已有评测输出
+    plan_reasoning: str            # 确定性路由说明
+    _quick_agent: str              # 请求的唯一业务分支
     needs_expansion: bool          # 是否需要 Query Expansion
-    agent_inject_prompt: str      # 透传给子 agent 的 prompt 注入内容
     # ==================== Retrieval Pipeline 状态 ====================
     # retrieval_agent_node 执行后写入，供 generation_agent_node 读取
     retrieval_context: str          # 格式化后的检索上下文（供生成用）
@@ -320,7 +309,7 @@ def create_multi_agent_graph() -> StateGraph:
     workflow.add_node("deep_research_generation", deep_research_generation_node)
     workflow.add_node("finalize_response", finalize_response_node)
 
-    # Planner 节点（任务规划）
+    # 确定性请求路由节点
     workflow.add_node("planner", planner_node)
 
     # 入口：maybe_summarize → retrieve_mem0_memories → planner
@@ -370,17 +359,31 @@ async def finalize_response_node(state: AgentState) -> Dict[str, Any]:
     if not final_answer:
         final_answer = "抱歉，无法生成答案。"
 
+    update: Dict[str, Any] = {"final_answer": final_answer}
+
+    # 最终来源再鉴权：即使未来新增缓存、恢复旧 checkpoint 或接入新的检索
+    # 分支，返回给 API 的 retrieved_docs 仍必须满足当前请求用户的 ACL。
+    user_context = state.get("user_context")
+    if user_context is not None:
+        from src.rag.retrieval.acl_filter import check_doc_access
+
+        authorized_docs = []
+        for item in state.get("retrieved_docs", []) or []:
+            doc = item[0] if isinstance(item, tuple) else item
+            metadata = getattr(doc, "metadata", None)
+            if metadata is not None and check_doc_access(metadata or {}, user_context):
+                authorized_docs.append(item)
+        update["retrieved_docs"] = authorized_docs
+
     messages = state.get("messages", [])
     if messages:
         last = messages[-1]
         last_type = getattr(last, "type", None) or type(last).__name__
         if last_type in ("ai", "AIMessage") and getattr(last, "content", "") == final_answer:
-            return {"final_answer": final_answer}
+            return update
 
-    return {
-        "final_answer": final_answer,
-        "messages": [AIMessage(content=final_answer)],
-    }
+    update["messages"] = [AIMessage(content=final_answer)]
+    return update
 
 
 # ==================== Mem0 记忆保存节点 ====================

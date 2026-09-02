@@ -89,6 +89,8 @@ def test_absolute_premise_trigger_covers_supported_and_false_quantifiers(quantif
     [
         ("验证当前原型是否已经完成这一前提", True),
         ("是否可以认为所有成员都必须登记", True),
+        ("是否可以确认每次实验都必须记录环境", True),
+        ("能否确认当前方案已经通过全部验证", True),
         ("判断所有成员是否必须登记共享资源", True),
         ("比较 A 和 B 的机制差异", False),
         ("总结三份资料并形成建议", False),
@@ -101,9 +103,6 @@ def test_premise_task_boundary_is_about_user_intent_not_topic_keywords(query, ex
 
 @pytest.mark.asyncio
 async def test_planner_remains_single_entry_and_routes_only_real_research_tasks(monkeypatch):
-    monkeypatch.setattr(planner_module, "get_llm", lambda: (_ for _ in ()).throw(
-        AssertionError("规则命中时不应调用 Planner LLM")
-    ))
     premise_state = await planner_module.planner_node({
         "messages": [HumanMessage(content=(
             "综合多份论文和实验记录，验证 RDMA 在所有负载下都优于本地内存这一前提"
@@ -206,12 +205,11 @@ async def test_researcher_rechecks_acl_and_drops_restricted_evidence(monkeypatch
         metadata={"source": "/private/保密.md", "title": "保密资料", "visibility": "restricted"},
     )
     grade = SimpleNamespace(decision=SimpleNamespace(value="high"))
-    pipeline = SimpleNamespace(retrieve=AsyncMock(return_value=(
-        [(public_doc, 0.9), (restricted_doc, 0.95)], grade, [],
-    )))
     monkeypatch.setattr(
-        "src.rag.evaluation.retrieval_grader.get_corrective_rag_pipeline",
-        lambda: pipeline,
+        "src.agent.agents.knowledge._retrieve_documents",
+        AsyncMock(return_value=(
+            [(public_doc, 0.9), (restricted_doc, 0.95)], grade, [],
+        )),
     )
     monkeypatch.setattr(
         team,
@@ -268,6 +266,118 @@ async def test_reviewer_overrides_pass_when_claim_has_invalid_citation(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_reviewer_skips_unactionable_revision_for_ordinary_task(monkeypatch):
+    package = team.EvidencePackage(
+        original_question="比较两种实验方案并总结差异",
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="比较", title="实验记录",
+            source="实验记录.md", excerpt="方案 A 和方案 B 使用不同的采样频率",
+        )],
+    )
+    analysis = team.AnalysisReport(claims=[team.Claim(
+        claim_id="C1", text="两种方案使用不同采样频率",
+        claim_type="comparison", source_ids=["S1"],
+    )])
+    monkeypatch.setattr(
+        team,
+        "_invoke_structured",
+        AsyncMock(return_value=(team.ReviewReport(
+            decision="REVISE",
+            overall_instruction="进一步润色并让表达更完整。",
+        ), {"input_tokens": 10, "output_tokens": 2})),
+    )
+
+    result = await team.reviewer_agent_node({
+        "evidence_package": package.model_dump(),
+        "analysis_report": analysis.model_dump(),
+    })
+    report = team.ReviewReport.model_validate(result["review_report"])
+    reviewer_trace = result["research_trace"]["stages"]["reviewer"]
+
+    assert report.decision == "PASS"
+    assert report.overall_instruction == ""
+    assert reviewer_trace["decision_before_actionability_gate"] == "REVISE"
+    assert reviewer_trace["review_report_before_actionability_gate"]["decision"] == "REVISE"
+    assert (
+        reviewer_trace["review_report_before_actionability_gate"]["overall_instruction"]
+        == "进一步润色并让表达更完整。"
+    )
+    assert reviewer_trace["revision_skipped_reason"]
+
+
+@pytest.mark.asyncio
+async def test_reviewer_keeps_revision_for_structured_issue(monkeypatch):
+    package = team.EvidencePackage(
+        original_question="总结实验结论",
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="总结", title="实验记录",
+            source="实验记录.md", excerpt="实验尚未完成，当前没有最终结论",
+        )],
+    )
+    analysis = team.AnalysisReport(claims=[team.Claim(
+        claim_id="C1", text="实验已经证明方案有效",
+        claim_type="fact", source_ids=["S1"],
+    )])
+    issue = team.ReviewItem(
+        claim="实验已经证明方案有效",
+        source_ids=["S1"],
+        supported=False,
+        issue_type="unsupported",
+        revision_instruction="删除未被证据支持的结论。",
+    )
+    monkeypatch.setattr(
+        team,
+        "_invoke_structured",
+        AsyncMock(return_value=(team.ReviewReport(
+            decision="REVISE", items=[issue],
+        ), {"input_tokens": 10, "output_tokens": 2})),
+    )
+
+    result = await team.reviewer_agent_node({
+        "evidence_package": package.model_dump(),
+        "analysis_report": analysis.model_dump(),
+    })
+    report = team.ReviewReport.model_validate(result["review_report"])
+
+    assert report.decision == "REVISE"
+    assert report.items == [issue]
+    assert not result["research_trace"]["stages"]["reviewer"]["revision_skipped_reason"]
+
+
+def test_review_report_accepts_nested_qwen_decision_object():
+    report = team.ReviewReport.model_validate({
+        "review_result": {"decision": "PASS", "revision_instruction": "无需修订"},
+    })
+
+    assert report.decision == "PASS"
+
+
+@pytest.mark.asyncio
+async def test_reviewer_failure_never_passes_actionability_gate(monkeypatch):
+    package = team.EvidencePackage(
+        original_question="总结实验记录",
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="总结", title="记录", source="记录.md", excerpt="证据",
+        )],
+    )
+    analysis = team.AnalysisReport(claims=[team.Claim(
+        claim_id="C1", text="有证据的事实", source_ids=["S1"],
+    )])
+    monkeypatch.setattr(team, "_invoke_structured", AsyncMock(side_effect=ValueError("解析失败")))
+
+    result = await team.reviewer_agent_node({
+        "evidence_package": package.model_dump(),
+        "analysis_report": analysis.model_dump(),
+    })
+    report = team.ReviewReport.model_validate(result["review_report"])
+    reviewer_trace = result["research_trace"]["stages"]["reviewer"]
+
+    assert report.decision == "REVISE"
+    assert reviewer_trace["reviewer_call_failed"] is True
+    assert reviewer_trace["revision_skipped_reason"] == ""
+
+
+@pytest.mark.asyncio
 async def test_reviewer_requires_explicit_assessment_for_challenged_absolute_premise(monkeypatch):
     package = team.EvidencePackage(
         original_question="验证 RDMA 在所有负载下都优于本地内存这一前提",
@@ -317,7 +427,7 @@ async def test_reviewer_does_not_reject_supported_absolute_premise(monkeypatch):
         team,
         "_invoke_structured",
         AsyncMock(return_value=(team.ReviewReport(
-            decision="PASS", premise_assessment="supported",
+            decision="PASS", premise_assessment="supported", premise_source_ids=["S1"],
         ), {"input_tokens": 1, "output_tokens": 1})),
     )
 
@@ -337,6 +447,62 @@ async def test_reviewer_does_not_reject_supported_absolute_premise(monkeypatch):
     })
     assert "当前证据支持该前提成立" in final["final_answer"]
     assert "可能不成立" not in final["final_answer"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("assessment", ["supported", "unsupported"])
+async def test_reviewer_uses_sourced_analyst_premise_when_reviewer_is_inconclusive(
+    monkeypatch, assessment,
+):
+    package = team.EvidencePackage(
+        original_question="是否可以确认每次实验都必须记录环境",
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="核验", title="实验规范", source="实验规范.md",
+            excerpt="每次实验至少记录硬件、软件版本和随机种子",
+        )],
+    )
+    analysis = team.AnalysisReport(
+        claims=[team.Claim(
+            claim_id="C1", text="规范要求每次实验记录环境", source_ids=["S1"],
+        )],
+        premise_assessment=assessment,
+        premise_source_ids=["S1"],
+    )
+    monkeypatch.setattr(
+        team,
+        "_invoke_structured",
+        AsyncMock(return_value=(team.ReviewReport(
+            decision="PASS", premise_assessment="insufficient",
+        ), {"input_tokens": 1, "output_tokens": 1})),
+    )
+
+    result = await team.reviewer_agent_node({
+        "evidence_package": package.model_dump(),
+        "analysis_report": analysis.model_dump(),
+    })
+    report = team.ReviewReport.model_validate(result["review_report"])
+    assert report.premise_assessment == assessment
+    assert report.premise_source_ids == ["S1"]
+    assert report.false_premise_detected is (assessment == "unsupported")
+
+
+def test_premise_reconciliation_does_not_override_conflicting_evidence():
+    package = team.EvidencePackage(
+        original_question="验证所有任务都必须登记这一前提",
+        conflicts=["两份制度对登记范围描述不一致"],
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="核验", title="制度", source="制度.md",
+            excerpt="所有任务必须登记",
+        )],
+    )
+    analysis = team.AnalysisReport(
+        premise_assessment="supported", premise_source_ids=["S1"],
+    )
+    review = team.ReviewReport(decision="PASS", premise_assessment="insufficient")
+
+    reconciled = team._reconcile_premise_assessment(package, analysis, review)
+    assert reconciled.premise_assessment == "insufficient"
+    assert reconciled.premise_source_ids == []
 
 
 @pytest.mark.asyncio

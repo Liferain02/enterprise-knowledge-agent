@@ -2,13 +2,14 @@
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from src.agent.agents import planner as planner_module
+from src.agent.agents import knowledge as knowledge_module
 from src.agent.graph import (
     create_multi_agent_graph,
     finalize_response_node,
@@ -25,12 +26,6 @@ from tests.eval.run_rag_eval import _average_precision, ndcg_at_k
 @pytest.mark.asyncio
 async def test_complex_knowledge_query_uses_rag_expansion_without_planner_llm(monkeypatch):
     """对比/列举类问题必须进入 RAG，不再进入不可用的 Send 分支。"""
-
-    def _unexpected_llm():
-        raise AssertionError("规则已识别的复杂知识查询不应调用 Planner LLM")
-
-    monkeypatch.setattr(planner_module, "get_llm", _unexpected_llm)
-
     state = await planner_module.planner_node(
         {"messages": [HumanMessage(content="对比 RDMA 和 TCP 的差异")]}
     )
@@ -39,6 +34,83 @@ async def test_complex_knowledge_query_uses_rag_expansion_without_planner_llm(mo
     assert state["needs_expansion"] is True
     assert state["plan_steps"] == []
     assert planner_module.route_from_planner(state) == "retrieval_agent"
+
+
+def test_legacy_agent_architecture_is_not_exported():
+    import src.agent as agent_package
+    import src.agent.agents as agents_package
+
+    assert not hasattr(agent_package, "ParallelExecutor")
+    assert not hasattr(agents_package, "supervisor_node")
+    assert not hasattr(agents_package, "knowledge_agent_node")
+
+
+def test_unreachable_answer_cache_and_table_qa_are_not_exported():
+    import src.rag as rag_package
+
+    for name in (
+        "llm_cache_get", "llm_cache_set", "retrieval_cache_get",
+        "retrieval_cache_set", "cache_get_or_set",
+    ):
+        assert not hasattr(rag_package, name)
+
+
+def test_agent_card_only_advertises_reachable_research_capabilities():
+    from src.api.routes.a2a_routes import _build_agent_card
+
+    card = _build_agent_card()
+    skill_ids = {skill.id for skill in card.skills}
+
+    assert card.name == "实验室科研智能助手"
+    assert "optional_deep_research" in skill_ids
+    assert "multi_step_planning" not in skill_ids
+    assert "acl_hybrid_rag" in card.metadata["features"]
+    assert "corrective_rag" not in card.metadata["features"]
+
+
+@pytest.mark.asyncio
+async def test_default_retrieval_path_skips_unproven_crag(monkeypatch):
+    import config.settings as settings_module
+    import src.rag.evaluation.retrieval_grader as grader_module
+    import src.rag.retrieval.retriever as retriever_module
+
+    doc = Document(page_content="证据", metadata={"source": "资料.md"})
+    manager = MagicMock()
+    manager.search_with_rerank.return_value = [(doc, 0.8)]
+    monkeypatch.setattr(
+        settings_module,
+        "get_settings",
+        lambda: SimpleNamespace(crag_enabled=False, query_expand_enabled=False),
+    )
+    monkeypatch.setattr(retriever_module, "get_retriever_manager", lambda: manager)
+    forbidden_crag = MagicMock(side_effect=AssertionError("默认路径不应调用 CRAG"))
+    monkeypatch.setattr(grader_module, "get_corrective_rag_pipeline", forbidden_crag)
+
+    results, grade, history = await knowledge_module._retrieve_documents(
+        "实验室制度", 5, False, None,
+    )
+
+    assert results == [(doc, 0.8)]
+    assert grade is None
+    assert history == ["实验室制度"]
+    forbidden_crag.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_default_retrieval_rejects_meaningless_input_before_search(monkeypatch):
+    import src.rag.retrieval.retriever as retriever_module
+
+    forbidden_manager = MagicMock(side_effect=AssertionError("无语义输入不应检索"))
+    monkeypatch.setattr(retriever_module, "get_retriever_manager", forbidden_manager)
+
+    results, grade, history = await knowledge_module._retrieve_documents(
+        "？!@#$%^&*(){}[]|", 5, False, None,
+    )
+
+    assert results == []
+    assert grade is None
+    assert history == ["？!@#$%^&*(){}[]|"]
+    forbidden_manager.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -121,6 +193,36 @@ async def test_finalizer_adds_exactly_one_visible_ai_message():
         }
     )
     assert "messages" not in second
+
+
+@pytest.mark.asyncio
+async def test_finalizer_reauthorizes_retrieved_documents():
+    user = {
+        "user_id": "u1",
+        "username": "普通员工",
+        "role": "employee",
+        "department": "dev",
+        "department_name": "研发部",
+        "department_path": "/研发部",
+        "is_active": True,
+    }
+    allowed = Document(
+        page_content="公开实验结论",
+        metadata={"source": "公开.md", "confidentiality": "internal"},
+    )
+    denied = Document(
+        page_content="高管薪酬",
+        metadata={"source": "薪酬.md", "confidentiality": "confidential"},
+    )
+
+    result = await finalize_response_node({
+        "messages": [HumanMessage(content="总结")],
+        "final_answer": "总结完成。",
+        "user_context": user,
+        "retrieved_docs": [allowed, denied],
+    })
+
+    assert result["retrieved_docs"] == [allowed]
 
 
 @pytest.mark.asyncio

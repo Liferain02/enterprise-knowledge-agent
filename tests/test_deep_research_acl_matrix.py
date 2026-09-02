@@ -103,12 +103,11 @@ async def test_denied_document_never_propagates_through_deep_research(monkeypatc
         },
     )
     grade = SimpleNamespace(decision=SimpleNamespace(value="high"))
-    pipeline = SimpleNamespace(retrieve=AsyncMock(return_value=(
-        [(denied, 0.99), (allowed, 0.90)], grade, ["综合检索"],
-    )))
     monkeypatch.setattr(
-        "src.rag.evaluation.retrieval_grader.get_corrective_rag_pipeline",
-        lambda: pipeline,
+        "src.agent.agents.knowledge._retrieve_documents",
+        AsyncMock(return_value=(
+            [(denied, 0.99), (allowed, 0.90)], grade, ["综合检索"],
+        )),
     )
     monkeypatch.setattr(
         team,
@@ -187,12 +186,11 @@ async def test_revision_rechecks_acl_before_merging_new_evidence(monkeypatch):
         metadata={"source": "补充受限.md", "title": "补充受限", **DOCUMENTS["restricted_same_project"]},
     )
     grade = SimpleNamespace(decision=SimpleNamespace(value="high"))
-    pipeline = SimpleNamespace(retrieve=AsyncMock(return_value=(
-        [(denied, 0.99), (allowed, 0.90)], grade, ["补充查询"],
-    )))
     monkeypatch.setattr(
-        "src.rag.evaluation.retrieval_grader.get_corrective_rag_pipeline",
-        lambda: pipeline,
+        "src.agent.agents.knowledge._retrieve_documents",
+        AsyncMock(return_value=(
+            [(denied, 0.99), (allowed, 0.90)], grade, ["补充查询"],
+        )),
     )
     monkeypatch.setattr(
         team,

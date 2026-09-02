@@ -61,6 +61,10 @@ def test_disabled_auth_allows_placeholders_for_local_mode():
     assert settings.auth_enabled is False
 
 
+def test_unproven_crag_is_disabled_by_default():
+    assert _settings().crag_enabled is False
+
+
 @pytest.mark.parametrize("value", [False, "false", "0", "off", "release", "production"])
 def test_debug_false_values_are_real_booleans(value):
     settings = _settings(debug=value)
@@ -93,9 +97,10 @@ def test_unknown_debug_value_fails_closed():
         _settings(debug="sometimes")
 
 
-def test_production_exception_response_hides_internal_details():
+@pytest.mark.asyncio
+async def test_production_exception_response_hides_internal_details():
+    import httpx
     from fastapi import FastAPI
-    from fastapi.testclient import TestClient
 
     from src.api.middleware import register_exception_handlers
 
@@ -106,8 +111,9 @@ def test_production_exception_response_hides_internal_details():
     async def boom():
         raise RuntimeError("internal-marker-not-for-clients")
 
-    client = TestClient(app, raise_server_exceptions=False)
-    response = client.get("/boom")
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/boom")
 
     assert response.status_code == 500
     assert response.json()["error"]["message"] == "服务器内部错误"

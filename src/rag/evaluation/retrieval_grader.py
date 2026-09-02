@@ -820,9 +820,10 @@ class CorrectiveRAGPipeline:
             # 评估前精排（可选）：减少 LLM 评估调用量
             # ────────────────────────────────────────────────────────────
             if self.rerank_before_grade:
-                # 减少评估数量：只评估 top 3（减少 LLM 调用次数）
+                # 至少保留调用方请求的 top_k。固定裁成 3 会让多证据问题即使
+                # 已召回目标文档，也不可能返回 4～5 个来源。
                 candidates = self._rerank_before_grade(
-                    current_query, candidates, top_n=min(3, candidate_k)
+                    current_query, candidates, top_n=min(top_k, candidate_k)
                 )
 
             if not candidates:

@@ -403,8 +403,8 @@ class Settings(BaseSettings):
 
     # ==================== Corrective RAG 配置 ====================
     crag_enabled: bool = Field(
-        default=True,
-        description="是否启用 Corrective RAG（检索结果评估与自我纠错）"
+        default=False,
+        description="是否启用 Corrective RAG；消融未证明默认收益，默认关闭"
     )
     crag_max_retries: int = Field(
         default=1,

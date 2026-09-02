@@ -10,7 +10,7 @@
             <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <span>实验室智能助手</span>
+        <span>实验室科研智能助手</span>
       </div>
 
       <nav v-if="isAuthed" class="workspace-nav">
@@ -286,7 +286,7 @@
 
           <!-- 注册表单 -->
           <div v-else>
-            <p class="login-desc">注册新账号，开始使用实验室智能助手</p>
+            <p class="login-desc">注册新账号，开始使用实验室科研智能助手</p>
             <div class="login-form">
               <input v-model="regUsername" class="login-input" placeholder="用户名（3-32字符）" autocomplete="username" />
               <input v-model="regPassword" class="login-input" placeholder="密码（6-128字符）" type="password" autocomplete="new-password" />
@@ -530,7 +530,7 @@
       <div v-else-if="isAuthed" class="messages-container" ref="messagesContainer">
         <div v-if="messages.length === 0" class="empty-state">
           <div class="empty-icon">💬</div>
-          <h2>欢迎使用实验室智能助手</h2>
+          <h2>欢迎使用实验室科研智能助手</h2>
           <p>我可以帮您：</p>
           <ul>
             <li>📚 检索实验室知识资料</li>

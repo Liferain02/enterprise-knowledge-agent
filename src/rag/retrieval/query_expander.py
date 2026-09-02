@@ -28,6 +28,7 @@ import logging
 from src.models.llm import get_llm
 from config.settings import get_settings
 from .acl_filter import UserContext, check_doc_access
+from .hybrid_retriever import _document_identity
 
 
 logger = logging.getLogger(__name__)
@@ -886,27 +887,20 @@ async def multi_query_retrieve(
     tasks = [retrieve_single(q) for q in queries]
     all_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # 合并结果
-    merged: Dict[int, Tuple[Any, float, str]] = {}  # doc_id -> (doc, score, source)
+    # 保留各子查询的独立排名；不能在 RRF 前去重，否则同一文档被多个
+    # 子查询命中的累积优势会丢失。
+    ranked_results: List[Tuple[Any, float, str]] = []
 
     for query, results in zip(queries, all_results):
         if isinstance(results, Exception):
             logger.warning(f"子查询检索失败 '{query}': {results}")
             continue
 
-        for doc, score in results:
-            doc_key = hash(doc.page_content)
-            if doc_key not in merged:
-                merged[doc_key] = (doc, score, query)
-            else:
-                # 取最高分
-                existing_doc, existing_score, existing_query = merged[doc_key]
-                if score > existing_score:
-                    merged[doc_key] = (doc, score, query)
+        ranked_results.extend((doc, score, query) for doc, score in results)
 
     # Reciprocal Rank Fusion 排序
     fused_results = _reciprocal_rank_fusion(
-        [r for r in merged.values()],
+        ranked_results,
         k=60,  # RRF 参数
     )
 
@@ -933,31 +927,33 @@ def _reciprocal_rank_fusion(
         query_groups[source].append((doc, score))
 
     # 为每个组内的文档计算 RRF 分数
-    doc_rrf_scores: Dict[int, Tuple[Any, float, str, float]] = {}
+    doc_rrf_scores: Dict[str, Dict[str, Any]] = {}
 
     for source, docs in query_groups.items():
-        for rank, (doc, score) in enumerate(docs):
-            doc_key = hash(doc.page_content)
-            rrf_score = 1.0 / (k + rank + 1)
-            fusion_score = score * rrf_score  # 结合原始分数
-
+        for rank, (doc, _raw_score) in enumerate(docs, 1):
+            doc_key = _document_identity(doc)
+            rrf_score = 1.0 / (k + rank)
             if doc_key not in doc_rrf_scores:
-                doc_rrf_scores[doc_key] = (doc, score, source, 0.0)
-            doc_rrf_scores[doc_key] = (
-                doc_rrf_scores[doc_key][0],
-                doc_rrf_scores[doc_key][1],
-                source,
-                doc_rrf_scores[doc_key][3] + fusion_score,
-            )
+                doc_rrf_scores[doc_key] = {
+                    "doc": doc,
+                    "score": 0.0,
+                    "sources": [],
+                }
+            doc_rrf_scores[doc_key]["score"] += rrf_score
+            if source not in doc_rrf_scores[doc_key]["sources"]:
+                doc_rrf_scores[doc_key]["sources"].append(source)
 
     # 按融合分数排序
     sorted_results = sorted(
         doc_rrf_scores.values(),
-        key=lambda x: x[3],
+        key=lambda item: item["score"],
         reverse=True,
     )
 
-    return [(doc, score, source) for doc, score, source, _ in sorted_results]
+    return [
+        (item["doc"], item["score"], " | ".join(item["sources"]))
+        for item in sorted_results
+    ]
 
 
 # ============================================================

@@ -1,4 +1,4 @@
 """
-Enterprise Knowledge Agent - 主模块
+实验室科研智能助手 - 主模块
 """
 __version__ = "1.0.0"

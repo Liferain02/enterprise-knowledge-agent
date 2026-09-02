@@ -2,8 +2,8 @@
 """运行 Deep Research V2 retrieval-only Development Benchmark。
 
 比较对象：
-- normal：当前 normal 使用的原问题 + Query Expansion/CRAG；
-- deep_researcher：Researcher 实际生成的有界检索查询 + 相同 CRAG。
+- normal：当前 normal 使用的原问题 + Query Expansion + Hybrid/Rerank；
+- deep_researcher：Researcher 实际生成的有界检索查询 + 相同 Hybrid/Rerank。
 
 该脚本不调用 Analyst、Reviewer 或最终 Generation，从而把检索失败与答案失败分开。
 """
@@ -28,9 +28,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.agent.agents.research_team import MAX_SUBQUESTIONS, _plan_subquestions
-from src.rag.evaluation.retrieval_grader import get_corrective_rag_pipeline
+from src.agent.agents.knowledge import _retrieve_documents
 from src.rag.retrieval.acl_filter import UserContext, check_doc_access
 from src.rag.retrieval.query_expander import RuleBasedDecomposer
+from src.rag.retrieval.retriever import get_retriever_manager
 from src.rag.storage.vectorstore import get_vectorstore_manager
 from tests.eval.deep_research_retrieval_dev_dataset import (
     RETRIEVAL_DEV_DATASET,
@@ -85,24 +86,14 @@ def _expected_acl_allowed(expected_id: str, corpus_rows: list[dict[str, Any]], u
 
 
 async def _pipeline_retrieve(query: str, user: UserContext, *, expansion: bool) -> dict[str, Any]:
-    pipeline = get_corrective_rag_pipeline()
+    manager = get_retriever_manager()
     candidate_k = 15
-    raw_candidates = pipeline.retriever_manager.search_with_score_acl(
+    raw_candidates = manager.search_with_score_acl(
         query, k=candidate_k, user=user,
     )
-    if pipeline.rerank_before_grade:
-        reranked = pipeline._rerank_before_grade(
-            query, raw_candidates, top_n=min(3, candidate_k),
-        )
-    else:
-        reranked = raw_candidates
     started = time.perf_counter()
-    results, grade, history = await pipeline.retrieve(
-        query=query,
-        top_k=5,
-        needs_expansion=expansion,
-        user=user,
-    )
+    results, grade, history = await _retrieve_documents(query, 5, expansion, user)
+    reranked = results
     final_titles = list(dict.fromkeys(_title(doc) for doc, _score in results))
     return {
         "query": query,
@@ -111,7 +102,8 @@ async def _pipeline_retrieve(query: str, user: UserContext, *, expansion: bool) 
         "raw_candidate_titles": list(dict.fromkeys(_title(doc) for doc, _score in raw_candidates)),
         "reranked_titles": list(dict.fromkeys(_title(doc) for doc, _score in reranked)),
         "rewrite_history": list(history),
-        "decision": getattr(getattr(grade, "decision", None), "value", "no_results"),
+        "decision": getattr(getattr(grade, "decision", None), "value", None)
+        or ("high" if results else "no_results"),
         "latency_ms": round((time.perf_counter() - started) * 1000, 3),
     }
 
@@ -169,15 +161,14 @@ def _diagnose(
             for run in query_runs for title in run.get("reranked_titles", [])
         ):
             failure_type = "unknown"
-            reason = "目标资料通过 rerank，但未进入 CRAG 最终返回；需检查相关性分级"
+            reason = "目标资料通过 rerank，但未进入文档级最终排名；需检查合并与截断"
         elif case.category in ("exact_named_document", "named_entity_alias"):
             failure_type = "lexical/title_failure"
             reason = "目标资料已入库且可见，但命名/别名查询未召回到最终结果"
         else:
             failure_type = "semantic_retrieval_failure"
             reason = "目标资料已入库且可见，但语义或多证据查询未召回"
-        # 最终 CRAG/Rerank 丢弃只能在 raw candidates 可观测时严格区分；当前公开
-        # pipeline 不返回候选阶段，因此不把猜测包装成 rerank_failure。
+        # 只有 raw candidates 可观测时才严格归因 rerank_failure，避免从最终结果猜测。
         if any(expected_id.casefold() in item.casefold() for item in all_histories) and failure_type == "lexical/title_failure":
             reason += "；改写历史已保留名称，仍未命中"
         failures.append({"expected_doc": expected_id, "failure_type": failure_type, "reason": reason})

@@ -187,15 +187,30 @@ class ChatService:
             return [{"title": "知识库来源", "snippet": source_cards[:220], "doc_type": "general"}]
         return []
 
-    def _build_source_cards(self, retrieved_docs: Any, limit: int = 5) -> List[Dict[str, Any]]:
+    def _build_source_cards(
+        self,
+        retrieved_docs: Any,
+        limit: int = 5,
+        user_context=None,
+    ) -> List[Dict[str, Any]]:
         if not retrieved_docs:
             return []
+        from src.rag.retrieval.acl_filter import check_doc_access
+
         results = []
-        for item in retrieved_docs[:limit]:
+        for item in retrieved_docs:
+            doc = item[0] if isinstance(item, tuple) else item
+            if user_context is not None and (
+                not isinstance(doc, Document)
+                or not check_doc_access(doc.metadata or {}, user_context)
+            ):
+                continue
             if isinstance(item, tuple):
                 results.append(item)
             elif isinstance(item, Document):
                 results.append((item, None))
+            if len(results) >= limit:
+                break
         return knowledge_service.build_source_cards(results, limit=limit)
 
     def _maybe_build_onboarding_response(
@@ -324,7 +339,9 @@ class ChatService:
         )
 
         answer = result.get("final_answer", "抱歉，无法生成答案。")
-        source_cards = self._build_source_cards(result.get("retrieved_docs"))
+        source_cards = self._build_source_cards(
+            result.get("retrieved_docs"), user_context=user_context
+        )
         used_agent = result.get("used_agent", "unknown")
         self._schedule_memory_save({
             "messages": result.get("messages", []),
@@ -518,7 +535,10 @@ class ChatService:
             used_agent = "unknown"
             version_source = ""
             if checkpoint:
-                source_cards = self._build_source_cards(checkpoint.get("retrieved_docs", []))
+                source_cards = self._build_source_cards(
+                    checkpoint.get("retrieved_docs", []),
+                    user_context=user_context,
+                )
                 used_agent = checkpoint.get("used_agent", "unknown")
                 version_source = checkpoint.get("version_source", "")
                 checkpoint_answer = checkpoint.get("final_answer", "")

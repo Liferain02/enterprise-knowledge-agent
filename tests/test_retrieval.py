@@ -35,9 +35,13 @@ from src.rag.evaluation.conflict_detector import (
     detect_document_conflicts, extract_key_facts,
 )
 from src.rag.retrieval.query_expander import (
-    RuleBasedDecomposer, QueryExpander, ExpandStrategy,
+    RuleBasedDecomposer, QueryExpander, ExpandStrategy, _reciprocal_rank_fusion,
 )
-from src.rag.retrieval.hybrid_retriever import HybridRetrieverManager
+from src.rag.retrieval.hybrid_retriever import (
+    HybridRetrieverManager,
+    _document_identity,
+)
+from src.rag.retrieval.acl_filter import UserContext
 
 
 # ================================================================
@@ -172,6 +176,129 @@ def conflict_docs():
 # ================================================================
 # Section 1: 复杂查询与查询改写
 # ================================================================
+
+
+class TestHybridAclAndIdentity:
+    """混合检索必须先鉴权再截断，并使用稳定 Chunk 身份。"""
+
+    def test_acl_filter_happens_before_final_top_k(self):
+        user = UserContext(
+            user_id="u-dev",
+            username="研发用户",
+            role="teacher",
+            department="dev",
+            department_name="研发组",
+            department_path="/实验室/研发组",
+        )
+        unauthorized = Document(
+            page_content="项目进度 项目进度 项目进度 项目进度",
+            metadata={
+                "source": "其他组.md",
+                "chunk_id": "1",
+                "confidentiality": "internal",
+                "visibility": "project",
+                "department_restrict": ["other"],
+            },
+        )
+        authorized = Document(
+            page_content="项目进度说明",
+            metadata={
+                "source": "研发组.md",
+                "chunk_id": "1",
+                "confidentiality": "internal",
+                "visibility": "project",
+                "department_restrict": ["dev"],
+            },
+        )
+        manager = HybridRetrieverManager(
+            top_k=1,
+            enable_vector=False,
+            enable_bm25=True,
+        )
+        manager.set_documents([unauthorized, authorized])
+
+        results = manager.search_with_scores("项目进度", k=1, user=user)
+
+        assert len(results) == 1
+        assert results[0][0].metadata["source"] == "研发组.md"
+
+    def test_document_identity_is_stable_and_source_aware(self):
+        first = Document(
+            page_content="完全相同的段落",
+            metadata={"source": "文档甲.md", "version": "1", "chunk_id": "2"},
+        )
+        same_chunk = Document(
+            page_content="完全相同的段落",
+            metadata={"source": "文档甲.md", "version": "1", "chunk_id": "2"},
+        )
+        other_source = Document(
+            page_content="完全相同的段落",
+            metadata={"source": "文档乙.md", "version": "1", "chunk_id": "2"},
+        )
+
+        assert _document_identity(first) == _document_identity(same_chunk)
+        assert _document_identity(first) != _document_identity(other_source)
+
+    def test_bm25_automatically_loads_current_vectorstore_snapshot(self, monkeypatch):
+        """主链无需外部 set_documents 调用即可真正启用 BM25。"""
+        corpus = {
+            "documents": ["RDMA 网卡驱动与 NUMA 拓扑记录要求", "普通组会说明"],
+            "metadatas": [
+                {"source": "RDMA规范.md", "visibility": "public"},
+                {"source": "组会.md", "visibility": "public"},
+            ],
+        }
+        fake_manager = MagicMock()
+        fake_manager.raw_collection.count.return_value = 2
+        fake_manager.list_documents.return_value = corpus
+        monkeypatch.setattr(
+            "src.rag.storage.vectorstore.get_vectorstore_manager",
+            lambda *_args, **_kwargs: fake_manager,
+        )
+        manager = HybridRetrieverManager(
+            top_k=1,
+            enable_vector=False,
+            enable_bm25=True,
+        )
+
+        results = manager.search_with_scores("RDMA NUMA", k=1)
+
+        assert manager._bm25_index is not None
+        assert results[0][0].metadata["source"] == "RDMA规范.md"
+        assert results[0][2] == "bm25"
+
+    @pytest.mark.asyncio
+    async def test_crag_rerank_keeps_requested_top_k_for_multi_evidence(self):
+        docs = [
+            Document(page_content=f"证据 {index}", metadata={"source": f"证据{index}.md"})
+            for index in range(8)
+        ]
+        candidates = [(doc, 1.0 - index * 0.01) for index, doc in enumerate(docs)]
+        pipeline = CorrectiveRAGPipeline(max_retries=0, rerank_before_grade=True)
+        pipeline._retriever_manager = MagicMock()
+        pipeline._retriever_manager.search_with_score_acl.return_value = candidates
+        pipeline._rerank_before_grade = MagicMock(return_value=candidates[:5])
+        grades = GradeResult(
+            query="综合五份证据",
+            grades=[
+                DocumentGrade(
+                    doc=doc,
+                    relevance_score=1.0,
+                    raw_score=5,
+                    reasoning="高相关",
+                    grade=GradeLevel.HIGH,
+                )
+                for doc in docs[:5]
+            ],
+        )
+        pipeline.grader.grade_retrieval = AsyncMock(return_value=grades)
+
+        results, _grade, _history = await pipeline.retrieve(
+            "综合五份证据", top_k=5, needs_expansion=False
+        )
+
+        assert len(results) == 5
+        assert pipeline._rerank_before_grade.call_args.kwargs["top_n"] == 5
 
 class TestComplexQueryDecomposition:
     """复杂查询分解对抗测试"""
@@ -656,21 +783,6 @@ class TestCRAGDecisionBoundaries:
 class TestRRFFusion:
     """RRF融合排序对抗测试"""
 
-    def test_adaptive_weight_short_query(self):
-        """自适应权重：短查询（≤4字）BM25权重=0.7"""
-        manager = HybridRetrieverManager(enable_bm25=True, enable_vector=True)
-        query_len = 3
-        if query_len <= 4:
-            vec_w, bm_w = 0.3, 0.7
-        assert bm_w == 0.7 and vec_w == 0.3
-
-    def test_adaptive_weight_medium_query(self):
-        """自适应权重：中等查询（5-8字）BM25权重=0.6"""
-        query_len = 6
-        if query_len <= 8:
-            vec_w, bm_w = 0.4, 0.6
-        assert bm_w == 0.6 and vec_w == 0.4
-
     def test_rrf_k_parameter(self):
         """RRF k参数敏感性：k=60时各排名贡献均衡"""
         k = 60
@@ -678,11 +790,25 @@ class TestRRFFusion:
         doc_score_bm = 1.0 / (k + 5)
         assert abs(doc_score_vec - doc_score_bm) < 0.002
 
-    def test_deduplication_by_hash(self):
-        """去重：相同内容文档应有相同hash"""
+    def test_query_expansion_uses_stable_source_aware_chunk_identity(self):
+        """同一 chunk 跨查询去重，但不同来源的同文内容不能被错误合并。"""
         doc1 = Document(page_content="年假15天", metadata={"source": "test.pdf"})
         doc2 = Document(page_content="年假15天", metadata={"source": "test.pdf"})
-        assert hash(doc1.page_content) == hash(doc2.page_content)
+        other = Document(page_content="年假15天", metadata={"source": "other.pdf"})
+
+        fused = _reciprocal_rank_fusion([
+            (doc1, 0.9, "query-1"),
+            (doc2, 0.8, "query-2"),
+            (other, 0.7, "query-2"),
+        ])
+
+        assert len(fused) == 2
+        assert {_document_identity(doc) for doc, _, _ in fused} == {
+            _document_identity(doc1), _document_identity(other),
+        }
+        assert fused[0][0].metadata["source"] == "test.pdf"
+        assert fused[0][1] == pytest.approx(2 / 61)
+        assert fused[0][2] == "query-1 | query-2"
 
     @pytest.mark.asyncio
     async def test_hybrid_fusion_both_paths_available(self):
@@ -1860,7 +1986,7 @@ def test_summary():
     print("  1. 复杂查询分解 (多意图/对比/列举/流程)")
     print("  2. 查询边界条件 (极短/标点/重复/混合语言)")
     print("  3. CRAG决策边界 (HIGH/MEDIUM/LOW/NO_RESULTS阈值)")
-    print("  4. RRF融合排序 (自适应权重/k参数/去重)")
+    print("  4. RRF融合排序 (固定配置权重/k参数/稳定身份去重)")
     print("  5. 查询扩展对抗 (LLM失败/乱码解析/HyDE失败)")
     print("  6. 检索投毒检测 (关键词填充/语义矛盾/ACL)")
     print("  7. 性能压力测试 (大top_k/并发/rewrite循环)")

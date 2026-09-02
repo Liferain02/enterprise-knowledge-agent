@@ -88,7 +88,7 @@ class AgentCard(BaseModel):
     # 服务提供方
     provider: AgentProvider = Field(
         default_factory=lambda: AgentProvider(
-            organization="Enterprise Knowledge Base Team",
+            organization="实验室科研智能助手",
             version="1.0.0"
         ),
         description="服务提供方"
@@ -166,11 +166,11 @@ def _build_agent_card() -> AgentCard:
             )
         ),
         AgentSkill(
-            id="multi_step_planning",
-            name="多步骤规划",
+            id="optional_deep_research",
+            name="可选深度研究",
             description=(
-                "处理复杂任务，自动拆解为多个子步骤并行或顺序执行。"
-                "例如：对比两篇论文方案，或先查组会要求再整理汇报清单。"
+                "仅在用户显式选择时，将复杂科研问题拆为子问题，组织带来源证据，"
+                "并通过有界审核生成研究回答。"
             )
         ),
     ]
@@ -194,8 +194,9 @@ def _build_agent_card() -> AgentCard:
         "llm_model": getattr(settings, "llm_model", "qwen-plus"),
         "vector_store": "chroma",
         "features": [
-            "corrective_rag",
-            "mem0_memory",
+            "acl_hybrid_rag",
+            "qwen_rerank",
+            "optional_deep_research",
             "acl_permission",
             "document_versioning",
             "conflict_detection",
@@ -203,10 +204,10 @@ def _build_agent_card() -> AgentCard:
     }
 
     return AgentCard(
-        name="实验室智能助手",
+        name="实验室科研智能助手",
         description=(
-            "面向科研实验室的资料检索与协作助手。"
-            "支持知识库检索、多步骤规划、Mem0 记忆、权限隔离与来源引用。"
+            "面向计算机专业研究生实验室的科研资料检索与协作助手。"
+            "支持权限感知检索、来源引用和用户显式选择的有界深度研究。"
         ),
         url=base_url,
         version="1.0.0",
@@ -218,7 +219,7 @@ def _build_agent_card() -> AgentCard:
         ),
         skills=skills,
         provider=AgentProvider(
-            organization="Research Lab Assistant Team",
+            organization="实验室科研智能助手",
             version="1.0.0"
         ),
         authentication=AuthenticationVerify(
@@ -314,7 +315,7 @@ async def get_agent_card_handler(request: Request):
 
     返回内容示例：
     {
-        "name": "实验室智能助手",
+        "name": "实验室科研智能助手",
         "description": "面向科研实验室的资料检索与协作系统...",
         "url": "http://localhost:8080",
         "version": "1.0.0",
@@ -466,6 +467,6 @@ def _skill_matches_endpoint(skill_id: str, endpoint: str) -> bool:
         "lab_onboarding_query": ["chat", "knowledge_search"],
         "operation_execution": ["chat"],
         "general_conversation": ["chat"],
-        "multi_step_planning": ["chat"],
+        "optional_deep_research": ["chat"],
     }
     return endpoint in mapping.get(skill_id, [])

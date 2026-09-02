@@ -2,28 +2,26 @@
 Knowledge Retrieval Pipeline - 知识检索管线
 
 重构后（参考 OpenClaw / Agentic RAG 最佳实践）：
-- retrieval_agent_node：检索阶段（无 ReAct 循环，直接执行 Hybrid → Rerank → ACL → CRAG 评估）
-- generation_agent_node：生成阶段（基于评估后的文档，独立生成答案）
+- retrieval_agent_node：检索阶段（无 ReAct 循环，默认执行 ACL Hybrid → Rerank）
+- generation_agent_node：生成阶段（基于检索文档，独立生成答案）
 - conflict_detection_node：可选的冲突检测（检测多文档中的矛盾信息）
 
 核心改进：
 1. 消除 ReAct 循环开销：检索阶段直接调用 pipeline，不经过 LLM 决策循环
-2. 评估是独立的：CRAG Grading 结果写入 state，供生成与诊断使用
-3. 查询改写是可选的预处理：在检索前判断，评估失败后才触发重写
+2. CRAG 是显式实验开关：启用时 Grading 结果写入 state，默认链不承担其成本
+3. 查询扩展是可选预处理：只由 Normal 的复杂形式触发
 4. 冲突检测可插拔：作为可选节点，不影响主流程性能
 
 流程：
   Planner → retrieval_agent_node → generation_agent_node → finalize_response → END
 """
-import asyncio
 import time
-import re
 from typing import Dict, Any, List, Tuple
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage
 from langchain_core.documents import Document
 import logging
 
-from ._utils import get_last_user_message, inject_summary_to_messages, inject_user_identity_to_messages
+from ._utils import get_last_user_message, inject_user_identity_to_messages
 
 
 logger = logging.getLogger(__name__)
@@ -39,8 +37,8 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     检索阶段节点 - 替代原 knowledge_agent_node 中的 ReAct 循环
 
     职责：
-    1. 直接调用 CorrectiveRAGPipeline.retrieve()
-       流程：Hybrid 检索 → Rerank 精排 → CRAG LLM 评估 → 查询改写/分解（条件触发）
+    1. 默认执行 Hybrid → Rerank；复杂 Normal 查询可先做 Query Expansion。
+       CRAG 只在显式配置启用时执行，不作为默认质量门。
     2. 将评估结果写入 state，供 generation_agent_node 和诊断使用
     3. 生成检索上下文字符串（供生成阶段用）
 
@@ -67,29 +65,27 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     try:
         t0 = time.time()
 
-        # ── 核心：直接调用 Corrective RAG Pipeline（带 ACL 过滤）───────
-        from src.rag.evaluation.retrieval_grader import get_corrective_rag_pipeline
-
-        pipeline = get_corrective_rag_pipeline()
-
         # 获取 top_k：从配置或 state 读取，默认 5
         top_k = state.get("retrieval_top_k", 5)
 
         logger.debug("开始检索: query=%s top_k=%s user=%s", last_user_message[:50], top_k, getattr(user_context, 'username', 'anonymous'))
 
-        results, grade_result, rewrite_history = await pipeline.retrieve(
-            query=last_user_message,
-            top_k=top_k,
-            needs_expansion=needs_expansion,
-            user=user_context,
+        results, grade_result, rewrite_history = await _retrieve_documents(
+            last_user_message, top_k, needs_expansion, user_context,
         )
 
         retrieval_time = time.time() - t0
 
         # ── 解析评估结果 ──────────────────────────────────────────────
-        decision = grade_result.decision.value if grade_result else "no_results"
-        avg_score = grade_result.avg_score if grade_result else 0.0
-        decision_reason = grade_result.decision_reason if grade_result else "无评估结果"
+        decision = grade_result.decision.value if grade_result else (
+            "high" if results else "no_results"
+        )
+        avg_score = grade_result.avg_score if grade_result else (
+            sum(score for _, score in results) / len(results) if results else 0.0
+        )
+        decision_reason = grade_result.decision_reason if grade_result else (
+            "CRAG 默认关闭；结果来自 ACL Hybrid + Rerank"
+        )
 
         logger.debug(
             "检索完成: decision=%s high=%d/%d avg=%.3f rewrite=%s duration=%.2fs",
@@ -149,6 +145,52 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "version_source": "",
         }
 
+
+async def _retrieve_documents(
+    query: str,
+    top_k: int,
+    needs_expansion: bool,
+    user_context: Any,
+) -> Tuple[List[Tuple[Document, float]], Any, List[str]]:
+    """按配置选择默认检索或显式 CRAG 实验路径。"""
+
+    from config.settings import get_settings
+    from src.rag.evaluation.retrieval_grader import is_meaningful_retrieval_query
+
+    if not is_meaningful_retrieval_query(query):
+        return [], None, [query]
+
+    settings = get_settings()
+    if getattr(settings, "crag_enabled", False):
+        from src.rag.evaluation.retrieval_grader import get_corrective_rag_pipeline
+
+        return await get_corrective_rag_pipeline().retrieve(
+            query=query,
+            top_k=top_k,
+            needs_expansion=needs_expansion,
+            user=user_context,
+        )
+
+    if needs_expansion and getattr(settings, "query_expand_enabled", True):
+        from src.rag.retrieval.query_expander import decompose_and_retrieve
+
+        expanded, expansion = await decompose_and_retrieve(
+            query=query,
+            top_k=top_k,
+            user=user_context,
+        )
+        results = [(doc, score) for doc, score, _source in expanded]
+        history = list(dict.fromkeys([query, *expansion.all_queries]))
+        return results, None, history
+
+    from src.rag.retrieval.retriever import get_retriever_manager
+
+    results = get_retriever_manager().search_with_rerank(
+        query=query,
+        k=top_k,
+        user=user_context,
+    )
+    return results, None, [query]
 
 def _build_retrieval_context(
     query: str,
@@ -372,65 +414,3 @@ def _build_generation_prompt(
     lines.extend(["", f"用户问题：{query}"])
 
     return "\n".join(lines)
-
-
-# ============================================================
-# 兼容性保留：旧的 knowledge_agent_node（向后兼容）
-# 仍然使用 SkillLoader ReAct 方式，后续可考虑废弃
-# ============================================================
-
-
-async def knowledge_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    知识 Agent 节点（保留旧版 ReAct 方式，向后兼容）
-
-    新流程请使用 retrieval_agent_node + generation_agent_node。
-    """
-    messages = state.get("messages", [])
-    last_user_message = get_last_user_message(messages)
-    summary = state.get("summary", "") or ""
-    mem0_memories = state.get("mem0_memories", "") or ""
-    session_id = state.get("session_id", "default")
-
-    if not last_user_message:
-        return {"final_answer": "抱歉，我无法理解您的问题。"}
-
-    try:
-        from ..skills import get_skill_loader
-
-        loader = get_skill_loader()
-        agent = loader.create_agent("knowledge")
-
-        config = {"configurable": {"thread_id": f"{session_id}_knowledge"}}
-        messages_with_context = inject_user_identity_to_messages(
-            messages,
-            user_context=state.get("user_context"),
-            summary=summary,
-            mem0_memories=mem0_memories,
-        )
-
-        agent_inject = state.get("agent_inject_prompt", "") or ""
-        if agent_inject:
-            inject_msg = SystemMessage(content=("【系统指令】" + agent_inject.strip()))
-            messages_with_context = [inject_msg] + messages_with_context
-
-        result = await agent.ainvoke({"messages": messages_with_context}, config)
-        agent_messages = result.get("messages", [])
-        final_answer = agent_messages[-1].content
-
-        logger.debug("生成答案长度: %d 字符", len(final_answer))
-
-        return {
-            "final_answer": final_answer,
-            "sources": "knowledge_base",
-            "used_agent": "knowledge_agent",
-            "messages": agent_messages,
-        }
-
-    except Exception as e:
-        logger.exception("知识库搜索出错: %s", e)
-        return {
-            "final_answer": f"搜索知识库时出错: {str(e)}",
-            "sources": "",
-            "used_agent": "knowledge_agent",
-        }

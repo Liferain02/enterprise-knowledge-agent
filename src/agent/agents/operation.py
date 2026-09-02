@@ -11,7 +11,7 @@ from langgraph.prebuilt import create_react_agent
 from src.models.llm import get_llm
 from ..tools import get_all_agent_tools
 from ..prompts import OPERATION_AGENT_SYSTEM_PROMPT
-from ._utils import get_last_user_message, inject_summary_to_messages, inject_user_identity_to_messages
+from ._utils import get_last_user_message, inject_user_identity_to_messages
 from config.settings import get_settings
 
 import logging

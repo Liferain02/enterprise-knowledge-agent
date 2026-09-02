@@ -240,7 +240,11 @@ class RetrieverManager:
             return self.hybrid_manager.search(query, k=k, user=user)
 
         vectorstore = get_vectorstore(self.collection_name)
-        return vectorstore.similarity_search(query, k=k, filter=final_filter)
+        fetch_k = k * 4 if user else k
+        docs = vectorstore.similarity_search(query, k=fetch_k, filter=final_filter)
+        if user:
+            docs = [doc for doc in docs if check_doc_access(doc.metadata or {}, user)]
+        return docs[:k]
 
     def search_with_score_acl(
         self,
@@ -273,7 +277,12 @@ class RetrieverManager:
             return [(doc, score) for doc, score, _ in results]
 
         vectorstore = get_vectorstore(self.collection_name)
-        return vectorstore.similarity_search_with_score(query, k=k, filter=final_filter)
+        fetch_k = k * 4 if user else k
+        results = vectorstore.similarity_search_with_score(
+            query, k=fetch_k, filter=final_filter
+        )
+        results = self.filter_results_by_acl(results, user)
+        return results[:k]
 
     def search_with_rerank(
         self,
@@ -334,9 +343,14 @@ class RetrieverManager:
             if check_doc_access(doc.metadata or {}, user):
                 filtered.append((doc, score))
             else:
+                username = (
+                    user.get("username", "unknown")
+                    if isinstance(user, dict)
+                    else getattr(user, "username", "unknown")
+                )
                 logger.warning(
                     f"[Retriever] ACL 二次验证过滤："
-                    f"用户 {user.username} 无权访问 {doc.metadata.get('source', '?')}"
+                    f"用户 {username} 无权访问 {doc.metadata.get('source', '?')}"
                 )
 
         return filtered

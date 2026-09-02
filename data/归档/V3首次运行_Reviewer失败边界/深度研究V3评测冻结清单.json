@@ -1,0 +1,59 @@
+{
+  "status": "frozen_before_v3_generation",
+  "dataset_identity": "v3_claim_causal_development_eval",
+  "case_count": 20,
+  "dataset_sha256": "d8b8577fdf0ca2d73e7a4d260bb264f57b08039109a835dea3b17cd6c80f05c6",
+  "corpus_files": {
+    "data/knowledge/.gitkeep": "aace48da59aed0546cbc90ada8fdfd3e6b0a32317eb4a261e6d6d022e82fab1f",
+    "data/knowledge/dicts/jieba_user_dict.txt": "d2e8d1816c5522161dbbe59932e60e1e2ef53f14405963d0a1f4dde2211ce850",
+    "data/knowledge/meetings/实验室例会纪要_2026-04-15.md": "1e7768141df22e3e72ad327ac764786911f26071879ec028cf211c1a15c9588b",
+    "data/knowledge/operations/RDMA与高性能网络实验规范.md": "32c33ea6941574177e1c75ceb043b04345b881b654dfa74017f499eb64e2a8a7",
+    "data/knowledge/operations/实验室安全与值班制度.md": "8cb46fef17f1e479087278c4a56a08e6b6f3bc546d6e70bcdf6b333f7110ccb5",
+    "data/knowledge/operations/实验室常见问题FAQ.md": "2b131557dfa3a96a69551d39913e965b5db9afef6b0b80549f107816b3394bd4",
+    "data/knowledge/operations/实验室成员与分工说明.md": "61802fe576404e43c9e50a7cf7793dd5690a9a4aea1df69a112243d5db657533",
+    "data/knowledge/operations/实验室组会制度与汇报要求.md": "eb0d371df7da1002c06c646da1173664262b01761e1cfaa0cc5154e5ed061ef6",
+    "data/knowledge/operations/实验室考勤与请假制度.md": "a1c04be30008b886a90e2291bc02cb81483a9abf46259e77f291a795b32318cd",
+    "data/knowledge/operations/报销与采购说明.md": "60f173a93b0f1c3b8e60a321e314f6a3e16b6ea8d62d8371400fae17492c4868",
+    "data/knowledge/operations/新生入组第一周任务清单.md": "8348bc73e4ae9a06bcd90770d9c946780465627e8767adc07b1576f1d2995ef2",
+    "data/knowledge/operations/论文投稿与对外汇报流程.md": "f8866e44be71f525a0e3d9611598cb7f76eb2ad3510746868a75f4ed2fb3a688",
+    "data/knowledge/operations/论文阅读与实验记录要求.md": "3abefffb38010fc4c1a11ad7a57358cdb43fd96bbf13a6160c1361135ced13e1",
+    "data/knowledge/operations/设备预约与共享资源使用流程.md": "23e7b9225d6a441c6a592ce901a507c2cd2aa12ff00ef2ad49005f6b188eeba3",
+    "data/knowledge/operations/高性能计算集群使用说明.md": "3605e3c4d68ec43724634050f87b55d1546414f375c535aeae08fcc4d0a72bc9",
+    "data/knowledge/overview/实验室研究方向与课题地图.md": "2ce9f7db0297fff795299c02772db482dfe0a35dedb8ca854260778f50801604",
+    "data/knowledge/papers/Argo.pdf": "b3cc7c99a41b3a38fa6d1e67955a90f4716b7fa033c097049658705296ee1a45",
+    "data/knowledge/papers/Fried 等 - Caladan Mitigating Interference at Microsecond Timescales.pdf": "5db4e5f2548cf125ae13a26158523b7bbc0878bf0e5918a317f607171cea6e5d",
+    "data/knowledge/papers/Hong 等 - 2019 - Scaling out NUMA-Aware Applications with RDMA-Based Distributed Shared Memory.pdf": "53175f288ccf377bd9f1276feaf26034c0ecd5bfe9977a552c5cff3f9d72a3d8",
+    "data/knowledge/papers/Ousterhout 等 - Shenango Achieving High CPU Efficiency for Latency-sensitive Datacenter Workloads.pdf": "6e6a97e0a17a6f33133d1d5a6ba032b69e692fa9cf89a9143b5a3825e8c9e0e8",
+    "data/knowledge/papers/Ruan 等 - Nu Achieving Microsecond-Scale Resource Fungibility with Logical Processes.pdf": "58c934fefb1eb3a7be10a1de1f7fbcfb98447afa4813a67bc15bc2eecdb33b5f",
+    "data/knowledge/papers/Ruan 等 - Quicksand Harnessing Stranded Datacenter Resources with Granular Computing.pdf": "4c93ff7b8b43b61d25d7260623a97799932764ffd6f0a73c53460e7107ea3622",
+    "data/knowledge/papers/Ruan和Aguilera - AIFM High-Performance, Application-Integrated Far Memory.pdf": "a3ecc1a1ae9d02decb6ff11516b8e810ffd788d233fb84a9fe856817a7065bc2",
+    "data/knowledge/projects/全局变量实现2.md": "49ba49f9c4d3a54263d25600e7af5fbcdc353e216636644475b61f7f0c1deb77",
+    "data/knowledge/projects/分布式NUMA研究计划.docx": "d21a3f403ab94794a19cfacd330f42a469939b6c51345796e9fe30e94441a8f1",
+    "data/knowledge/projects/分布式NUMA课题组会模板.md": "1c1c1962b8dd83699fa39ab54e985e6b3d459039dd052e9ae47bdf9a14115750",
+    "data/knowledge/知识目录索引.md": "93c13b9ff0653c3cad2d5d4ac29ae111d320fb6e46af12a3df2c74e808f2e2e9"
+  },
+  "corpus_snapshot_sha256": "f8fc2a534bab6bbe60e4026f1e62eeae4ab626a16f0d32d99511a03cc81faf35",
+  "variants": [
+    "normal",
+    "deep_gated",
+    "deep_full"
+  ],
+  "quality_tolerance": 0.02,
+  "cost_reduction_gate": 0.05,
+  "calibration_case_ids": [
+    "V301",
+    "V306",
+    "V311",
+    "V316"
+  ],
+  "calibration_fraction": 0.2,
+  "models": {
+    "llm_provider": "qwen",
+    "llm_model": "qwen3.5-flash",
+    "embedding_model": "text-embedding-v2",
+    "reranker_provider": "qwen",
+    "reranker_model": "gte-rerank-v2"
+  },
+  "frozen_at": "2026-09-02T11:03:27+08:00",
+  "disclaimer": "标准答案在生成前冻结；这是声明级开发评测，不是 blind holdout，不能用于新的盲测泛化声明。"
+}

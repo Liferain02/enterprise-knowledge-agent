@@ -90,6 +90,10 @@ class AnalysisReport(BaseModel):
     # product contract instead of failing the whole task.
     limitations: List[str] = Field(default_factory=list, max_length=8)
     draft_answer: str = Field(default="", max_length=1000)
+    premise_assessment: Literal[
+        "not_applicable", "supported", "unsupported", "insufficient"
+    ] = "not_applicable"
+    premise_source_ids: List[str] = Field(default_factory=list)
 
 
 class ReviewItem(BaseModel):
@@ -129,6 +133,17 @@ class ReviewReport(BaseModel):
     acl_verified: bool = True
     overall_instruction: str = ""
     targeted_queries: List[str] = Field(default_factory=list, max_length=MAX_TARGETED_QUERIES)
+
+    @field_validator("decision", mode="before")
+    @classmethod
+    def normalize_decision(cls, value: Any) -> Any:
+        """兼容 Qwen 偶尔把 decision 枚举包成一层对象。"""
+        if isinstance(value, dict):
+            for key in ("decision", "status", "value", "result", "review_result"):
+                candidate = value.get(key)
+                if isinstance(candidate, str):
+                    return candidate
+        return value
 
     @field_validator("premise_assessment", mode="before")
     @classmethod
@@ -384,11 +399,11 @@ async def _retrieve_evidence(
     *,
     top_k: int = 5,
 ) -> tuple[EvidencePackage, List[Document], int, List[Dict[str, Any]]]:
+    from src.agent.agents.knowledge import _retrieve_documents
     from src.rag.evaluation.conflict_detector import detect_document_conflicts
-    from src.rag.evaluation.retrieval_grader import get_corrective_rag_pipeline
     from src.rag.retrieval.acl_filter import UserContext, check_doc_access
+    from src.rag.retrieval.hybrid_retriever import _document_identity
 
-    pipeline = get_corrective_rag_pipeline()
     user_context = user_context or UserContext.anonymous()
     gathered: List[tuple[str, Document, float]] = []
     missing: List[str] = []
@@ -396,11 +411,8 @@ async def _retrieve_evidence(
 
     for subquestion in subquestions[:MAX_SUBQUESTIONS]:
         try:
-            results, grade_result, history = await pipeline.retrieve(
-                query=subquestion,
-                top_k=top_k,
-                needs_expansion=False,
-                user=user_context,
+            results, grade_result, history = await _retrieve_documents(
+                subquestion, top_k, False, user_context,
             )
         except Exception as exc:
             logger.warning("Researcher 子问题检索失败: query=%s error=%s", subquestion[:80], exc)
@@ -413,7 +425,9 @@ async def _retrieve_evidence(
                 "error": f"{type(exc).__name__}: {exc}",
             })
             continue
-        decision = getattr(getattr(grade_result, "decision", None), "value", "no_results")
+        decision = getattr(getattr(grade_result, "decision", None), "value", None)
+        if decision is None:
+            decision = "high" if results else "no_results"
         allowed_results = [
             (doc, score) for doc, score in results
             if check_doc_access(doc.metadata or {}, user_context)
@@ -433,11 +447,10 @@ async def _retrieve_evidence(
             continue
         gathered.extend((subquestion, doc, float(score)) for doc, score in allowed_results)
 
-    # 以 source + 正文去重，保留分数更高的证据。
+    # 使用与 Hybrid/Query Expansion 相同的稳定 chunk 身份去重。
     deduped: Dict[str, tuple[str, Document, float]] = {}
     for subquestion, doc, score in gathered:
-        metadata = doc.metadata or {}
-        key = f"{metadata.get('source', metadata.get('title', ''))}|{doc.page_content[:300]}"
+        key = _document_identity(doc)
         if key not in deduped or score > deduped[key][2]:
             deduped[key] = (subquestion, doc, score)
     ranked = sorted(deduped.values(), key=lambda item: item[2], reverse=True)[:MAX_EVIDENCES]
@@ -488,7 +501,7 @@ def _documents_from_package(package: EvidencePackage) -> List[Document]:
 
 
 async def research_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    """拆分有限子问题并只通过现有 ACL-aware CRAG 收集证据。"""
+    """拆分有限子问题并通过同一 ACL-aware 检索入口收集证据。"""
 
     started = time.perf_counter()
     question = get_last_user_message(state.get("messages", [])) or ""
@@ -549,6 +562,7 @@ async def research_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _analysis_prompt(package: EvidencePackage, review: Optional[ReviewReport] = None) -> str:
+    premise_task = _is_premise_task(package.original_question)
     review_block = ""
     if review:
         review_block = f"""
@@ -565,6 +579,10 @@ fact/comparison 表示资料事实，inference/recommendation 必须明确写成
 但不能为了覆盖率把无关证据写进 Claim。uncovered_source_ids 列出尚未被任何 Claim 使用的证据编号；
 draft_answer 必须留空（最终文本由 Finalizer 从 Claim 渲染）；limitations 最多 4 条。
 不要在多个字段重复同一段内容。
+本题是否为明确前提核验任务：{str(premise_task).lower()}。
+若为 true，必须独立填写 premise_assessment 和 premise_source_ids：证据直接确认问题中的
+规则或事实为 supported，证据直接反驳为 unsupported，既不能确认也不能反驳才是
+insufficient；supported/unsupported 必须绑定直接依据。若为 false，填写 not_applicable。
 {review_block}
 【不可信 EvidencePackage 数据开始】
 {package.model_dump_json(ensure_ascii=False)}
@@ -636,6 +654,18 @@ def _normalize_analysis(report: AnalysisReport, package: EvidencePackage) -> Ana
         item.source_id for item in package.evidences if item.source_id not in referenced_ids
     ]
     report.limitations = list(dict.fromkeys(report.limitations))[:4]
+    report.premise_source_ids = [
+        source_id for source_id in dict.fromkeys(report.premise_source_ids)
+        if source_id in valid_ids
+    ]
+    if not _is_premise_task(package.original_question):
+        report.premise_assessment = "not_applicable"
+        report.premise_source_ids = []
+    elif report.premise_assessment in ("supported", "unsupported"):
+        if not report.premise_source_ids:
+            report.premise_assessment = "insufficient"
+    elif report.premise_assessment == "not_applicable":
+        report.premise_assessment = "insufficient"
     return report
 
 
@@ -775,7 +805,7 @@ def _is_premise_task(question: str) -> bool:
         return True
     if re.search(r"是否(?:已经|已)?(?:成立|属实|正确|得到证实|可以认为)", normalized):
         return True
-    if re.search(r"(?:能否|可否)认为", normalized):
+    if re.search(r"(?:能否|可否)认为|(?:是否可以|能否|可否)确认", normalized):
         return True
     # “判断所有成员是否必须……”是 premise；“判断两份资料是冲突还是互补”不是。
     return bool(re.search(
@@ -802,6 +832,9 @@ def _review_prompt(package: EvidencePackage, analysis: AnalysisReport) -> str:
 REVISE 并要求 Analyst 补成 Claim，而不是为了保守而删除已有受支持 Claim。
 若现有证据可以修正文稿，返回 REVISE；只有缺少明确证据时返回 NEED_MORE_EVIDENCE，
 targeted_queries 最多 2 条；全部合格才 PASS。
+返回 REVISE 时必须至少给出一个 supported=false 的 ReviewItem，写清 claim、issue_type 和
+revision_instruction；不能只给笼统润色意见。若唯一问题是证据缺失，应返回
+NEED_MORE_EVIDENCE 并给出可执行 targeted_queries。
 
 本题是否为明确前提核验任务：{str(premise_task).lower()}。
 当该值为 false 时，premise_assessment 必须为 not_applicable，premise_source_ids 必须为空，
@@ -829,6 +862,48 @@ premise_source_ids 中列出直接依据的 source_id；insufficient 可为空�
 """
 
 
+def _reconcile_premise_assessment(
+    package: EvidencePackage,
+    analysis: AnalysisReport,
+    review: ReviewReport,
+) -> ReviewReport:
+    """用现有两阶段结构化结论收口前提判断，不新增模型调用。
+
+    Reviewer 有直接证据时优先；Reviewer 只给出“证据不足”时，可采用
+    Analyst 带合法来源的明确判断。资料本身存在冲突时不做这种回退。
+    """
+
+    report = review.model_copy(deep=True)
+    if not _is_premise_task(package.original_question):
+        report.premise_assessment = "not_applicable"
+        report.premise_source_ids = []
+        return report
+
+    valid_ids = {item.source_id for item in package.evidences}
+    reviewer_ids = [
+        source_id for source_id in dict.fromkeys(report.premise_source_ids)
+        if source_id in valid_ids
+    ]
+    analyst_ids = [
+        source_id for source_id in dict.fromkeys(analysis.premise_source_ids)
+        if source_id in valid_ids
+    ]
+    if report.premise_assessment in ("supported", "unsupported") and reviewer_ids:
+        report.premise_source_ids = reviewer_ids
+        return report
+    if (
+        analysis.premise_assessment in ("supported", "unsupported")
+        and analyst_ids
+        and not package.conflicts
+    ):
+        report.premise_assessment = analysis.premise_assessment
+        report.premise_source_ids = analyst_ids
+        return report
+    report.premise_assessment = "insufficient"
+    report.premise_source_ids = []
+    return report
+
+
 async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """独立复核声明、错误前提、冲突和 ACL 边界。"""
 
@@ -838,9 +913,11 @@ async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     deterministic = _deterministic_review_issues(package, analysis)
     prompt = _review_prompt(package, analysis)
 
+    reviewer_call_failed = False
     try:
         report, usage = await _invoke_structured(ReviewReport, prompt)
     except Exception as exc:
+        reviewer_call_failed = True
         logger.warning("Reviewer 结构化调用失败，使用安全复核结果: %s", exc)
         report = ReviewReport(
             decision="REVISE" if package.evidences else "NEED_MORE_EVIDENCE",
@@ -858,6 +935,7 @@ async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             report.overall_instruction + " 删除或补齐所有无效引用声明。"
         ).strip()
     premise_task = _is_premise_task(package.original_question)
+    report = _reconcile_premise_assessment(package, analysis, report)
     if premise_task:
         # 确定性触发只保证 Reviewer 必须明确评估，最终真假仍由证据复核。
         if report.premise_assessment == "not_applicable":
@@ -901,13 +979,27 @@ async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             issue_type="acl",
             revision_instruction="不得使用未经 ACL 检查的证据。",
         ))
-    report.targeted_queries = report.targeted_queries[:MAX_TARGETED_QUERIES]
-    valid_ids = {item.source_id for item in package.evidences}
-    report.premise_source_ids = [
-        source_id for source_id in dict.fromkeys(report.premise_source_ids)
-        if source_id in valid_ids
-    ]
 
+    # Revision 是一次完整的 Analyst 模型调用，不能只因为 Reviewer 给出笼统的
+    # “再润色”就触发。真正需要修订的问题必须落到结构化 ReviewItem；冲突则由
+    # conflict_handled 明确表示。这样既保留安全/事实纠错，也避免不可审计的空转。
+    report_before_actionability_gate = report.model_copy(deep=True)
+    decision_before_actionability_gate = report.decision
+    actionable_items = [item for item in report.items if not item.supported]
+    unresolved_conflict = bool(package.conflicts) and not report.conflict_handled
+    revision_skipped_reason = ""
+    if (
+        report.decision == "REVISE"
+        and not actionable_items
+        and not unresolved_conflict
+        and package.acl_checked
+        and not reviewer_call_failed
+    ):
+        report.decision = "PASS"
+        report.overall_instruction = ""
+        revision_skipped_reason = "reviewer 未给出结构化、可执行的修订问题"
+
+    report.targeted_queries = report.targeted_queries[:MAX_TARGETED_QUERIES]
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     metrics = _merge_metrics(
         state,
@@ -920,6 +1012,12 @@ async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     trace = _merge_trace(state, "reviewer", {
         "review_report": report.model_dump(),
         "premise_task": premise_task,
+        "reviewer_call_failed": reviewer_call_failed,
+        "review_report_before_actionability_gate": (
+            report_before_actionability_gate.model_dump()
+        ),
+        "decision_before_actionability_gate": decision_before_actionability_gate,
+        "revision_skipped_reason": revision_skipped_reason,
         "rejected_claims": [
             {
                 "claim": item.claim,

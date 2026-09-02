@@ -6,7 +6,7 @@ RAG 检索质量综合评测脚本
 1. 检索层指标：Recall@K / Precision@K / MRR / NDCG@K / MAP / Hit@K
 2. 检索上下文覆盖指标（基于关键词重叠，不冒充最终答案评测）
 3. 对抗查询测试（注入/模糊/超长/无答案）
-4. CRAG 决策分布统计
+4. 检索决策分布统计（默认链或显式 CRAG）
 5. 性能指标（延迟/P99/吞吐量）
 
 运行方式:
@@ -339,7 +339,7 @@ class RAGEvalEngine:
     RAG 检索质量评测引擎
 
     工作流程：
-    1. 对每个查询调用真实 CRAG pipeline 检索
+    1. 对每个查询调用默认 ACL Hybrid + Rerank 检索
     2. 计算检索层 + 上下文覆盖指标
     3. 聚合所有查询的指标
     4. 输出报告
@@ -348,29 +348,27 @@ class RAGEvalEngine:
     def __init__(self, top_k: int = 10, enable_context_metrics: bool = True):
         self.top_k = top_k
         self.enable_context_metrics = enable_context_metrics
-        self._pipeline = None
-
-    @property
-    def pipeline(self):
-        if self._pipeline is None:
-            from src.rag.evaluation.retrieval_grader import get_corrective_rag_pipeline
-            self._pipeline = get_corrective_rag_pipeline(rerank_before_grade=True)
-        return self._pipeline
 
     async def _retrieve_docs(self, query: str) -> Tuple[List[Document], str, float, int, int, str]:
-        """调用与线上知识 Agent 相同的 ACL + Hybrid + Rerank + CRAG 链路。"""
+        """调用与默认知识 Agent 相同的 ACL + Hybrid + Rerank 链路。"""
         try:
+            from src.agent.agents.knowledge import _retrieve_documents
+            from src.rag.retrieval.query_expander import RuleBasedDecomposer
             from src.rag.retrieval.acl_filter import UserContext
 
-            results, grade_result, _ = await self.pipeline.retrieve(
-                query=query,
-                top_k=self.top_k,
-                needs_expansion=None,
-                user=UserContext.anonymous(),
+            results, grade_result, _ = await _retrieve_documents(
+                query,
+                self.top_k,
+                RuleBasedDecomposer.needs_expansion(query),
+                UserContext.anonymous(),
             )
             docs = [doc for doc, _ in results]
-            decision = grade_result.decision.value if grade_result else "no_results"
-            avg_score = grade_result.avg_score if grade_result else 0.0
+            decision = grade_result.decision.value if grade_result else (
+                "high" if docs else "no_results"
+            )
+            avg_score = grade_result.avg_score if grade_result else (
+                sum(score for _, score in results) / len(results) if results else 0.0
+            )
             high_count = grade_result.high_count if grade_result else 0
             low_count = grade_result.low_count if grade_result else 0
             return docs, decision, avg_score, high_count, low_count, ""
@@ -432,7 +430,7 @@ class RAGEvalEngine:
         result.crag_decision = decision
         result.crag_avg_score = avg_score
         result.crag_high_count = high_count
-        result.cag_low_count = low_count
+        result.crag_low_count = low_count
         result.crag_warning = warning
         result.is_adversarial = is_adv
         result.is_enumerate = is_enum
@@ -556,14 +554,14 @@ class RAGEvalEngine:
                 "avg_latency_ms": _mean([r.latency_ms for r in items]),
                 "max_latency_ms": max(r.latency_ms for r in items),
             }
-            # CRAG 决策分布
+            # 检索决策分布
             decisions = defaultdict(int)
             for r in items:
                 decisions[r.crag_decision] += 1
             vals["CRAG_decisions"] = dict(decisions)
             return vals
 
-        # CRAG 决策分布（全部）
+        # 检索决策分布（全部）
         all_decisions = defaultdict(int)
         for r in results:
             all_decisions[r.crag_decision] += 1
@@ -631,7 +629,7 @@ class RAGEvalEngine:
             if "CRAG_decisions" in s:
                 dec = s["CRAG_decisions"]
                 total = sum(dec.values()) or 1
-                print(f"{prefix}  CRAG 决策分布:")
+                print(f"{prefix}  检索决策分布:")
                 for k, v in sorted(dec.items()):
                     print(f"{prefix}    {k:<15}: {v} ({v/total:.1%})")
 

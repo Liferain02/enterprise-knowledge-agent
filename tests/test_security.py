@@ -3,6 +3,7 @@
 覆盖：文档注入、用户注入、权限绕过、记忆污染、幻觉诱导。
 """
 import pytest
+from datetime import date, timedelta
 from unittest.mock import patch, MagicMock, AsyncMock
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
@@ -127,6 +128,64 @@ class TestSecurityAdversarial:
 
         assert Confidentiality.can_access("hr", Confidentiality.CONFIDENTIAL) is True
 
+    def test_document_time_window_is_enforced_fail_closed(self):
+        """未生效、已过期和非法日期均不得通过最终 Python ACL 防线。"""
+        from src.rag.retrieval.acl_filter import UserContext, check_doc_access
+
+        user = UserContext(
+            user_id="u-time",
+            username="时间边界测试",
+            role="employee",
+            department="dev",
+            department_name="研发部",
+            department_path="/研发部",
+        )
+        today = date.today()
+        base = {
+            "source": "制度.md",
+            "confidentiality": "internal",
+            "visibility": "public",
+        }
+
+        assert check_doc_access({
+            **base,
+            "effective_date": today.isoformat(),
+            "expiry_date": today.isoformat(),
+        }, user) is True
+        assert check_doc_access({
+            **base,
+            "effective_date": (today + timedelta(days=1)).isoformat(),
+        }, user) is False
+        assert check_doc_access({
+            **base,
+            "expiry_date": (today - timedelta(days=1)).isoformat(),
+        }, user) is False
+        assert check_doc_access({**base, "expiry_date": "不是日期"}, user) is False
+
+    def test_acl_restrictions_accept_ingestion_scalar_encoding(self):
+        """上传时列表会变成逗号字符串，ACL 必须按多个值解释。"""
+        from src.rag.retrieval.acl_filter import UserContext, check_doc_access
+
+        user = UserContext(
+            user_id="u-dev",
+            username="教师",
+            role="teacher",
+            department="dev",
+            department_name="研发部",
+            department_path="/研发部",
+        )
+        base = {
+            "confidentiality": "internal",
+            "visibility": "project",
+            "department_restrict": "dev,systems",
+            "role_restrict": '["teacher", "pi"]',
+        }
+
+        assert check_doc_access(base, user) is True
+        assert check_doc_access({**base, "department_restrict": "systems,network"}, user) is False
+        assert check_doc_access({**base, "role_restrict": "pi,admin"}, user) is False
+        assert check_doc_access({**base, "confidentiality": "unknown-level"}, user) is False
+
     @pytest.mark.asyncio
     async def test_role_escalation_attempt(self, mock_llm_factory):
         """
@@ -211,6 +270,64 @@ class TestSecurityAdversarial:
         # 应只剩 1 篇（年假文档）
         assert len(filtered) == 1
         assert "高管薪酬" not in str(filtered[0][0].page_content)
+
+    def test_vector_only_path_rechecks_department_and_time_before_top_k(self, monkeypatch):
+        """关闭 Hybrid 时也不能把 Chroma 粗过滤当成完整 ACL。"""
+        from src.rag.retrieval.acl_filter import UserContext
+        from src.rag.retrieval.retriever import RetrieverManager
+
+        user = UserContext(
+            user_id="u-dev",
+            username="研发用户",
+            role="teacher",
+            department="dev",
+            department_name="研发部",
+            department_path="/研发部",
+        )
+        denied_department = Document(
+            page_content="其他部门高分资料",
+            metadata={
+                "source": "其他组.md",
+                "confidentiality": "internal",
+                "visibility": "project",
+                "department_restrict": ["other"],
+            },
+        )
+        expired = Document(
+            page_content="已过期资料",
+            metadata={
+                "source": "旧资料.md",
+                "confidentiality": "internal",
+                "visibility": "project",
+                "department_restrict": ["dev"],
+                "expiry_date": (date.today() - timedelta(days=1)).isoformat(),
+            },
+        )
+        allowed = Document(
+            page_content="当前研发资料",
+            metadata={
+                "source": "研发资料.md",
+                "confidentiality": "internal",
+                "visibility": "project",
+                "department_restrict": ["dev"],
+            },
+        )
+        vectorstore = MagicMock()
+        vectorstore.similarity_search_with_score.return_value = [
+            (denied_department, 0.99),
+            (expired, 0.98),
+            (allowed, 0.80),
+        ]
+        monkeypatch.setattr(
+            "src.rag.retrieval.retriever.get_vectorstore",
+            lambda *_args, **_kwargs: vectorstore,
+        )
+        manager = RetrieverManager(use_reranker=False, use_hybrid=False)
+
+        results = manager.search_with_score_acl("研发资料", k=1, user=user)
+
+        assert results == [(allowed, 0.80)]
+        assert vectorstore.similarity_search_with_score.call_args.kwargs["k"] == 4
 
     @pytest.mark.asyncio
     async def test_sql_injection_in_metadata(self, mock_llm_factory):

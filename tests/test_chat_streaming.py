@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import pytest
 from langchain_core.documents import Document
 
+from src.rag.retrieval.acl_filter import UserContext
+
 
 chat_module = importlib.import_module("src.api.services.chat_service")
 
@@ -35,6 +37,31 @@ def _model_event(content: str, *, visible: bool = False):
 
 def _decode_sse(chunks):
     return [json.loads(chunk.removeprefix("data: ").strip()) for chunk in chunks]
+
+
+def test_source_cards_are_reauthorized_for_current_user():
+    user = UserContext(
+        user_id="u1",
+        username="普通员工",
+        role="employee",
+        department="dev",
+        department_name="研发部",
+        department_path="/研发部",
+    )
+    allowed = Document(
+        page_content="公开实验结论",
+        metadata={"title": "公开资料", "source": "公开.md", "confidentiality": "internal"},
+    )
+    denied = Document(
+        page_content="高管薪酬",
+        metadata={"title": "受限资料", "source": "薪酬.md", "confidentiality": "confidential"},
+    )
+
+    cards = chat_module.ChatService()._build_source_cards(
+        [denied, allowed], user_context=user
+    )
+
+    assert [card["title"] for card in cards] == ["公开资料"]
 
 
 @pytest.mark.asyncio

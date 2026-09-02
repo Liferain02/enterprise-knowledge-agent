@@ -90,7 +90,9 @@ class VectorStoreManager:
         ids: Optional[List[str]] = None
     ) -> List[str]:
         """添加文档到向量存储"""
-        return self.vectorstore.add_documents(documents, ids=ids)
+        result = self.vectorstore.add_documents(documents, ids=ids)
+        self._invalidate_hybrid_index()
+        return result
     
     def add_texts(
         self,
@@ -99,7 +101,9 @@ class VectorStoreManager:
         ids: Optional[List[str]] = None
     ) -> List[str]:
         """添加文本到向量存储"""
-        return self.vectorstore.add_texts(texts, metadatas, ids=ids)
+        result = self.vectorstore.add_texts(texts, metadatas, ids=ids)
+        self._invalidate_hybrid_index()
+        return result
     
     def similarity_search(
         self,
@@ -153,6 +157,7 @@ class VectorStoreManager:
         except Exception:
             pass
         self._vectorstore = None  # 重置实例，下次访问时重新创建
+        self._invalidate_hybrid_index()
 
     def list_documents(
         self,
@@ -181,6 +186,7 @@ class VectorStoreManager:
         """按 ID 删除 chunks。"""
         if ids:
             self.raw_collection.delete(ids=ids)
+            self._invalidate_hybrid_index()
         return len(ids)
     
     def reset(self):
@@ -190,6 +196,20 @@ class VectorStoreManager:
         except Exception:
             pass
         self._vectorstore = None  # 重置实例，下次访问时重新创建
+        self._invalidate_hybrid_index()
+
+    @staticmethod
+    def _invalidate_hybrid_index() -> None:
+        """若 Hybrid 单例已创建，使其 BM25 snapshot 在下次查询时重建。"""
+        try:
+            from src.rag.retrieval import hybrid_retriever
+
+            manager = hybrid_retriever._hybrid_retriever_manager
+            if manager is not None:
+                manager.invalidate_bm25_index()
+        except Exception:
+            # 向量库写入不能因可重建的内存索引失效操作失败。
+            pass
     
     def get_collection_info(self) -> Dict[str, Any]:
         """获取集合信息"""

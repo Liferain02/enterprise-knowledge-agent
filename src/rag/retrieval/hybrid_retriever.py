@@ -8,11 +8,10 @@ bm25s: Rust+Python 实现，比 rank_bm25 快 10 倍，内置中文分词（jieb
 参考：
 - https://github.com/xhluca/bm25s
 """
+import hashlib
+import json
 from typing import List, Optional, Dict, Any, Tuple
 from langchain_core.documents import Document
-from langchain_core.retrievers import BaseRetriever
-from langchain_classic.retrievers import EnsembleRetriever
-from langchain_community.retrievers import BM25Retriever
 import jieba
 import logging
 from rank_bm25 import BM25Okapi
@@ -28,6 +27,30 @@ RRF_K = 60
 
 # jieba 用户词典全局加载（只加载一次）
 _JIEBA_DICT_LOADED = False
+
+
+def _document_identity(doc: Document) -> str:
+    """返回跨进程稳定、且不会合并不同来源同文内容的 Chunk 身份。"""
+    metadata = doc.metadata or {}
+    identity = {
+        "source": metadata.get("doc_id") or metadata.get("source") or "",
+        "version": (
+            metadata.get("document_version")
+            or metadata.get("version_id")
+            or metadata.get("version")
+            or ""
+        ),
+        "chunk_id": metadata.get("chunk_id") or "",
+        "chunk_hash": metadata.get("chunk_hash") or "",
+    }
+    # 旧文档可能没有 chunk_id/chunk_hash；内容摘要只作为稳定兜底，并与
+    # 来源、版本共同参与计算，避免不同文档的相同段落被错误合并。
+    if not identity["chunk_id"] and not identity["chunk_hash"]:
+        identity["content_sha256"] = hashlib.sha256(
+            doc.page_content.encode("utf-8")
+        ).hexdigest()
+    payload = json.dumps(identity, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _ensure_jieba_dict():
@@ -81,10 +104,6 @@ class HybridRetrieverManager:
         self.enable_vector = enable_vector
         self.fusion_strategy = fusion_strategy
 
-        self._vector_retriever = None
-        self._bm25_retriever = None
-        self._ensemble_retriever = None
-
         # 用于 BM25 的文档集合
         self._documents: List[Document] = []
         self._vectorstore = None
@@ -102,17 +121,6 @@ class HybridRetrieverManager:
         if self._vectorstore is None:
             self._vectorstore = get_vectorstore(self.collection_name)
         return self._vectorstore
-
-    @property
-    def vector_retriever(self) -> BaseRetriever:
-        """获取向量检索器"""
-        if self._vector_retriever is None:
-            vectorstore = get_vectorstore(self.collection_name)
-            self._vector_retriever = vectorstore.as_retriever(
-                search_type="similarity",
-                search_kwargs={"k": self.top_k * 2}  # 检索更多候选
-            )
-        return self._vector_retriever
 
     def set_documents(self, documents: List[Document]):
         """
@@ -141,51 +149,39 @@ class HybridRetrieverManager:
                 self._bm25_backend = "rank_bm25"
                 logger.info(f"混合检索 BM25 引擎: rank_bm25 ({len(documents)} 篇文档)")
 
+    def _ensure_bm25_index(self) -> None:
+        """首次检索时从当前 Chroma snapshot 构建 BM25，避免名义 Hybrid。"""
+        if not self.enable_bm25 or self._bm25_index is not None:
+            return
+        try:
+            from ..storage.vectorstore import get_vectorstore_manager
+
+            manager = get_vectorstore_manager(self.collection_name)
+            count = manager.raw_collection.count()
+            if count <= 0:
+                return
+            payload = manager.list_documents(limit=count)
+            documents = [
+                Document(page_content=text or "", metadata=metadata or {})
+                for text, metadata in zip(
+                    payload.get("documents") or [],
+                    payload.get("metadatas") or [],
+                )
+                if text
+            ]
+            self.set_documents(documents)
+        except Exception as exc:
+            logger.warning("[Hybrid] BM25 语料加载失败，退化为向量检索: %s", exc)
+
+    def invalidate_bm25_index(self) -> None:
+        """文档入库或删除后使内存 BM25 snapshot 失效。"""
+        self._documents = []
+        self._tokenized_corpus = []
+        self._bm25_index = None
+
     def _tokenize(self, text: str) -> List[str]:
         """分词（统一使用 jieba）"""
         return [w.lower() for w in jieba.cut(text) if w.strip()]
-
-    @property
-    def bm25_retriever(self) -> Optional[BM25Retriever]:
-        """获取 BM25 检索器"""
-        if self._bm25_retriever is None and self.enable_bm25 and self._documents:
-            self._bm25_retriever = BM25Retriever.from_documents(
-                self._documents,
-                k=self.top_k * 2
-            )
-        return self._bm25_retriever
-
-    @property
-    def ensemble_retriever(self) -> Optional[EnsembleRetriever]:
-        """获取集成检索器"""
-        if self._ensemble_retriever is not None:
-            return self._ensemble_retriever
-
-        retrievers = []
-        weights = []
-
-        if self.enable_vector:
-            retrievers.append(self.vector_retriever)
-            weights.append(self.vector_weight)
-
-        if self.enable_bm25 and self.bm25_retriever:
-            retrievers.append(self.bm25_retriever)
-            weights.append(self.bm25_weight)
-
-        if not retrievers:
-            return None
-
-        # 归一化权重
-        total_weight = sum(weights)
-        if total_weight > 0:
-            weights = [w / total_weight for w in weights]
-
-        self._ensemble_retriever = EnsembleRetriever(
-            retrievers=retrievers,
-            weights=weights
-        )
-
-        return self._ensemble_retriever
 
     def search(
         self,
@@ -209,13 +205,8 @@ class HybridRetrieverManager:
         """
         k = k or self.top_k
 
-        if self.enable_bm25:
-            results_with_scores = self.search_with_scores(query, k=k, user=user)
-            return [doc for doc, _, _ in results_with_scores]
-
-        # 纯向量检索（带 ACL 过滤）
-        final_filter = self._build_acl_filter(user)
-        return self.vector_retriever.invoke(query, filter=final_filter)[:k]
+        results_with_scores = self.search_with_scores(query, k=k, user=user)
+        return [doc for doc, _, _ in results_with_scores]
 
     def _build_acl_filter(self, user: Optional[UserContext]) -> Optional[Dict[str, Any]]:
         """构建 ACL filter"""
@@ -265,37 +256,35 @@ class HybridRetrieverManager:
         """
         k = k or self.top_k
         candidate_k = k * 2  # 两路各取 2k，留足融合余量
+        self._ensure_bm25_index()
 
-        # ── 自适应权重：根据查询长度动态调整 BM25 vs 向量权重 ─────────────
-        # 短查询（≤8字）：BM25 更擅长精确关键词匹配，提升其权重
-        # 长查询（>8字）：向量语义检索更强，降低 BM25 权重
-        _ensure_jieba_dict()  # 安全加载用户词典
-        query_len = len(query.strip())
-        if query_len <= 4:
-            # 极短查询（≤4字）：BM25 占主导
-            vec_w = 0.3
-            bm_w = 0.7
-        elif query_len <= 8:
-            # 短查询（5-8字）：BM25 稍强
-            vec_w = 0.4
-            bm_w = 0.6
-        else:
-            # 正常查询（>8字）：保持配置权重
-            vec_w = self.vector_weight
-            bm_w = self.bm25_weight
+        # 固定使用配置权重。字符长度阈值没有独立消融依据，尤其中文字符数
+        # 不能稳定代表查询意图；默认 0.5/0.5 便于复现和解释。
+        _ensure_jieba_dict()
+        vec_w = self.vector_weight
+        bm_w = self.bm25_weight
 
         # ── 第一路：向量检索（返回 rank，带 ACL 过滤）───────────────
         vector_ranked: Dict[str, Tuple[Document, int]] = {}  # key → (doc, rank)
         if self.enable_vector:
             try:
                 final_filter = self._build_acl_filter(user)
+                # Chroma 只能预过滤密级/可见性；适度 over-fetch 后在进入候选
+                # 排名之前完成部门、角色和日期检查，避免无权限结果占满 top-k。
+                vector_fetch_k = candidate_k * 4 if user else candidate_k
                 results = self.vectorstore.similarity_search_with_score(
-                    query, k=candidate_k, filter=final_filter
+                    query, k=vector_fetch_k, filter=final_filter
                 )
-                for rank, (doc, raw_score) in enumerate(results, 1):
-                    key = hash(doc.page_content)
+                authorized_rank = 0
+                for doc, _raw_score in results:
+                    if user and not check_doc_access(doc.metadata or {}, user):
+                        continue
+                    authorized_rank += 1
+                    key = _document_identity(doc)
                     if key not in vector_ranked:
-                        vector_ranked[key] = (doc, rank)
+                        vector_ranked[key] = (doc, authorized_rank)
+                    if authorized_rank >= candidate_k:
+                        break
             except Exception as e:
                 logger.warning(f"[Hybrid] 向量检索错误: {e}")
 
@@ -336,11 +325,16 @@ class HybridRetrieverManager:
                             1 for t in tokens if t in t_lower
                         ) / max(len(tokens), 1)
 
-                scored = [(all_scores[i], doc) for i, doc in enumerate(self._documents) if all_scores[i] > 0]
+                scored = [
+                    (all_scores[i], doc)
+                    for i, doc in enumerate(self._documents)
+                    if all_scores[i] > 0
+                    and (not user or check_doc_access(doc.metadata or {}, user))
+                ]
                 scored.sort(key=lambda x: x[0], reverse=True)
 
                 for rank, (_, doc) in enumerate(scored[:candidate_k], 1):
-                    key = hash(doc.page_content)
+                    key = _document_identity(doc)
                     if key not in bm25_ranked:
                         bm25_ranked[key] = (doc, rank)
             except Exception as e:
@@ -375,7 +369,7 @@ class HybridRetrieverManager:
 
         # ── 组装返回 ──────────────────────────────────────────────────
         results = []
-        for key, score in fused[:k]:
+        for key, score in fused:
             doc = (
                 vector_ranked.get(key, bm25_ranked.get(key, (None, None)))[0]
                 if key in vector_ranked or key in bm25_ranked
@@ -391,7 +385,7 @@ class HybridRetrieverManager:
         # ── ACL 二次过滤（防止 filter 绕过）──────────────────────
         results = self._acl_filter_results(results, user)
 
-        return results
+        return results[:k]
 
     def _score_fusion(
         self,
@@ -423,82 +417,9 @@ class HybridRetrieverManager:
         for key in all_keys:
             vs = vec_norm.get(key, 0.0)
             bs = bm_norm.get(key, 0.0)
-            score = (1 - bm_weight) * vs + bm_weight * bs
+            score = vec_weight * vs + bm_weight * bs
             fused.append((key, score))
         return fused
-
-    def _get_vector_scores(self, documents: List[Document]) -> List[float]:
-        """
-        获取向量检索的相似度分数（已归一化到 0-1）
-
-        Args:
-            documents: 文档列表
-
-        Returns:
-            归一化后的分数列表
-        """
-        if not documents:
-            return []
-
-        # 向量检索通常返回余弦相似度，已在 0-1 范围
-        # 但为了安全起见，也做一次 Min-Max 归一化
-        scores = []
-        for doc in documents:
-            # 从元数据中获取相似度分数（如果存在）
-            score = doc.metadata.get("score") if doc.metadata else None
-            if score is None:
-                # 默认分数为 1.0（如果无法获取）
-                score = 1.0
-            scores.append(score)
-
-        return self._min_max_normalize(scores)
-
-    def _get_bm25_scores(self, documents: List[Document]) -> List[float]:
-        """
-        获取 BM25 检索的分数并进行归一化
-
-        Args:
-            documents: 文档列表
-
-        Returns:
-            归一化后的分数列表
-        """
-        if not documents:
-            return []
-
-        # 从元数据中获取 BM25 分数
-        scores = []
-        for doc in documents:
-            score = doc.metadata.get("score") if doc.metadata else None
-            if score is None:
-                # 如果无法获取分数，默认设为较低值
-                score = 0.0
-            scores.append(score)
-
-        # 对 BM25 分数进行 Min-Max 归一化到 0-1
-        return self._min_max_normalize(scores)
-
-    def _min_max_normalize(self, scores: List[float]) -> List[float]:
-        """
-        Min-Max 归一化：将分数映射到 0-1 范围
-
-        Args:
-            scores: 原始分数列表
-
-        Returns:
-            归一化后的分数列表
-        """
-        if not scores:
-            return []
-
-        min_score = min(scores)
-        max_score = max(scores)
-
-        # 如果所有分数相同，避免除以零
-        if max_score == min_score:
-            return [1.0] * len(scores)
-
-        return [(s - min_score) / (max_score - min_score) for s in scores]
 
     def format_results(
         self,

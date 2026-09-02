@@ -3,8 +3,10 @@ ACL 检索权限过滤器
 实现"检索前过滤"而非"回答后裁剪"，在 Chroma filter 层面完成权限控制。
 """
 import logging
+import json
+import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,8 @@ class Confidentiality:
     @classmethod
     def can_access(cls, user_role: str, doc_level: str) -> bool:
         """判断某角色是否能访问某密级的文档"""
+        if doc_level not in cls._LEVEL_RANK:
+            return False
         user_max = {
             "employee": cls.INTERNAL,
             "student": cls.INTERNAL,
@@ -134,6 +138,27 @@ def _get_user_attr(user, attr: str, default=None):
     return getattr(user, attr, default)
 
 
+def _restriction_values(value: Any) -> list[str]:
+    """兼容上传入库后的逗号字符串、JSON 数组和原生列表。"""
+    if value is None or value == "":
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        if stripped.startswith("["):
+            try:
+                decoded = json.loads(stripped)
+                if isinstance(decoded, list):
+                    return [str(item).strip() for item in decoded if str(item).strip()]
+            except (TypeError, ValueError):
+                pass
+        return [item.strip() for item in re.split(r"[,，;；]", stripped) if item.strip()]
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [str(value).strip()] if str(value).strip() else []
+
+
 def build_acl_filter(
     user: Optional[UserContext] = None,
     include_expired: bool = False,
@@ -161,7 +186,6 @@ def build_acl_filter(
         logger.debug("[ACL] 无用户上下文，返回不过滤")
         return None
 
-    today = date.today().isoformat()
     conditions = []
 
     # ────────────────────────────────────────────────────────────
@@ -250,10 +274,11 @@ def check_doc_access(
     用于回答后二次验证，防止 ACL filter 绕过。
 
     检查顺序：
-    1. 密级权限
-    2. 可见性
-    3. 部门限制
-    4. 角色限制
+    1. 文档生效/失效时间
+    2. 密级权限
+    3. 可见性
+    4. 部门限制
+    5. 角色限制
     """
     if not user:
         return False
@@ -263,7 +288,26 @@ def check_doc_access(
     if not is_active:
         return False
 
-    # 1. 密级检查
+    # 1. 版本时效检查。Chroma 无法可靠比较 ISO 日期字符串，因此在所有
+    # 检索路径共用的 Python 防线中检查。缺失日期兼容历史文档；字段存在
+    # 但格式错误时 fail closed，避免错误元数据绕过有效期限制。
+    today = date.today()
+    effective_date = _parse_metadata_date(doc_metadata.get("effective_date"))
+    expiry_date = _parse_metadata_date(doc_metadata.get("expiry_date"))
+    if effective_date is _INVALID_DATE or expiry_date is _INVALID_DATE:
+        logger.warning(
+            "[ACL] 文档 %s 的有效期格式无效，拒绝访问",
+            doc_metadata.get("doc_id", doc_metadata.get("source", "?")),
+        )
+        return False
+    if effective_date is not None and effective_date > today:
+        logger.debug("[ACL] 文档尚未生效: effective_date=%s", effective_date)
+        return False
+    if expiry_date is not None and expiry_date < today:
+        logger.debug("[ACL] 文档已过期: expiry_date=%s", expiry_date)
+        return False
+
+    # 2. 密级检查
     doc_level = doc_metadata.get("confidentiality", Confidentiality.INTERNAL)
     user_role = _get_user_attr(user, "role", "student")
     username = _get_user_attr(user, "username", "unknown")
@@ -274,7 +318,7 @@ def check_doc_access(
         )
         return False
 
-    # 2. 可见性检查
+    # 3. 可见性检查
     visibility = doc_metadata.get("visibility", "public")
     allowed_visibility = set(allowed_visibilities_for_role(user_role))
     if visibility not in allowed_visibility:
@@ -283,12 +327,10 @@ def check_doc_access(
         )
         return False
 
-    # 3. 部门限制检查
-    dept_restrict = doc_metadata.get("department_restrict", [])
+    # 4. 部门限制检查
+    dept_restrict = _restriction_values(doc_metadata.get("department_restrict"))
     # 无限制的语义：字段不存在/空字符串/空数组 → 允许访问
-    if dept_restrict and dept_restrict != "" and dept_restrict != []:
-        if isinstance(dept_restrict, str):
-            dept_restrict = [dept_restrict]
+    if dept_restrict:
         user_department = _get_user_attr(user, "department", "")
         # 如果文档有部门限制，但用户没有部门 → 拒绝
         if not user_department:
@@ -302,15 +344,41 @@ def check_doc_access(
             )
             return False
 
-    # 4. 角色限制检查
-    role_restrict = doc_metadata.get("role_restrict", [])
-    if role_restrict and role_restrict != "" and role_restrict != []:
-        if isinstance(role_restrict, str):
-            role_restrict = [role_restrict]
-        if user_role and user_role not in role_restrict:
+    # 5. 角色限制检查
+    role_restrict = _restriction_values(doc_metadata.get("role_restrict"))
+    if role_restrict:
+        if not user_role or user_role not in role_restrict:
             logger.warning(
                 f"[ACL] 用户角色 {user_role} 不在允许列表 {role_restrict}"
             )
             return False
 
     return True
+
+
+_INVALID_DATE = object()
+
+
+def _parse_metadata_date(value: Any):
+    """把常见元数据日期转为 date；空值表示不设边界，非法值单独标记。"""
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.utcfromtimestamp(value).date()
+        except (OverflowError, OSError, ValueError):
+            return _INVALID_DATE
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            # 同时兼容 YYYY-MM-DD 与 ISO datetime（含 Z 后缀）。
+            return date.fromisoformat(normalized[:10])
+        except ValueError:
+            return _INVALID_DATE
+    return _INVALID_DATE
