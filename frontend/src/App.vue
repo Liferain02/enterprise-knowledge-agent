@@ -1854,14 +1854,19 @@ const sendMessage = async () => {
 
     const reader = response.body!.getReader()
     const decoder = new TextDecoder()
+    let sseBuffer = ''
 
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
 
-      const chunk = decoder.decode(value, { stream: true })
-      // 解析 SSE 行：data: {"type": "...", "data": "..."}
-      for (const line of chunk.split('\n')) {
+      // 网络 chunk 不保证与 SSE 行边界对齐。保留最后一个半行，避免 token、
+      // sources 或 research_run_id 被拆包后静默丢失。
+      sseBuffer += decoder.decode(value, { stream: true })
+      const lines = sseBuffer.split('\n')
+      sseBuffer = lines.pop() || ''
+      // 解析完整 SSE 行：data: {"type": "...", "data": "..."}
+      for (const line of lines) {
         if (!line.startsWith('data: ')) continue
         try {
           const event = JSON.parse(line.slice(6))
@@ -1901,6 +1906,21 @@ const sendMessage = async () => {
         } catch {
           // 忽略解析错误（SSE 行可能不完整）
         }
+      }
+    }
+
+    // 正常 SSE 以换行结束；仍处理服务端关闭前可能留下的最后一行。
+    sseBuffer += decoder.decode()
+    if (sseBuffer.startsWith('data: ')) {
+      try {
+        const event = JSON.parse(sseBuffer.slice(6))
+        if (event.type === 'llm_token' && event.data) partialAnswer.value += event.data
+        else if (event.type === 'used_agent' && event.data) currentAgent.value = event.data
+        else if (event.type === 'sources' && event.data) pendingSources.value = Array.isArray(event.data) ? event.data : []
+        else if (event.type === 'version_source' && event.data) pendingVersionSource.value = event.data
+        else if (event.type === 'research_run_id' && event.data) pendingResearchRunId.value = event.data
+      } catch {
+        // 服务端异常中断时保留已完整接收的内容，不把协议碎片显示给用户。
       }
     }
 

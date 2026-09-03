@@ -99,9 +99,13 @@ class AnalysisReport(BaseModel):
 class ReviewItem(BaseModel):
     """Reviewer 对单条声明的检查结果。"""
 
-    claim: str
+    claim: str = Field(
+        default="",
+        validation_alias=AliasChoices("claim", "claim_text", "claim_id"),
+    )
     source_ids: List[str] = Field(default_factory=list)
-    supported: bool
+    # Reviewer 指出问题却省略 supported 时必须按“不通过”处理，不能默认放行。
+    supported: bool = False
     issue_type: Literal[
         "none",
         "unsupported",
@@ -114,16 +118,47 @@ class ReviewItem(BaseModel):
     ] = "none"
     revision_instruction: str = ""
 
+    @field_validator("issue_type", mode="before")
+    @classmethod
+    def normalize_issue_type(cls, value: Any) -> Any:
+        """把 Qwen 的“证据未形成声明”归入现有引用缺口类型。"""
+        normalized = str(value or "").strip().lower()
+        if "missing_claim" in normalized or normalized == "uncovered_evidence":
+            return "citation_gap"
+        if "source" in normalized:
+            return "invalid_source"
+        if "conflict" in normalized:
+            return "conflict"
+        if "premise" in normalized:
+            return "false_premise"
+        if "acl" in normalized or "access" in normalized:
+            return "acl"
+        if "evidence" in normalized:
+            return "missing_evidence"
+        if normalized not in {
+            "none", "unsupported", "invalid_source", "false_premise",
+            "conflict", "acl", "missing_evidence", "citation_gap",
+        }:
+            # 未知问题不能使整个 Reviewer 结果解析失败，也不能被当成通过。
+            return "unsupported"
+        return normalized
+
 
 class ReviewReport(BaseModel):
     """Reviewer -> Finalizer/Analyst 的唯一主要协议。"""
 
+    # 部分 Qwen 兼容接口会返回 review_items，却偶尔漏掉顶层 decision。
+    # 默认 REVISE 是安全降级：最多触发既有的一次受限修订，不会放行未复核声明。
     decision: Literal["PASS", "REVISE", "NEED_MORE_EVIDENCE"] = Field(
+        default="REVISE",
         validation_alias=AliasChoices(
             "decision", "review_result", "review_decision", "reviewer_decision", "status",
         )
     )
-    items: List[ReviewItem] = Field(default_factory=list)
+    items: List[ReviewItem] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("items", "review_items"),
+    )
     premise_assessment: Literal[
         "not_applicable", "supported", "unsupported", "insufficient"
     ] = "not_applicable"
@@ -959,6 +994,13 @@ async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             overall_instruction="复核服务失败；仅保留有明确引用的声明。",
         )
         usage = {"input_tokens": 0, "output_tokens": 0}
+
+    # Qwen 偶尔用 claim_id 代替原声明文本。解析后在现有 AnalysisReport 内
+    # 回填，不引入第二套协议，也不允许模型提供的未知文本绕过引用校验。
+    claims_by_id = {claim.claim_id: claim.text for claim in analysis.claims}
+    for item in report.items:
+        if item.claim in claims_by_id:
+            item.claim = claims_by_id[item.claim]
 
     if deterministic:
         report.items = deterministic + report.items

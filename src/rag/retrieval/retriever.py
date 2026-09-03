@@ -274,7 +274,9 @@ class RetrieverManager:
             # 所以在结果层面过滤 base_filter 条件更可靠）
             if base_filter:
                 results = self._filter_results_by_base(results, base_filter)
-            return [(doc, score) for doc, score, _ in results]
+            # 未过滤的 Hybrid 结果为 (doc, score, source)，结果层过滤后会
+            # 统一成 (doc, score)。两种形态都只向上层暴露稳定的二元组。
+            return [(row[0], row[1]) for row in results]
 
         vectorstore = get_vectorstore(self.collection_name)
         fetch_k = k * 4 if user else k

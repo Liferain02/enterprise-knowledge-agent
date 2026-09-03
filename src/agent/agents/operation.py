@@ -115,8 +115,9 @@ async def operation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.exception("操作执行出错: %s", e)
-        
+        answer = "工具执行未能在有限步骤内完成，请换一种更明确的说法后重试。"
         return {
-            "final_answer": f"执行操作时出错: {str(e)}",
-            "used_agent": "operation_agent"
+            "final_answer": answer,
+            "used_agent": "operation_agent",
+            "messages": [AIMessage(content=answer)],
         }

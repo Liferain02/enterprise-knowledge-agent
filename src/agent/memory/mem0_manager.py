@@ -362,10 +362,15 @@ class Mem0MemoryManager:
             return {"success": False, "error": "Mem0 未初始化"}
         
         try:
-            result = self._client.update(
+            memory = await asyncio.to_thread(self._client.get, memory_id)
+            if not isinstance(memory, dict) or memory.get("user_id") != user_id:
+                return {"success": False, "error": "记忆不存在或无权修改"}
+            # mem0 1.x 的单条 update/delete 以全局 memory_id 定位，不接受
+            # user_id；因此调用前先用记录归属做应用层校验。
+            result = await asyncio.to_thread(
+                self._client.update,
                 memory_id=memory_id,
                 data=content,
-                user_id=user_id
             )
             return {"success": True, "result": result}
             
@@ -394,7 +399,10 @@ class Mem0MemoryManager:
             return {"success": True}
         
         try:
-            self._client.delete(memory_id=memory_id, user_id=user_id)
+            memory = await asyncio.to_thread(self._client.get, memory_id)
+            if not isinstance(memory, dict) or memory.get("user_id") != user_id:
+                return {"success": False, "error": "记忆不存在或无权删除"}
+            await asyncio.to_thread(self._client.delete, memory_id=memory_id)
             return {"success": True}
             
         except Exception as e:

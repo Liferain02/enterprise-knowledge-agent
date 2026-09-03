@@ -168,6 +168,54 @@ def test_review_report_accepts_qwen_reviewer_decision_alias():
     assert report.decision == "REVISE"
 
 
+def test_review_report_safely_accepts_qwen_review_items_without_decision():
+    report = team.ReviewReport.model_validate({
+        "review_items": [{
+            "claim": "需要补充变量控制说明",
+            "source_ids": ["S1"],
+            "supported": False,
+            "issue_type": "citation_gap",
+            "revision_instruction": "绑定依据；若无则补充说明。",
+        }],
+    })
+
+    assert report.decision == "REVISE"
+    assert len(report.items) == 1
+    assert report.items[0].issue_type == "citation_gap"
+
+
+def test_review_report_normalizes_qwen_uncovered_evidence_item():
+    report = team.ReviewReport.model_validate({
+        "review_items": [{
+            "claim": "证据中的关键条件尚未形成声明",
+            "source_ids": ["S1"],
+            "issue_type": "missing_claim_from_evidence",
+            "revision_instruction": "补充有引用的声明。",
+        }],
+    })
+
+    assert report.decision == "REVISE"
+    assert report.items[0].supported is False
+    assert report.items[0].issue_type == "citation_gap"
+
+    compact_alias = team.ReviewReport.model_validate({
+        "review_items": [{
+            "claim": "遗漏声明",
+            "issue_type": "missing_claim_evidence",
+        }],
+    })
+    assert compact_alias.items[0].issue_type == "citation_gap"
+
+    free_form_alias = team.ReviewReport.model_validate({
+        "review_items": [{
+            "claim_id": "C1",
+            "issue_type": "weak_inference",
+        }],
+    })
+    assert free_form_alias.items[0].claim == "C1"
+    assert free_form_alias.items[0].issue_type == "unsupported"
+
+
 def test_analysis_normalization_moves_transient_limitation_out_of_claims():
     package = team.EvidencePackage(original_question="问题")
     report = team.AnalysisReport(claims=[team.Claim(
@@ -299,6 +347,42 @@ async def test_reviewer_overrides_pass_when_claim_has_invalid_citation(monkeypat
     report = team.ReviewReport.model_validate(result["review_report"])
     assert report.decision == "REVISE"
     assert report.items[0].issue_type == "invalid_source"
+
+
+@pytest.mark.asyncio
+async def test_reviewer_resolves_qwen_claim_id_to_original_claim(monkeypatch):
+    package = team.EvidencePackage(
+        original_question="问题",
+        evidences=[team.EvidenceItem(
+            source_id="S1", subquestion="问题", title="资料",
+            source="资料.md", excerpt="原始证据",
+        )],
+    )
+    analysis = team.AnalysisReport(claims=[team.Claim(
+        claim_id="C1", text="原始声明", claim_type="fact", source_ids=["S1"],
+    )])
+    model_report = team.ReviewReport.model_validate({
+        "decision": "REVISE",
+        "review_items": [{
+            "claim_id": "C1",
+            "issue_type": "unsupported_definition",
+            "revision_instruction": "删除不受支持的定义。",
+        }],
+    })
+    monkeypatch.setattr(
+        team,
+        "_invoke_structured",
+        AsyncMock(return_value=(model_report, {"input_tokens": 1, "output_tokens": 1})),
+    )
+
+    result = await team.reviewer_agent_node({
+        "evidence_package": package.model_dump(),
+        "analysis_report": analysis.model_dump(),
+    })
+
+    item = team.ReviewReport.model_validate(result["review_report"]).items[0]
+    assert item.claim == "原始声明"
+    assert item.issue_type == "unsupported"
 
 
 @pytest.mark.asyncio

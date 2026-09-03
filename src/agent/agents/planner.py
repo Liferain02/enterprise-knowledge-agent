@@ -29,9 +29,15 @@ def _quick_route(question: str) -> str:
     if any(word in query for word in time_keywords):
         return "operation_agent"
 
-    history_keywords = ("上一", "之前的问题", "之前的对话", "前一次", "刚才")
-    if any(word in query for word in history_keywords):
-        return "operation_agent"
+    # “它/那/上一轮”等资料追问应继续走知识检索，由 StandaloneQueryRewriter
+    # 结合最近一轮补全指代。只有明确询问个人历史或偏好时才走带会话记忆的
+    # General Agent；这类请求不需要文件、时间或计算工具。
+    personal_history_patterns = (
+        r"我(?:之前|刚才|上次).{0,12}(?:关注|偏好|提到|说过|问过|讨论过|研究)",
+        r"(?:还记得|记不记得).{0,8}我",
+    )
+    if any(re.search(pattern, query) for pattern in personal_history_patterns):
+        return "general_agent"
 
     arithmetic = re.search(
         r"\d+(?:\.\d+)?\s*(?:[+\-*/×÷%^]|乘以|除以|加上|减去)\s*\d+(?:\.\d+)?",

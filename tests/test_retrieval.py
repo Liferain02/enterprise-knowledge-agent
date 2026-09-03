@@ -42,6 +42,7 @@ from src.rag.retrieval.hybrid_retriever import (
     _document_identity,
 )
 from src.rag.retrieval.acl_filter import UserContext
+from src.rag.retrieval.retriever import RetrieverManager
 
 
 # ================================================================
@@ -944,6 +945,22 @@ class TestQueryExpansionAdversarial:
             assert len(history) >= 1
         finally:
             mock_rm.search_with_score_acl = original_search
+
+
+def test_hybrid_base_filter_keeps_stable_document_score_pairs():
+    doc = Document(page_content="RDMA", metadata={"doc_type": "project_doc"})
+    hybrid = MagicMock()
+    hybrid.search_with_scores.return_value = [(doc, 0.91, "hybrid")]
+    manager = RetrieverManager(use_reranker=False, use_hybrid=True)
+    manager._hybrid_manager = hybrid
+
+    results = manager.search_with_score_acl(
+        "RDMA",
+        k=1,
+        base_filter={"doc_type": {"$eq": "project_doc"}},
+    )
+
+    assert results == [(doc, 0.91)]
 
 
 # ================================================================

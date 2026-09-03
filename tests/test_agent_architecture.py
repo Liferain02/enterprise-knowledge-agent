@@ -199,6 +199,8 @@ async def test_default_retrieval_rejects_meaningless_input_before_search(monkeyp
         ("帮我计算 123 * 456 = ?", "operation_agent"),
         ("实验室组会多久一次", "retrieval_agent"),
         ("有哪些 RDMA 实验要求", "retrieval_agent"),
+        ("它还要求做哪些基准测试？只补充上一轮没有说清的部分。", "retrieval_agent"),
+        ("我之前关注哪个研究方向？", "general_agent"),
     ],
 )
 async def test_product_queries_have_one_deterministic_route(query, expected_route):
