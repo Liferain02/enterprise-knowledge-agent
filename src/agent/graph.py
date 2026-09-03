@@ -259,13 +259,27 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
             logger.debug("Mem0 无相关记忆，耗时 %.2fs", _time.time()-t0)
             return {}
 
+        memories, memory_stats = mem0_manager.filter_memories_for_current_user(
+            memories,
+            state.get("user_context"),
+        )
+        if not memories:
+            logger.debug(
+                "Mem0 候选全部被 Recall Gate 过滤: %s",
+                memory_stats,
+            )
+            return {}
+
         # 格式化记忆
         formatted_memories = mem0_manager.format_memories_for_context(
             memories,
             max_chars=getattr(settings, "mem0_max_context_chars", 500)
         )
 
-        logger.debug("Mem0 检索到 %d 条相关记忆，耗时 %.2fs", len(memories), _time.time()-t0)
+        logger.debug(
+            "Mem0 允许注入 %d 条记忆，耗时 %.2fs，统计=%s",
+            len(memories), _time.time()-t0, memory_stats,
+        )
 
         return {"mem0_memories": formatted_memories}
 

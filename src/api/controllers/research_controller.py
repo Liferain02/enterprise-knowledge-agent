@@ -106,11 +106,14 @@ async def confirm_research_claim_memory(
             user_id=current_user.get("username", "anonymous"),
             metadata={
                 "memory_type": "confirmed_research_fact",
+                "scope": "research",
+                "project_id": candidate["project_id"],
                 "research_run_id": run_id,
                 "claim_id": claim_id,
                 "source_ids": candidate["source_ids"],
                 "review_decision": "PASS",
                 "user_confirmed": True,
+                "verified": True,
             },
             # Claim 已经过证据、Reviewer 和用户三重确认，不再让 Mem0 的
             # 提取 LLM 改写一次；精确存储也显著降低按钮等待时间。

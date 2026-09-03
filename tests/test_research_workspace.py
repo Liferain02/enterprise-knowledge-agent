@@ -245,6 +245,10 @@ def test_only_reviewed_evidence_backed_fact_can_be_confirmed_as_memory(tmp_path)
                         "claim_id": "C2", "text": "下一步应更换网卡。",
                         "claim_type": "recommendation", "source_ids": ["S1"],
                     },
+                    {
+                        "claim_id": "C3", "text": "推断瓶颈可能位于网卡。",
+                        "claim_type": "inference", "source_ids": ["S1"],
+                    },
                 ],
             },
             "review_report": {"decision": "PASS", "acl_verified": True, "items": []},
@@ -261,6 +265,8 @@ def test_only_reviewed_evidence_backed_fact_can_be_confirmed_as_memory(tmp_path)
 
     with pytest.raises(ValueError, match="事实类"):
         service.prepare_confirmed_claim(saved["id"], "C2", user)
+    with pytest.raises(ValueError, match="事实类"):
+        service.prepare_confirmed_claim(saved["id"], "C3", user)
 
 
 def test_rejected_or_unreferenced_claim_cannot_be_confirmed_as_memory(tmp_path):
@@ -331,6 +337,18 @@ async def test_confirmed_fact_is_stored_exactly_without_second_llm_inference(tmp
     assert response.stored is True
     assert manager.add_conversation.await_args.kwargs["infer"] is False
     assert "带宽为 91 Gbps" in manager.add_conversation.await_args.kwargs["messages"][0]["content"]
+    metadata = manager.add_conversation.await_args.kwargs["metadata"]
+    assert metadata == {
+        "memory_type": "confirmed_research_fact",
+        "scope": "research",
+        "project_id": "",
+        "research_run_id": saved["id"],
+        "claim_id": "C1",
+        "source_ids": ["S1"],
+        "review_decision": "PASS",
+        "user_confirmed": True,
+        "verified": True,
+    }
 
     manager.add_conversation.reset_mock()
     repeated = await research_controller.confirm_research_claim_memory(

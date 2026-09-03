@@ -543,6 +543,7 @@ class ResearchService:
 
         return {
             "run_id": run_id,
+            "project_id": str(detail.get("project_id") or ""),
             "claim_id": claim_id,
             "text": claim_text,
             "source_ids": source_ids,
@@ -552,6 +553,37 @@ class ResearchService:
             ],
             "already_confirmed": claim_id in (detail.get("confirmed_claim_ids") or []),
         }
+
+    def validate_confirmed_research_memory(
+        self,
+        run_id: str,
+        claim_id: str,
+        source_ids: list[str],
+        project_id: str,
+        user: dict,
+    ) -> bool:
+        """按当前 Research Run、Reviewer 与 Evidence ACL 验证科研记忆。
+
+        Mem0 仅提供候选召回。这里复用事实提升入口完成可信性与权限检查；
+        任何记录缺失、元数据不一致或权限变化均 fail closed。
+        """
+        normalized_sources = [
+            str(source_id).strip() for source_id in source_ids
+            if str(source_id).strip()
+        ]
+        if not run_id or not claim_id or not normalized_sources:
+            return False
+        try:
+            candidate = self.prepare_confirmed_claim(run_id, claim_id, user)
+        except (PermissionError, ValueError, TypeError):
+            return False
+        return (
+            candidate.get("already_confirmed") is True
+            and str(candidate.get("project_id") or "") == str(project_id or "")
+            and set(candidate.get("source_ids") or []) == set(normalized_sources)
+            and len(candidate.get("source_ids") or []) == len(set(normalized_sources))
+            and len(normalized_sources) == len(set(normalized_sources))
+        )
 
     def record_memory_confirmation(
         self,

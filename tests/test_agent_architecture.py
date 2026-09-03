@@ -346,6 +346,44 @@ async def test_mem0_uses_one_user_level_search(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_mem0_recall_filters_candidates_before_context_injection(monkeypatch):
+    preference = {"memory": "用户偏好简洁回答", "metadata": {"memory_type": "preference"}}
+    research = {"memory": "已撤权科研事实", "metadata": {"scope": "research"}}
+    formatter = MagicMock(return_value="【相关记忆】\n- 用户偏好简洁回答")
+    manager = SimpleNamespace(
+        search=AsyncMock(return_value=[preference, research]),
+        filter_memories_for_current_user=MagicMock(return_value=(
+            [preference],
+            {
+                "memory_candidates": 2,
+                "memory_allowed": 1,
+                "memory_acl_filtered": 1,
+                "memory_invalid_metadata": 0,
+                "memory_research_verified": 0,
+            },
+        )),
+        format_memories_for_context=formatter,
+    )
+    settings = SimpleNamespace(mem0_enabled=True, mem0_max_context_chars=500)
+    user_context = {"username": "alice", "role": "student"}
+    monkeypatch.setattr("config.settings.get_settings", lambda: settings)
+    monkeypatch.setattr("src.agent.memory.get_mem0_manager", lambda: manager)
+
+    result = await retrieve_mem0_memories_node({
+        "messages": [HumanMessage(content="我偏好什么回答方式？")],
+        "session_id": "session-1",
+        "user_id": "alice",
+        "user_context": user_context,
+    })
+
+    manager.filter_memories_for_current_user.assert_called_once_with(
+        [preference, research], user_context,
+    )
+    formatter.assert_called_once_with([preference], max_chars=500)
+    assert "已撤权科研事实" not in result["mem0_memories"]
+
+
+@pytest.mark.asyncio
 async def test_mem0_writes_once_and_excludes_tool_and_assistant_messages(monkeypatch):
     manager = SimpleNamespace(add_conversation=AsyncMock(return_value={"success": True}))
     settings = SimpleNamespace(mem0_enabled=True)
@@ -361,6 +399,7 @@ async def test_mem0_writes_once_and_excludes_tool_and_assistant_messages(monkeyp
             ],
             "session_id": "session-1",
             "user_id": "alice",
+            "research_mode": "normal",
         }
     )
     # 保存是后台任务；让事件循环执行已调度任务，但不让用户链路等待其耗时。
@@ -372,6 +411,33 @@ async def test_mem0_writes_once_and_excludes_tool_and_assistant_messages(monkeyp
         ],
         user_id="alice",
         session_id="session-1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_deep_research_final_answer_never_enters_automatic_mem0_save(monkeypatch):
+    manager = SimpleNamespace(add_conversation=AsyncMock(return_value={"success": True}))
+    monkeypatch.setattr(
+        "config.settings.get_settings", lambda: SimpleNamespace(mem0_enabled=True),
+    )
+    monkeypatch.setattr("src.agent.memory.get_mem0_manager", lambda: manager)
+
+    await save_to_mem0_node({
+        "messages": [
+            HumanMessage(content="综合分析项目实验"),
+            AIMessage(content="这是包含推断和建议的 Deep Research Final Answer"),
+        ],
+        "session_id": "deep-session",
+        "user_id": "alice",
+        "research_mode": "deep",
+        "used_agent": "deep_research",
+    })
+    await asyncio.sleep(0)
+
+    manager.add_conversation.assert_awaited_once_with(
+        messages=[{"role": "user", "content": "综合分析项目实验"}],
+        user_id="alice",
+        session_id="deep-session",
     )
 
 

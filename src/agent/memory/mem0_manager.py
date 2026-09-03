@@ -204,6 +204,105 @@ class Mem0MemoryManager:
             logger.error(f"Mem0 检索记忆失败: {e}")
             return []
 
+    @staticmethod
+    def _user_context_dict(user_context: Any) -> Optional[Dict[str, Any]]:
+        """把 Agent UserContext 转成 ResearchService 使用的轻量身份字典。"""
+        if isinstance(user_context, dict):
+            return dict(user_context)
+        if user_context is None:
+            return None
+        fields = (
+            "user_id", "username", "role", "department", "department_name",
+            "department_path", "is_active",
+        )
+        return {
+            field: getattr(user_context, field)
+            for field in fields if hasattr(user_context, field)
+        }
+
+    def filter_memories_for_current_user(
+        self,
+        memories: List[Dict[str, Any]],
+        user_context: Any,
+    ) -> tuple[List[Dict[str, Any]], Dict[str, int]]:
+        """过滤 Mem0 候选；科研事实必须重新通过当前 Research ACL。
+
+        普通用户记忆维持原行为。带 research 标记的候选一旦无法完整验证，
+        一律拒绝，不从记忆文本推断身份或权限。
+        """
+        from src.api.services.research_service import research_service
+
+        stats = {
+            "memory_candidates": len(memories),
+            "memory_allowed": 0,
+            "memory_acl_filtered": 0,
+            "memory_invalid_metadata": 0,
+            "memory_research_verified": 0,
+        }
+        allowed: List[Dict[str, Any]] = []
+        current_user = self._user_context_dict(user_context)
+
+        for memory in memories:
+            if not isinstance(memory, dict):
+                stats["memory_invalid_metadata"] += 1
+                continue
+            metadata = memory.get("metadata")
+            metadata = metadata if isinstance(metadata, dict) else {}
+            memory_type = metadata.get("memory_type") or memory.get("memory_type")
+            scope = metadata.get("scope") or memory.get("scope")
+            is_research = memory_type == "confirmed_research_fact" or scope == "research"
+
+            if not is_research:
+                allowed.append(memory)
+                continue
+
+            source_ids = metadata.get("source_ids")
+            required_metadata_valid = (
+                isinstance(memory.get("metadata"), dict)
+                and metadata.get("memory_type") == "confirmed_research_fact"
+                and metadata.get("scope") == "research"
+                and "project_id" in metadata
+                and bool(str(metadata.get("research_run_id") or "").strip())
+                and bool(str(metadata.get("claim_id") or "").strip())
+                and isinstance(source_ids, list)
+                and bool(source_ids)
+                and metadata.get("review_decision") == "PASS"
+                and metadata.get("user_confirmed") is True
+                and metadata.get("verified") is True
+                and bool(current_user)
+            )
+            if not required_metadata_valid:
+                stats["memory_invalid_metadata"] += 1
+                continue
+
+            try:
+                valid = research_service.validate_confirmed_research_memory(
+                    run_id=str(metadata["research_run_id"]),
+                    claim_id=str(metadata["claim_id"]),
+                    source_ids=source_ids,
+                    project_id=str(metadata.get("project_id") or ""),
+                    user=current_user,
+                )
+            except Exception:
+                valid = False
+            if not valid:
+                stats["memory_acl_filtered"] += 1
+                continue
+            allowed.append(memory)
+            stats["memory_research_verified"] += 1
+
+        stats["memory_allowed"] = len(allowed)
+        logger.debug(
+            "Mem0 Recall Gate: candidates=%d allowed=%d acl_filtered=%d "
+            "invalid_metadata=%d research_verified=%d",
+            stats["memory_candidates"],
+            stats["memory_allowed"],
+            stats["memory_acl_filtered"],
+            stats["memory_invalid_metadata"],
+            stats["memory_research_verified"],
+        )
+        return allowed, stats
+
     async def get_all_memories(
         self,
         user_id: str = "default_user",
