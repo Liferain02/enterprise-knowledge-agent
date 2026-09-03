@@ -64,9 +64,14 @@ def summarize(results: Dict[str, Any], labels: Dict[str, Any]) -> Dict[str, Any]
         raise ValueError("人工校准必须覆盖预先选定的 4/20 cases")
 
     predictions = _prediction_map(results)
+    plan = results.get("human_calibration_plan") or {}
+    planned_task_ids = set(plan.get("task_ids") or [])
     tasks = labels.get("tasks") or []
-    if not tasks or {task["task_id"] for task in tasks} != set(predictions):
-        raise ValueError("人工任务与冻结 Qwen Judge 项目不完整或不一致")
+    task_ids = {task["task_id"] for task in tasks}
+    if not tasks or not planned_task_ids or task_ids != planned_task_ids:
+        raise ValueError("人工任务与冻结的分层抽样计划不完整或不一致")
+    if not task_ids <= set(predictions):
+        raise ValueError("人工任务包含不存在的 Qwen Judge 项目")
 
     pairs: list[tuple[str, str]] = []
     by_axis: Dict[str, list[tuple[str, str]]] = defaultdict(list)

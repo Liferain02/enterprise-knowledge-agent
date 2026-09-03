@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from unittest.mock import AsyncMock
 
@@ -50,6 +51,91 @@ def test_v3_dataset_has_frozen_ground_truth_and_known_sources():
         set(claim.source_doc_ids) <= known_sources
         for case in V3_CLAIM_EVAL_DATASET for claim in case.atomic_claims
     )
+
+
+def test_v3_freeze_validation_separates_generation_from_judge(tmp_path, monkeypatch):
+    manifest_path = tmp_path / "freeze.json"
+    frozen = {
+        "dataset_sha256": "dataset-v1",
+        "corpus_snapshot_sha256": "corpus-v1",
+        "implementation_snapshot_sha256": "generation-v1",
+        "variants": list(runner.VARIANTS),
+        "implementation_files": {
+            "src/agent/agents/research_team.py": "research-v1",
+            "tests/eval/claim_level_evaluator.py": "judge-v1",
+        },
+    }
+    current = {
+        **frozen,
+        "implementation_snapshot_sha256": "generation-v2",
+        "implementation_files": {
+            **frozen["implementation_files"],
+            "src/agent/agents/research_team.py": "research-v2",
+        },
+    }
+    manifest_path.write_text(json.dumps(frozen), encoding="utf-8")
+    monkeypatch.setattr(runner, "FREEZE_MANIFEST", manifest_path)
+    monkeypatch.setattr(runner, "_freeze_payload", lambda: current)
+
+    assert runner.ensure_freeze_manifest("judge") == frozen
+    with pytest.raises(RuntimeError, match="implementation_snapshot_sha256"):
+        runner.ensure_freeze_manifest("generation")
+
+    current["implementation_files"]["tests/eval/claim_level_evaluator.py"] = "judge-v2"
+    with pytest.raises(RuntimeError, match="Claim Judge"):
+        runner.ensure_freeze_manifest("judge")
+
+
+def test_human_calibration_tasks_are_deterministically_stratified():
+    rows = []
+    selected = {"V301", "V306", "V311", "V316"}
+    for case in V3_CLAIM_EVAL_DATASET:
+        if case.case_id not in selected:
+            continue
+        variants = {}
+        for variant in runner.VARIANTS:
+            variants[variant] = {
+                "answer": "回答",
+                "retrieved_contexts": [{"context_id": "N1", "text": "证据"}],
+                "claim_evaluation": {
+                    "response_claims": [
+                        {"claim_id": "R1", "text": "回答声明一"},
+                        {"claim_id": "R2", "text": "回答声明二"},
+                    ],
+                    "response_to_ground_truth": [
+                        {"item_id": "R1", "verdict": "supported"},
+                        {"item_id": "R2", "verdict": "supported"},
+                    ],
+                    "ground_truth_to_response": [{
+                        "item_id": case.atomic_claims[0].claim_id,
+                        "verdict": "supported",
+                    }],
+                    "response_to_context": [
+                        {"item_id": "R1", "verdict": "supported"},
+                        {"item_id": "R2", "verdict": "supported"},
+                    ],
+                },
+            }
+        rows.append({"case": {"case_id": case.case_id}, "variants": variants})
+
+    first = runner._human_task_payload({"results": rows})
+    second = runner._human_task_payload({"results": rows})
+
+    assert first["selected_task_count"] == 36
+    assert first["candidate_task_count"] == 60
+    assert first["task_selection_sha256"] == second["task_selection_sha256"]
+    assert {(
+        task["case_id"], task["variant"], task["axis"]
+    ) for task in first["tasks"]} == {
+        (case_id, variant, axis)
+        for case_id in selected
+        for variant in runner.VARIANTS
+        for axis in (
+            "response_to_ground_truth",
+            "ground_truth_to_response",
+            "response_to_context",
+        )
+    }
 
 
 def test_qwen_claim_content_alias_is_normalized_to_text():
@@ -239,6 +325,7 @@ def _calibration_fixture(human_verdict="supported"):
     results = {
         "results": rows,
         "decision": {"quality_gate_preliminary": True, "cost_gate_preliminary": True},
+        "human_calibration_plan": {"task_ids": [task["task_id"] for task in tasks]},
     }
     labels = {
         "reviewer_id": "independent-reviewer",

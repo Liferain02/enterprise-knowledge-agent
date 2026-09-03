@@ -64,6 +64,7 @@ VARIANTS = ("normal", "deep_gated", "deep_full")
 CALIBRATION_CASES = ("V301", "V306", "V311", "V316")
 QUALITY_TOLERANCE = 0.02
 COST_REDUCTION_GATE = 0.05
+CALIBRATION_ITEMS_PER_STRATUM = 1
 
 
 def _sha256_bytes(content: bytes) -> str:
@@ -143,17 +144,34 @@ def _freeze_payload() -> Dict[str, Any]:
     }
 
 
-def ensure_freeze_manifest() -> Dict[str, Any]:
+def ensure_freeze_manifest(validation_scope: str = "generation") -> Dict[str, Any]:
+    """按评测阶段验证冻结边界。
+
+    generation 会执行完整模型链，必须要求语料与生成实现均未变化。
+    judge 只消费已经落盘的 answer/context 快照，因此只要求数据集与
+    Claim Judge 实现未变化；生成代码后续演进不应阻塞未完成的评分，
+    但会在结果中留下 drift 审计记录。
+    """
+    if validation_scope not in {"generation", "judge"}:
+        raise ValueError(f"未知冻结校验范围: {validation_scope}")
     current = _freeze_payload()
     if FREEZE_MANIFEST.exists():
         frozen = json.loads(FREEZE_MANIFEST.read_text(encoding="utf-8"))
-        for field in (
-            "dataset_sha256", "corpus_snapshot_sha256",
-            "implementation_snapshot_sha256", "variants",
-        ):
+        fields = ["dataset_sha256", "variants"]
+        if validation_scope == "generation":
+            fields.extend(("corpus_snapshot_sha256", "implementation_snapshot_sha256"))
+        for field in fields:
             if frozen.get(field) != current.get(field):
                 raise RuntimeError(f"V3 冻结后 {field} 已变化，拒绝继续混用旧结果")
+        if validation_scope == "judge":
+            judge_path = "tests/eval/claim_level_evaluator.py"
+            frozen_hash = (frozen.get("implementation_files") or {}).get(judge_path)
+            current_hash = (current.get("implementation_files") or {}).get(judge_path)
+            if not frozen_hash or frozen_hash != current_hash:
+                raise RuntimeError("V3 冻结后 Claim Judge 实现已变化，拒绝继续混用旧评分")
         return frozen
+    if validation_scope != "generation":
+        raise RuntimeError("V3 冻结清单不存在，不能直接执行 Judge")
     FREEZE_MANIFEST.parent.mkdir(parents=True, exist_ok=True)
     FREEZE_MANIFEST.write_text(
         json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8",
@@ -396,10 +414,28 @@ async def run_generation(limit: int | None = None) -> Dict[str, Any]:
 
 
 async def run_judge(limit: int | None = None) -> Dict[str, Any]:
-    ensure_freeze_manifest()
+    frozen = ensure_freeze_manifest("judge")
     if not OUTPUT.exists():
         raise RuntimeError("必须先完成 20 条三变体答案生成")
     payload = json.loads(OUTPUT.read_text(encoding="utf-8"))
+    if payload.get("freeze_manifest_sha256") != _sha256_file(FREEZE_MANIFEST):
+        raise RuntimeError("V3 结果与冻结清单不匹配，拒绝继续评分")
+    if payload.get("dataset_sha256") != frozen.get("dataset_sha256"):
+        raise RuntimeError("V3 结果与冻结数据集不匹配，拒绝继续评分")
+    current = _freeze_payload()
+    frozen_files = frozen.get("implementation_files") or {}
+    current_files = current.get("implementation_files") or {}
+    payload["judge_resume_audit"] = {
+        "validation_scope": "stored_answers_and_contexts + dataset + claim_judge",
+        "frozen_implementation_snapshot_sha256": frozen.get("implementation_snapshot_sha256"),
+        "current_implementation_snapshot_sha256": current.get("implementation_snapshot_sha256"),
+        "post_generation_implementation_drift": {
+            path: {"frozen": old_hash, "current": current_files.get(path)}
+            for path, old_hash in frozen_files.items()
+            if current_files.get(path) != old_hash
+        },
+        "note": "生成代码变化不会重算已冻结回答；Judge 与数据集哈希必须保持不变。",
+    }
     completed = 0
     for row in payload["results"]:
         case = next(item for item in V3_CLAIM_EVAL_DATASET if item.case_id == row["case"]["case_id"])
@@ -486,8 +522,22 @@ def aggregate(payload: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def aggregate_by_category(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """按冻结任务类别拆分结果，避免总体均值掩盖适用边界。"""
+    categories = sorted({row["case"]["category"] for row in payload["results"]})
+    return {
+        category: aggregate({
+            "results": [
+                row for row in payload["results"]
+                if row["case"]["category"] == category
+            ],
+        })
+        for category in categories
+    }
+
+
 def _human_task_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    tasks: List[Dict[str, Any]] = []
+    candidates: List[Dict[str, Any]] = []
     gold_by_case = {case.case_id: case for case in V3_CLAIM_EVAL_DATASET}
     for row in payload["results"]:
         case_id = row["case"]["case_id"]
@@ -509,7 +559,7 @@ def _human_task_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             for axis, reference, claim_map in axes:
                 for item in evaluation[axis]:
                     item_id = item["item_id"]
-                    tasks.append({
+                    candidates.append({
                         "task_id": f"{case_id}:{variant_name}:{axis}:{item_id}",
                         "case_id": case_id,
                         "variant": variant_name,
@@ -519,10 +569,32 @@ def _human_task_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
                         "human_verdict": None,
                         "human_reason": "",
                     })
+    # 4 个 case 的全部抽取 Claim 会产生近 400 个标签，不适合作为人工
+    # 校准。按 case × variant × axis 分层，并用 task_id 哈希确定性抽样，
+    # 防止按模型 verdict 挑样或每次生成不同任务。
+    strata: Dict[tuple[str, str, str], List[Dict[str, Any]]] = {}
+    for task in candidates:
+        key = (task["case_id"], task["variant"], task["axis"])
+        strata.setdefault(key, []).append(task)
+    tasks: List[Dict[str, Any]] = []
+    for key in sorted(strata):
+        ranked = sorted(
+            strata[key],
+            key=lambda task: hashlib.sha256(task["task_id"].encode("utf-8")).hexdigest(),
+        )
+        tasks.extend(ranked[:CALIBRATION_ITEMS_PER_STRATUM])
+    task_ids = [task["task_id"] for task in tasks]
     return {
         "status": "pending_independent_human_labels",
         "calibration_fraction": 0.20,
         "selected_case_ids": list(CALIBRATION_CASES),
+        "candidate_task_count": len(candidates),
+        "selected_task_count": len(tasks),
+        "items_per_stratum": CALIBRATION_ITEMS_PER_STRATUM,
+        "selection_method": "sha256(task_id) minimum per case × variant × axis",
+        "task_selection_sha256": _sha256_bytes(
+            json.dumps(task_ids, ensure_ascii=False).encode("utf-8")
+        ),
         "reviewer_id": "",
         "independence_attestation": False,
         "instructions": (
@@ -534,6 +606,25 @@ def _human_task_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _write_pending_human_template(path: Path, payload: Dict[str, Any]) -> None:
+    """只自动替换尚未开始填写的人工模板，绝不覆盖真实评分。"""
+    if path.exists():
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        started = (
+            bool(str(existing.get("reviewer_id") or "").strip())
+            or existing.get("independence_attestation") is True
+            or any(
+                task.get("human_verdict") or str(task.get("human_reason") or "").strip()
+                for task in existing.get("tasks") or []
+            )
+        )
+        if started:
+            if existing.get("task_selection_sha256") != payload.get("task_selection_sha256"):
+                raise RuntimeError(f"{path.name} 已开始填写，拒绝覆盖为新的抽样模板")
+            return
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def write_report(payload: Dict[str, Any]) -> Dict[str, Any]:
     if any(
         not row["variants"][name].get("claim_evaluation")
@@ -542,15 +633,22 @@ def write_report(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise RuntimeError("声明级 Judge 尚未完成，不能生成最终消融报告")
     summary = aggregate(payload)
     payload["aggregate"] = summary
+    category_summary = aggregate_by_category(payload)
+    payload["aggregate_by_category"] = category_summary
     human_tasks = _human_task_payload(payload)
-    if not HUMAN_TASKS.exists():
-        HUMAN_TASKS.write_text(
-            json.dumps(human_tasks, ensure_ascii=False, indent=2), encoding="utf-8",
+    payload["human_calibration_plan"] = {
+        key: human_tasks[key]
+        for key in (
+            "calibration_fraction", "selected_case_ids", "candidate_task_count",
+            "selected_task_count", "items_per_stratum", "selection_method",
+            "task_selection_sha256",
         )
-    if not HUMAN_LABELS.exists():
-        HUMAN_LABELS.write_text(
-            json.dumps(human_tasks, ensure_ascii=False, indent=2), encoding="utf-8",
-        )
+    }
+    payload["human_calibration_plan"]["task_ids"] = [
+        task["task_id"] for task in human_tasks["tasks"]
+    ]
+    _write_pending_human_template(HUMAN_TASKS, human_tasks)
+    _write_pending_human_template(HUMAN_LABELS, human_tasks)
     gate = summary["causal_gate"]
     payload["decision"] = {
         "status": "pending_independent_human_calibration",
@@ -584,6 +682,20 @@ def write_report(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"{item['avg_logical_calls']:.2f} |"
         )
     lines.extend([
+        "", "## 按任务类别", "",
+        "| 类别 | Normal F1 | Gated F1 | Full F1 | Normal Faithfulness | Gated Faithfulness | Full Faithfulness |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ])
+    for category, values in category_summary.items():
+        lines.append(
+            f"| {category} | {values['normal']['avg_claim_f1']:.3f} | "
+            f"{values['deep_gated']['avg_claim_f1']:.3f} | "
+            f"{values['deep_full']['avg_claim_f1']:.3f} | "
+            f"{values['normal']['avg_faithfulness']:.3f} | "
+            f"{values['deep_gated']['avg_faithfulness']:.3f} | "
+            f"{values['deep_full']['avg_faithfulness']:.3f} |"
+        )
+    lines.extend([
         "", "## Actionability Gate 因果结果", "",
         f"- 真实分叉样本：{gate['affected_cases']} / 20（{', '.join(gate['affected_case_ids']) or '无'}）",
         f"- Claim F1 差值（gated-full）：{gate['claim_f1_delta_gated_minus_full']:+.3f}",
@@ -592,7 +704,10 @@ def write_report(payload: Dict[str, Any]) -> Dict[str, Any]:
         f"- 平均 input token 降低：{gate['input_token_reduction']:.1%}",
         f"- 平均 output token 降低：{gate['output_token_reduction']:.1%}",
         "", "## 当前决策", "",
+        f"- 质量预门禁：{'通过' if payload['decision']['quality_gate_preliminary'] else '失败'}",
+        f"- 成本预门禁：{'通过' if payload['decision']['cost_gate_preliminary'] else '失败'}",
         "Qwen Judge 已完成但尚未通过 20% 独立人工标签校准，因此不能最终保留或否决优化。",
+        f"人工校准采用 4 个冻结 case 的分层确定性抽样：{human_tasks['selected_task_count']} / {human_tasks['candidate_task_count']} 个候选标签。",
         f"人工任务：`{HUMAN_LABELS.relative_to(PROJECT_ROOT)}`。",
     ])
     REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
