@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from unittest.mock import AsyncMock
 
 import pytest
@@ -7,9 +8,13 @@ import pytest
 from src.agent.agents import research_team as team
 from src.rag.retrieval.acl_filter import UserContext
 from tests.eval.claim_level_evaluator import (
+    CLAIM_JUDGE_BATCH_SIZE,
+    ClaimExtraction,
     ClaimJudgement,
     ClaimVerdict,
     ExtractedClaim,
+    FlatClaimJudgement,
+    judge_claims,
     score_claim_judgement,
 )
 from tests.eval.deep_research_v3_claim_dataset import V3_CLAIM_EVAL_DATASET
@@ -47,6 +52,45 @@ def test_v3_dataset_has_frozen_ground_truth_and_known_sources():
     )
 
 
+def test_qwen_claim_content_alias_is_normalized_to_text():
+    claim = ExtractedClaim.model_validate({"claim_id": "R1", "content": "可验证声明"})
+
+    assert claim.text == "可验证声明"
+
+
+def test_claim_extraction_keeps_protocol_limit_at_wire_boundary():
+    result = ClaimExtraction.model_validate([f"声明 {index}" for index in range(25)])
+
+    assert len(result.claims) == 24
+    assert result.claims[0].text == "声明 0"
+    assert result.claims[-1].text == "声明 23"
+
+
+def test_qwen_verdict_aliases_are_normalized():
+    verdict = ClaimVerdict.model_validate({
+        "item_id": "R1",
+        "label": "supported",
+        "rationale": "参考文本明确支持。",
+    })
+
+    assert verdict.verdict == "supported"
+    assert verdict.reason == "参考文本明确支持。"
+
+
+def test_flat_qwen_judgement_accepts_root_list_and_aliases():
+    result = FlatClaimJudgement.model_validate([
+        {
+            "item_id": "RG:R01", "label": "supported", "explanation": "明确支持",
+            "reference_ids": [1],
+        },
+    ])
+
+    assert result.items[0].task_id == "RG:R01"
+    assert result.items[0].verdict == "supported"
+    assert result.items[0].reason == "明确支持"
+    assert result.items[0].reference_ids == ["1"]
+
+
 def test_claim_scoring_is_ragchecker_style_and_missing_judge_item_fails_closed():
     case = V3_CLAIM_EVAL_DATASET[0]
     response_claims = [
@@ -74,6 +118,38 @@ def test_claim_scoring_is_ragchecker_style_and_missing_judge_item_fails_closed()
     assert result["claim_f1"] == pytest.approx(1 / 3, abs=1e-6)
     assert result["faithfulness"] == 0.5
     assert result["response_to_ground_truth"][1]["verdict"] == "not_enough_information"
+
+
+@pytest.mark.asyncio
+async def test_claim_checker_batches_each_axis_without_losing_items(monkeypatch):
+    response_claims = [
+        ExtractedClaim(claim_id=f"R{index:02d}", text=f"声明 {index}")
+        for index in range(1, CLAIM_JUDGE_BATCH_SIZE + 2)
+    ]
+
+    async def fake_invoke(_schema, prompt, **_kwargs):
+        task_ids = re.findall(r'"task_id":\s*"([^"]+)"', prompt)
+        return FlatClaimJudgement(items=[
+            {"task_id": task_id, "verdict": "supported"} for task_id in task_ids
+        ]), {"input_tokens": 10, "output_tokens": 2}
+
+    invoke_mock = AsyncMock(side_effect=fake_invoke)
+    monkeypatch.setattr("tests.eval.claim_level_evaluator._invoke_structured", invoke_mock)
+
+    judgement, usage = await judge_claims(
+        question="问题",
+        answer="回答",
+        response_claims=response_claims,
+        ground_truth_answer="标准答案",
+        gold_claims=[V3_CLAIM_EVAL_DATASET[0].atomic_claims[0]],
+        retrieved_contexts=[{"context_id": "N01", "title": "资料", "text": "证据"}],
+    )
+
+    assert invoke_mock.await_count == 5  # RG 两批、GR 一批、RC 两批
+    assert len(judgement.response_to_ground_truth) == len(response_claims)
+    assert len(judgement.ground_truth_to_response) == 1
+    assert len(judgement.response_to_context) == len(response_claims)
+    assert usage == {"input_tokens": 50, "output_tokens": 10, "calls": 5}
 
 
 @pytest.mark.asyncio
