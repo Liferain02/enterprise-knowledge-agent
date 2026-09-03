@@ -15,6 +15,9 @@ DEFAULT_RESULTS = PROJECT_ROOT / "data" / "深度研究V3声明级因果消融�
 DEFAULT_LABELS = PROJECT_ROOT / "data" / "深度研究V3人工校准评分.json"
 DEFAULT_SUMMARY = PROJECT_ROOT / "data" / "深度研究V3人工校准汇总.json"
 DEFAULT_REPORT = PROJECT_ROOT / "data" / "深度研究V3人工校准报告.md"
+MODEL_LABELS = PROJECT_ROOT / "data" / "深度研究V3模型模拟校准评分.json"
+MODEL_SUMMARY = PROJECT_ROOT / "data" / "深度研究V3模型模拟校准汇总.json"
+MODEL_REPORT = PROJECT_ROOT / "data" / "深度研究V3模型模拟校准报告.md"
 EXPECTED_CASES = {"V301", "V306", "V311", "V316"}
 
 
@@ -54,11 +57,20 @@ def _cohen_kappa(pairs: Iterable[tuple[str, str]]) -> float:
     return (observed - expected) / (1 - expected) if not math.isclose(expected, 1.0) else 1.0
 
 
-def summarize(results: Dict[str, Any], labels: Dict[str, Any]) -> Dict[str, Any]:
+def _summarize(
+    results: Dict[str, Any],
+    labels: Dict[str, Any],
+    *,
+    review_kind: str,
+) -> Dict[str, Any]:
+    if review_kind not in {"human", "model_simulated"}:
+        raise ValueError("未知校准类型")
     if not str(labels.get("reviewer_id") or "").strip():
-        raise ValueError("缺少独立人工 reviewer_id")
-    if labels.get("independence_attestation") is not True:
+        raise ValueError("缺少 reviewer_id")
+    if review_kind == "human" and labels.get("independence_attestation") is not True:
         raise ValueError("独立评分声明尚未确认")
+    if review_kind == "model_simulated" and labels.get("review_kind") != "model_simulated":
+        raise ValueError("模型模拟评分必须显式标记 review_kind=model_simulated")
     selected = set(labels.get("selected_case_ids") or [])
     if selected != EXPECTED_CASES or labels.get("calibration_fraction") != 0.20:
         raise ValueError("人工校准必须覆盖预先选定的 4/20 cases")
@@ -92,8 +104,13 @@ def summarize(results: Dict[str, Any], labels: Dict[str, Any]) -> Dict[str, Any]
     quality_passed = preliminary.get("quality_gate_preliminary") is True
     cost_passed = preliminary.get("cost_gate_preliminary") is True
     keep_gate = calibration_passed and quality_passed and cost_passed
-    return {
-        "status": "independent_human_calibration_complete",
+    summary = {
+        "status": (
+            "independent_human_calibration_complete"
+            if review_kind == "human"
+            else "model_simulated_calibration_complete"
+        ),
+        "review_kind": review_kind,
         "reviewer_id": labels["reviewer_id"],
         "selected_cases": sorted(selected),
         "calibration_fraction": 0.20,
@@ -109,37 +126,76 @@ def summarize(results: Dict[str, Any], labels: Dict[str, Any]) -> Dict[str, Any]
         "qwen_judge_calibration_passed": calibration_passed,
         "quality_gate_passed": quality_passed,
         "cost_gate_passed": cost_passed,
-        "actionability_gate_final_decision": (
+        "advisory_actionability_gate_decision": (
             "keep_actionability_gate" if keep_gate else "revert_actionability_gate"
         ),
     }
+    summary["actionability_gate_final_decision"] = (
+        summary["advisory_actionability_gate_decision"]
+        if review_kind == "human"
+        else "pending_independent_human_calibration"
+    )
+    if review_kind == "model_simulated":
+        summary["disclaimer"] = (
+            "Codex 模型模拟评分，只能用于开发诊断，不是独立人工校准，"
+            "不得在报告或面试中标记为人工评测。"
+        )
+    return summary
+
+
+def summarize(results: Dict[str, Any], labels: Dict[str, Any]) -> Dict[str, Any]:
+    """汇总真实独立人工标签；保留原公开接口。"""
+    return _summarize(results, labels, review_kind="human")
+
+
+def summarize_model_simulation(
+    results: Dict[str, Any], labels: Dict[str, Any],
+) -> Dict[str, Any]:
+    """汇总模型模拟标签，但不允许完成最终人工门禁。"""
+    return _summarize(results, labels, review_kind="model_simulated")
 
 
 def _render_report(summary: Dict[str, Any]) -> str:
+    is_human = summary.get("review_kind") == "human"
     return "\n".join([
-        "# 深度研究 V3 人工校准报告", "",
+        "# 深度研究 V3 人工校准报告" if is_human else "# 深度研究 V3 模型模拟校准报告", "",
+        *( [] if is_human else [
+            "> Codex 模型模拟评分，不是独立人工校准，不得标记为人工评测。", "",
+        ]),
         f"- 状态：{summary['status']}",
         f"- 校准样本：{len(summary['selected_cases'])}/20 cases，{summary['labels']} 个蕴含标签",
-        f"- Qwen/人工一致率：{summary['agreement']:.3f}",
+        f"- Qwen/{'人工' if is_human else 'Codex 模拟'}一致率：{summary['agreement']:.3f}",
         f"- Cohen's kappa：{summary['cohen_kappa']:.3f}",
         f"- Judge 校准门槛：{'通过' if summary['qwen_judge_calibration_passed'] else '未通过'}",
         f"- 质量门槛：{'通过' if summary['quality_gate_passed'] else '未通过'}",
         f"- 成本门槛：{'通过' if summary['cost_gate_passed'] else '未通过'}",
         f"- 最终决策：`{summary['actionability_gate_final_decision']}`", "",
-        "只有 Judge 校准、质量不下降和成本明确降低三项同时通过，才保留 actionability gate。",
+        (
+            "只有 Judge 校准、质量不下降和成本明确降低三项同时通过，才保留 actionability gate。"
+            if is_human else
+            "模拟结果只提供建议；最终决策继续等待独立人工校准。"
+        ),
     ]) + "\n"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="汇总 V3 独立人工 Judge 校准")
+    parser = argparse.ArgumentParser(description="汇总 V3 Claim Judge 校准")
+    parser.add_argument("--review-kind", choices=("human", "model"), default="human")
     parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
-    parser.add_argument("--labels", type=Path, default=DEFAULT_LABELS)
-    parser.add_argument("--output", type=Path, default=DEFAULT_SUMMARY)
-    parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
+    parser.add_argument("--labels", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--report", type=Path)
     args = parser.parse_args()
+    is_human = args.review_kind == "human"
+    args.labels = args.labels or (DEFAULT_LABELS if is_human else MODEL_LABELS)
+    args.output = args.output or (DEFAULT_SUMMARY if is_human else MODEL_SUMMARY)
+    args.report = args.report or (DEFAULT_REPORT if is_human else MODEL_REPORT)
     results = json.loads(args.results.read_text(encoding="utf-8"))
     labels = json.loads(args.labels.read_text(encoding="utf-8"))
-    summary = summarize(results, labels)
+    summary = (
+        summarize(results, labels)
+        if is_human else summarize_model_simulation(results, labels)
+    )
     args.output.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     args.report.write_text(_render_report(summary), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))

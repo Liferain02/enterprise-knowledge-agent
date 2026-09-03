@@ -1013,24 +1013,13 @@ async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             revision_instruction="不得使用未经 ACL 检查的证据。",
         ))
 
-    # Revision 是一次完整的 Analyst 模型调用，不能只因为 Reviewer 给出笼统的
-    # “再润色”就触发。真正需要修订的问题必须落到结构化 ReviewItem；冲突则由
-    # conflict_handled 明确表示。这样既保留安全/事实纠错，也避免不可审计的空转。
+    # V3 因果消融显示：把“没有结构化 ReviewItem 的 REVISE”自动改写为 PASS
+    # 虽能减少约 15% 延迟，却令 Faithfulness 下降 0.044，超过预设 0.02 容差。
+    # 因此保留 Reviewer 的原始决定并执行至多一次 Revision。下面仍保留旧字段，
+    # 只用于审计和兼容冻结评测读取，不再改变路由。
     report_before_actionability_gate = report.model_copy(deep=True)
     decision_before_actionability_gate = report.decision
-    actionable_items = [item for item in report.items if not item.supported]
-    unresolved_conflict = bool(package.conflicts) and not report.conflict_handled
     revision_skipped_reason = ""
-    if (
-        report.decision == "REVISE"
-        and not actionable_items
-        and not unresolved_conflict
-        and package.acl_checked
-        and not reviewer_call_failed
-    ):
-        report.decision = "PASS"
-        report.overall_instruction = ""
-        revision_skipped_reason = "reviewer 未给出结构化、可执行的修订问题"
 
     report.targeted_queries = report.targeted_queries[:MAX_TARGETED_QUERIES]
     elapsed_ms = int((time.perf_counter() - started) * 1000)
@@ -1049,6 +1038,7 @@ async def reviewer_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         "review_report_before_actionability_gate": (
             report_before_actionability_gate.model_dump()
         ),
+        "actionability_gate_enabled": False,
         "decision_before_actionability_gate": decision_before_actionability_gate,
         "revision_skipped_reason": revision_skipped_reason,
         "rejected_claims": [

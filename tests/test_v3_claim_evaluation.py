@@ -20,7 +20,10 @@ from tests.eval.claim_level_evaluator import (
 )
 from tests.eval.deep_research_v3_claim_dataset import V3_CLAIM_EVAL_DATASET
 from tests.eval import run_v3_claim_causal_eval as runner
-from tests.eval.summarize_v3_human_calibration import summarize
+from tests.eval.summarize_v3_human_calibration import (
+    summarize,
+    summarize_model_simulation,
+)
 
 
 def test_v3_dataset_has_frozen_ground_truth_and_known_sources():
@@ -348,3 +351,19 @@ def test_human_calibration_requires_attestation_and_controls_final_gate_decision
     labels["independence_attestation"] = False
     with pytest.raises(ValueError, match="独立评分声明"):
         summarize(results, labels)
+
+
+def test_model_simulation_never_completes_independent_human_gate():
+    results, labels = _calibration_fixture()
+    labels.update({
+        "reviewer_id": "codex-model-simulation",
+        "review_kind": "model_simulated",
+        "independence_attestation": False,
+    })
+
+    summary = summarize_model_simulation(results, labels)
+
+    assert summary["qwen_judge_calibration_passed"] is True
+    assert summary["advisory_actionability_gate_decision"] == "keep_actionability_gate"
+    assert summary["actionability_gate_final_decision"] == "pending_independent_human_calibration"
+    assert "不是独立人工校准" in summary["disclaimer"]

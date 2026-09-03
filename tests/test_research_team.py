@@ -302,7 +302,7 @@ async def test_reviewer_overrides_pass_when_claim_has_invalid_citation(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_reviewer_skips_unactionable_revision_for_ordinary_task(monkeypatch):
+async def test_reviewer_preserves_revision_after_actionability_gate_reverted(monkeypatch):
     package = team.EvidencePackage(
         original_question="比较两种实验方案并总结差异",
         evidences=[team.EvidenceItem(
@@ -330,15 +330,20 @@ async def test_reviewer_skips_unactionable_revision_for_ordinary_task(monkeypatc
     report = team.ReviewReport.model_validate(result["review_report"])
     reviewer_trace = result["research_trace"]["stages"]["reviewer"]
 
-    assert report.decision == "PASS"
-    assert report.overall_instruction == ""
+    assert report.decision == "REVISE"
+    assert report.overall_instruction == "进一步润色并让表达更完整。"
+    assert reviewer_trace["actionability_gate_enabled"] is False
     assert reviewer_trace["decision_before_actionability_gate"] == "REVISE"
     assert reviewer_trace["review_report_before_actionability_gate"]["decision"] == "REVISE"
     assert (
         reviewer_trace["review_report_before_actionability_gate"]["overall_instruction"]
         == "进一步润色并让表达更完整。"
     )
-    assert reviewer_trace["revision_skipped_reason"]
+    assert reviewer_trace["revision_skipped_reason"] == ""
+    assert team.route_after_reviewer({
+        "review_report": result["review_report"],
+        "research_revision_count": 0,
+    }) == "research_revision"
 
 
 @pytest.mark.asyncio
