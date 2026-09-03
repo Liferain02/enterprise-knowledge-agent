@@ -1479,6 +1479,61 @@ textarea {
   color: var(--text-secondary);
 }
 
+.research-run-panel {
+  margin-top: 12px;
+}
+
+.research-run-toggle {
+  padding: 6px 10px;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.12);
+  color: #c4b5fd;
+  cursor: pointer;
+}
+
+.research-run-detail {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.45);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.research-run-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: var(--text-primary);
+}
+
+.research-run-evidence {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.research-run-claims {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.research-run-claim {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.research-run-claim .feedback-btn {
+  flex: 0 0 auto;
+}
+
 .feedback-actions {
   margin-top: 12px;
   display: flex;

@@ -115,7 +115,8 @@ class Mem0MemoryManager:
         messages: List[Dict[str, str]],
         user_id: str = "default_user",
         session_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        infer: bool = True,
     ) -> Dict[str, Any]:
         """
         添加对话到记忆
@@ -125,6 +126,7 @@ class Mem0MemoryManager:
             user_id: 用户 ID
             session_id: 会话 ID（可选）
             metadata: 附加元数据
+            infer: 是否让 Mem0 再用 LLM 提取；已验证事实可关闭以精确写入
             
         Returns:
             操作结果
@@ -147,6 +149,7 @@ class Mem0MemoryManager:
                 messages=messages,
                 user_id=user_id,
                 metadata=memory_metadata,
+                infer=infer,
             )
             
             logger.info(f"Mem0 添加记忆成功: user={user_id}, session={session_id}")

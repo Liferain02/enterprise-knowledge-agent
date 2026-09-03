@@ -22,6 +22,11 @@ class ChatRequest(BaseModel):
         default="normal",
         description="研究模式：normal 保持原链路；deep 使用固定三角色深度研究链路",
     )
+    project_id: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        description="可选科研项目 ID；仅用于明确关联研究运行，不从问题文本推断",
+    )
 
 
 class ChatStreamRequest(BaseModel):
@@ -32,6 +37,11 @@ class ChatStreamRequest(BaseModel):
     research_mode: Literal["normal", "deep"] = Field(
         default="normal",
         description="研究模式：normal 或 deep",
+    )
+    project_id: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        description="可选科研项目 ID；仅用于明确关联研究运行",
     )
 
 
@@ -301,6 +311,46 @@ class ResearchOverviewResponse(BaseModel):
     by_status: dict[str, int] = Field(default_factory=dict)
 
 
+class ResearchRunSummaryItem(BaseModel):
+    """研究运行列表项；不包含大体积阶段 payload。"""
+    id: str
+    project_id: Optional[str] = None
+    session_id: str
+    user_id: str
+    question: str
+    mode: str
+    status: str
+    final_answer: str
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    created_at: float
+    completed_at: Optional[float] = None
+
+
+class ResearchRunListResponse(BaseModel):
+    runs: List[ResearchRunSummaryItem] = Field(default_factory=list)
+    total: int
+
+
+class ResearchRunDetailItem(ResearchRunSummaryItem):
+    """结构化运行详情；服务层会按当前文档 ACL 重新过滤。"""
+    source_cards: List[dict[str, Any]] = Field(default_factory=list)
+    evidence_package: dict[str, Any] = Field(default_factory=dict)
+    analysis_report: dict[str, Any] = Field(default_factory=dict)
+    review_report: dict[str, Any] = Field(default_factory=dict)
+    research_trace: dict[str, Any] = Field(default_factory=dict)
+    hidden_evidence_count: int = 0
+    confirmed_claim_ids: List[str] = Field(default_factory=list)
+
+
+class ConfirmResearchClaimResponse(BaseModel):
+    """用户显式确认、且已通过证据与 Reviewer 门槛的长期记忆。"""
+    stored: bool
+    run_id: str
+    claim_id: str
+    text: str
+    source_titles: List[str] = Field(default_factory=list)
+
+
 # ==================== Response Models ====================
 class ChatResponse(BaseModel):
     """聊天响应"""
@@ -309,6 +359,7 @@ class ChatResponse(BaseModel):
     session_id: str = Field(description="会话ID")
     used_agent: str = Field(description="使用的Agent类型")
     image_understood: bool = Field(default=False, description="是否对图片进行了理解")
+    research_run_id: Optional[str] = Field(default=None, description="Deep Research 运行记录 ID")
 
 
 class SearchResponse(BaseModel):

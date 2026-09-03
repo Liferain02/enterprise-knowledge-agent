@@ -48,6 +48,7 @@ async def chat(request: ChatRequest, current_user: dict = Depends(get_current_us
             images=images_data,
             user_context=user_context,
             research_mode=request.research_mode,
+            project_id=request.project_id,
         )
 
         return ChatResponse(
@@ -56,6 +57,7 @@ async def chat(request: ChatRequest, current_user: dict = Depends(get_current_us
             session_id=request.session_id,
             used_agent=result["used_agent"],
             image_understood=result.get("image_understood", False),
+            research_run_id=result.get("research_run_id"),
         )
     except Exception as e:
         logger.exception(f"聊天请求失败: {str(e)}")
@@ -88,6 +90,7 @@ async def chat_stream(
             images=images_data,
             user_context=user_context,
             research_mode=request.research_mode,
+            project_id=request.project_id,
         )
 
         return StreamingResponse(

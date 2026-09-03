@@ -217,6 +217,11 @@ import os
 FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 if os.path.exists(FRONTEND_DIST):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIST), name="static")
+    frontend_assets = os.path.join(FRONTEND_DIST, "assets")
+    if os.path.isdir(frontend_assets):
+        # Vite 生产构建默认使用 /assets/...；后端一体模式必须显式挂载，
+        # 否则 index.html 可访问但 JS/CSS 全部 404。
+        app.mount("/assets", StaticFiles(directory=frontend_assets), name="frontend-assets")
 
     @app.get("/")
     async def serve_index():

@@ -369,14 +369,15 @@ async def _plan_subquestions(question: str) -> tuple[List[str], Dict[str, int]]:
 
 def _safe_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
     allowed = (
-        "title", "doc_type", "author", "project_name", "project_id",
+        "doc_id", "title", "doc_type", "author", "project_name", "project_id",
         "research_direction", "visibility", "confidentiality", "version",
         "created_at", "updated_at", "effective_date", "expiry_date",
+        "department_restrict", "role_restrict",
     )
     result: Dict[str, Any] = {}
     for key in allowed:
         value = metadata.get(key)
-        if isinstance(value, (str, int, float, bool)) and value not in ("", None):
+        if isinstance(value, (str, int, float, bool, list, tuple)) and value not in ("", None):
             result[key] = value
     return result
 
@@ -509,7 +510,38 @@ async def research_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         package = EvidencePackage(original_question="", missing_evidence=["缺少用户问题"])
         return {"research_question": "", "evidence_package": package.model_dump()}
 
-    subquestions, usage = await _plan_subquestions(question)
+    episode = None
+    try:
+        from src.api.services.research_service import research_service
+
+        user_context = state.get("user_context")
+        if isinstance(user_context, dict):
+            current_user = dict(user_context)
+        else:
+            current_user = {
+                key: getattr(user_context, key)
+                for key in ("user_id", "username", "role", "department", "department_name", "department_path", "is_active")
+                if user_context is not None and hasattr(user_context, key)
+            }
+        current_user["username"] = str(
+            current_user.get("username") or state.get("user_id") or "anonymous"
+        )
+        current_user.setdefault("role", "student")
+        episode = research_service.find_reusable_research_episode(
+            question,
+            current_user,
+            project_id=str(state.get("project_id") or ""),
+        )
+    except Exception as exc:
+        logger.debug("Research Run 情景记忆检索失败，继续新规划: %s", exc)
+
+    if episode:
+        subquestions = list(episode["subquestions"])
+        usage = {"input_tokens": 0, "output_tokens": 0}
+        planner_llm_calls = 0
+    else:
+        subquestions, usage = await _plan_subquestions(question)
+        planner_llm_calls = 1
     package, docs, retrieval_calls, query_runs = await _retrieve_evidence(
         subquestions,
         state.get("user_context"),
@@ -527,7 +559,7 @@ async def research_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     metrics = _merge_metrics(
         state,
-        llm_calls=1,
+        llm_calls=planner_llm_calls,
         retrieval_calls=retrieval_calls,
         input_tokens=usage["input_tokens"],
         output_tokens=usage["output_tokens"],
@@ -542,9 +574,10 @@ async def research_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
         "evidence_count": len(package.evidences),
         "missing_subquestions": list(package.missing_evidence),
         "query_runs": query_runs,
+        "episodic_memory": episode or {},
         "evidence_package": package.model_dump(),
         "latency_ms": elapsed_ms,
-        "llm_calls": 1,
+        "llm_calls": planner_llm_calls,
         "retrieval_calls": retrieval_calls,
         "input_tokens": usage["input_tokens"],
         "output_tokens": usage["output_tokens"],

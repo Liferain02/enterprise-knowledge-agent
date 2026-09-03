@@ -97,6 +97,82 @@ async def test_default_retrieval_path_skips_unproven_crag(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_multiturn_coreference_adds_one_standalone_query(monkeypatch):
+    import config.settings as settings_module
+    import src.rag.retrieval.query_expander as query_expander_module
+
+    doc = Document(page_content="RDMA 证据", metadata={"source": "RDMA规范.md"})
+    fused = AsyncMock(return_value=[(doc, 0.9, "融合查询")])
+    monkeypatch.setattr(
+        settings_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            crag_enabled=False,
+            query_expand_enabled=False,
+            standalone_rewrite_enabled=True,
+            standalone_rewrite_max_context_chars=120,
+        ),
+    )
+    monkeypatch.setattr(query_expander_module, "multi_query_retrieve", fused)
+
+    results, grade, history = await knowledge_module._retrieve_documents(
+        "它还要求做哪些基准测试？",
+        5,
+        False,
+        None,
+        recent_messages=[
+            HumanMessage(content="RDMA 实验前必须记录哪些环境信息？"),
+            HumanMessage(content="它还要求做哪些基准测试？"),
+        ],
+    )
+
+    assert results == [(doc, 0.9)]
+    assert grade is None
+    assert history[0] == "它还要求做哪些基准测试？"
+    assert len(history) == 2
+    assert "RDMA" in history[1]
+    assert fused.await_args.kwargs["top_k_per_query"] == 5
+
+
+@pytest.mark.asyncio
+async def test_explicit_multiturn_query_does_not_add_rewrite(monkeypatch):
+    import config.settings as settings_module
+    import src.rag.retrieval.query_expander as query_expander_module
+    import src.rag.retrieval.retriever as retriever_module
+
+    doc = Document(page_content="RDMA 证据", metadata={"source": "RDMA规范.md"})
+    manager = MagicMock()
+    manager.search_with_rerank.return_value = [(doc, 0.8)]
+    forbidden_fusion = AsyncMock(side_effect=AssertionError("完整问题不应追加查询"))
+    monkeypatch.setattr(
+        settings_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            crag_enabled=False,
+            query_expand_enabled=False,
+            standalone_rewrite_enabled=True,
+        ),
+    )
+    monkeypatch.setattr(retriever_module, "get_retriever_manager", lambda: manager)
+    monkeypatch.setattr(query_expander_module, "multi_query_retrieve", forbidden_fusion)
+
+    results, _grade, history = await knowledge_module._retrieve_documents(
+        "RDMA 实验必须记录哪些环境信息？",
+        5,
+        False,
+        None,
+        recent_messages=[
+            HumanMessage(content="上一轮讨论的是实验记录。"),
+            HumanMessage(content="RDMA 实验必须记录哪些环境信息？"),
+        ],
+    )
+
+    assert results == [(doc, 0.8)]
+    assert history == ["RDMA 实验必须记录哪些环境信息？"]
+    forbidden_fusion.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_default_retrieval_rejects_meaningless_input_before_search(monkeypatch):
     import src.rag.retrieval.retriever as retriever_module
 
@@ -270,7 +346,7 @@ async def test_mem0_uses_one_user_level_search(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_mem0_writes_once_and_excludes_tool_messages(monkeypatch):
+async def test_mem0_writes_once_and_excludes_tool_and_assistant_messages(monkeypatch):
     manager = SimpleNamespace(add_conversation=AsyncMock(return_value={"success": True}))
     settings = SimpleNamespace(mem0_enabled=True)
     monkeypatch.setattr("config.settings.get_settings", lambda: settings)
@@ -293,7 +369,6 @@ async def test_mem0_writes_once_and_excludes_tool_messages(monkeypatch):
     manager.add_conversation.assert_awaited_once_with(
         messages=[
             {"role": "user", "content": "记住我研究 RDMA"},
-            {"role": "assistant", "content": "好的，我记住了。"},
         ],
         user_id="alice",
         session_id="session-1",

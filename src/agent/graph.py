@@ -52,6 +52,7 @@ class AgentState(MessagesState):
 
     # 会话ID（用于在各节点中维护历史）
     session_id: str
+    project_id: str
 
     # 语义总结记忆：存储旧对话的压缩摘要
     summary: str
@@ -435,15 +436,14 @@ async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
         session_id = state.get("session_id", "default")
         user_id = state.get("user_id", "default_user")
 
-        # 转换消息格式。只保存用户可见的 user/assistant 对话，工具消息
-        # 和内部步骤不能被误标为 assistant 长期记忆。
+        # 默认开启后只把用户明确表达的内容交给 Mem0。助手答案即使对用户
+        # 可见，也可能含未经证据确认的推断，不能自动沉淀为长期事实。
+        # 证据化项目事实由 Research Run 的受控提升流程另行处理。
         msg_list = []
         for msg in messages[-4:]:  # 只保存最近4条消息
             msg_type = getattr(msg, "type", None) or type(msg).__name__
             if msg_type in ("human", "HumanMessage"):
                 role = "user"
-            elif msg_type in ("ai", "AIMessage"):
-                role = "assistant"
             else:
                 continue
             content = getattr(msg, "content", "")
@@ -453,7 +453,7 @@ async def save_to_mem0_node(state: AgentState) -> Dict[str, Any]:
         if not msg_list:
             return {}
 
-        # 一次写入即可；跨会话检索按 user_id 查询同一批记忆。
+        # 一次写入即可；跨会话检索按 user_id 查询同一批用户表达记忆。
         # 记忆提取可能包含额外 LLM 调用，不能阻塞最终 SSE sources/done。
         mem0_manager = get_mem0_manager()
         task = asyncio.create_task(
@@ -552,7 +552,13 @@ def _extract_result(result: Dict[str, Any]) -> Dict[str, Any]:
         "used_agent": result.get("used_agent", "unknown"),
         "version_source": result.get("version_source", ""),
         "retrieved_docs": result.get("retrieved_docs", []),
-        "messages": result.get("messages", [])
+        "messages": result.get("messages", []),
+        "evidence_package": result.get("evidence_package", {}),
+        "analysis_report": result.get("analysis_report", {}),
+        "review_report": result.get("review_report", {}),
+        "research_trace": result.get("research_trace", {}),
+        "research_team_metrics": result.get("research_team_metrics", {}),
+        "generation_metrics": result.get("generation_metrics", {}),
     }
 
 
@@ -565,6 +571,7 @@ def run_agent(
     user_context: UserContext = None,
     config: Dict[str, Any] = None,
     research_mode: str = "normal",
+    project_id: str = "",
 ) -> Dict[str, Any]:
     """
     运行 Agent（同步封装，使用 MemorySaver）
@@ -588,6 +595,7 @@ def run_agent(
             "user_id": user_id,
             "user_context": user_context,
             "research_mode": research_mode,
+            "project_id": project_id,
         }
         return await graph.ainvoke(initial_state, run_config)
 
@@ -611,6 +619,7 @@ async def arun_agent(
     user_context: UserContext = None,
     config: Dict[str, Any] = None,
     research_mode: str = "normal",
+    project_id: str = "",
 ) -> Dict[str, Any]:
     """
     运行 Agent（异步，使用 AsyncSqliteSaver）
@@ -632,6 +641,7 @@ async def arun_agent(
         "user_id": user_id,
         "user_context": user_context,
         "research_mode": research_mode,
+        "project_id": project_id,
     }
 
     t0 = _time.time()

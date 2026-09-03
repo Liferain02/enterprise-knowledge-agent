@@ -89,6 +89,125 @@ class ExpansionResult:
         return self.all_queries
 
 
+@dataclass(frozen=True)
+class QueryRewriteVariant:
+    """可审计的检索查询变体；不包含模型思维过程。"""
+
+    text: str
+    strategy: str
+    reason_code: str
+    weight: float = 1.0
+
+
+@dataclass(frozen=True)
+class StandaloneRewriteResult:
+    """多轮指代改写结果，原查询始终位于 variants[0]。"""
+
+    original_query: str
+    standalone_query: str
+    triggered: bool
+    reason_code: str
+    variants: Tuple[QueryRewriteVariant, ...]
+
+
+class StandaloneQueryRewriter:
+    """无额外 LLM 调用的多轮指代改写器。
+
+    它只处理有明确上下文信号的追问，并将最近一条用户问题作为检索锚点。
+    当前目标是验证 Standalone 是否值得默认开启，不尝试通用共指解析。
+    """
+
+    _PRONOUN_PATTERN = re.compile(
+        r"(它们|它|这个|这项|这种|该方法|该方案|该项目|"
+        r"该实验|该论文|这篇|上述|前者|后者)"
+    )
+    _FOLLOWUP_PREFIX_PATTERN = re.compile(
+        r"^(那|那么|然后|还有|另外|以及|回来后|结束后|之后|具体来说)"
+    )
+    _CONTEXT_COMPARISON_PATTERN = re.compile(
+        r"(跟|与|和)(旧|之前|上一个|前一个)(方案|版本|实验|结果|方法)?.{0,8}(相比|比较|区别|差异)|"
+        r"(旧|之前|上一个|前一个)(方案|版本|实验|结果|方法).{0,8}(呢|如何|怎样|怎么样)|"
+        r"^(跟|与|和).{1,40}(相比|比较)(呢|如何|怎样|怎么样)?[?？]?$"
+    )
+
+    @classmethod
+    def _trigger_reason(cls, query: str) -> str:
+        normalized = (query or "").strip()
+        if not normalized:
+            return "empty_query"
+        if cls._PRONOUN_PATTERN.search(normalized):
+            return "coreference_pronoun"
+        if cls._FOLLOWUP_PREFIX_PATTERN.search(normalized):
+            return "contextual_followup"
+        if cls._CONTEXT_COMPARISON_PATTERN.search(normalized):
+            return "contextual_comparison"
+        return "none"
+
+    @staticmethod
+    def _message_role_content(message: Any) -> Tuple[str, str]:
+        if isinstance(message, dict):
+            return str(message.get("role") or message.get("type") or ""), str(message.get("content") or "")
+        msg_type = getattr(message, "type", None) or type(message).__name__
+        return str(msg_type), str(getattr(message, "content", "") or "")
+
+    @classmethod
+    def _context_anchor(
+        cls,
+        query: str,
+        recent_messages: Optional[List[Any]],
+        summary: str,
+        max_chars: int,
+    ) -> str:
+        user_messages = []
+        for message in recent_messages or []:
+            role, content = cls._message_role_content(message)
+            if role in ("user", "human", "HumanMessage") and content.strip():
+                user_messages.append(content.strip())
+        if user_messages and user_messages[-1] == query.strip():
+            user_messages.pop()
+        anchor = user_messages[-1] if user_messages else (summary or "").strip()
+        anchor = re.sub(r"\s+", " ", anchor).strip("；;，,。！？? \t\n")
+        return anchor[-max_chars:] if anchor else ""
+
+    @classmethod
+    def rewrite(
+        cls,
+        query: str,
+        *,
+        recent_messages: Optional[List[Any]] = None,
+        summary: str = "",
+        max_context_chars: int = 120,
+    ) -> StandaloneRewriteResult:
+        original = (query or "").strip()
+        reason = cls._trigger_reason(original)
+        original_variant = QueryRewriteVariant(
+            text=original,
+            strategy="original",
+            reason_code="always_preserved",
+            weight=1.0,
+        )
+        if reason in {"empty_query", "none"}:
+            return StandaloneRewriteResult(original, original, False, reason, (original_variant,))
+
+        anchor = cls._context_anchor(original, recent_messages, summary, max_context_chars)
+        if not anchor:
+            return StandaloneRewriteResult(
+                original, original, False, "missing_context", (original_variant,)
+            )
+
+        standalone = f"关于“{anchor}”的追问：{original}"
+        standalone = re.sub(r"\s+", " ", standalone).strip()[:240]
+        if standalone == original:
+            return StandaloneRewriteResult(original, original, False, "duplicate", (original_variant,))
+        variant = QueryRewriteVariant(
+            text=standalone,
+            strategy="standalone",
+            reason_code=reason,
+            weight=0.95,
+        )
+        return StandaloneRewriteResult(original, standalone, True, reason, (original_variant, variant))
+
+
 # ============================================================
 # 规则快速分解器（无需 LLM）
 # ============================================================
@@ -1007,6 +1126,8 @@ async def decompose_and_retrieve(
     top_k: int = 5,
     strategy: ExpandStrategy = ExpandStrategy.HYBRID,
     user: Optional[UserContext] = None,
+    additional_queries: Optional[List[str]] = None,
+    max_total_queries: Optional[int] = None,
 ) -> Tuple[List[Tuple[Any, float, str]], Any]:
     """
     分解 + 检索 + 合并（端到端函数，集成 ACL 过滤）
@@ -1016,6 +1137,8 @@ async def decompose_and_retrieve(
         top_k: 最终返回结果数
         strategy: 分解策略
         user: 当前用户上下文（用于 ACL 权限过滤）
+        additional_queries: 需要与分解查询共同检索的查询（如 Standalone）
+        max_total_queries: 检索查询总数上限；原查询始终优先保留
 
     Returns:
         (合并结果, 分解结果)
@@ -1025,7 +1148,15 @@ async def decompose_and_retrieve(
     expander = QueryExpander(strategy=strategy)
     exp_result = await expander.expand_async(query)
 
-    if len(exp_result.sub_queries) <= 1:
+    search_queries = list(dict.fromkeys([
+        query,
+        *(additional_queries or []),
+        *exp_result.all_queries,
+    ]))
+    if max_total_queries is not None:
+        search_queries = search_queries[:max(1, max_total_queries)]
+
+    if len(search_queries) <= 1:
         # 不需要分解，直接检索（带 ACL 过滤）
         from src.rag.retrieval.retriever import get_retriever_manager
         rm = get_retriever_manager()
@@ -1034,7 +1165,7 @@ async def decompose_and_retrieve(
 
     # Step 2: 多查询并行检索（带 ACL 过滤）
     all_results = await multi_query_retrieve(
-        exp_result.all_queries,
+        search_queries,
         top_k_per_query=min(3, top_k),
         user=user,
     )

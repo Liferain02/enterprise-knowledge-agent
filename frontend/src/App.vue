@@ -580,6 +580,48 @@
                 <div class="source-snippet">{{ source.snippet }}</div>
               </div>
             </div>
+            <div v-if="msg.researchRunId" class="research-run-panel">
+              <button class="research-run-toggle" @click="toggleResearchRun(msg)">
+                {{ msg.researchRunOpen ? '收起研究过程' : '查看研究过程' }}
+              </button>
+              <div v-if="msg.researchRunOpen" class="research-run-detail">
+                <p v-if="msg.researchRunLoading">正在加载结构化研究记录...</p>
+                <p v-else-if="msg.researchRunError" class="form-error">{{ msg.researchRunError }}</p>
+                <template v-else-if="msg.researchRunDetail">
+                  <div class="research-run-metrics">
+                    <span>状态：{{ msg.researchRunDetail.status }}</span>
+                    <span>证据：{{ msg.researchRunDetail.evidence_package?.evidences?.length || 0 }}</span>
+                    <span>声明：{{ msg.researchRunDetail.analysis_report?.claims?.length || 0 }}</span>
+                    <span>复核：{{ msg.researchRunDetail.review_report?.decision || '未记录' }}</span>
+                  </div>
+                  <p v-if="msg.researchRunDetail.research_trace?.failure_attribution">
+                    失败归因：{{ msg.researchRunDetail.research_trace.failure_attribution }}
+                  </p>
+                  <p v-if="msg.researchRunDetail.hidden_evidence_count">
+                    有 {{ msg.researchRunDetail.hidden_evidence_count }} 条证据因当前权限不可见。
+                  </p>
+                  <ul v-if="msg.researchRunDetail.evidence_package?.evidences?.length" class="research-run-evidence">
+                    <li v-for="evidence in msg.researchRunDetail.evidence_package.evidences" :key="evidence.source_id">
+                      {{ evidence.source_id }} · {{ evidence.title }}
+                    </li>
+                  </ul>
+                  <div v-if="msg.researchRunDetail.analysis_report?.claims?.length" class="research-run-claims">
+                    <div class="source-list-title">已复核结论</div>
+                    <div v-for="claim in msg.researchRunDetail.analysis_report.claims" :key="claim.claim_id" class="research-run-claim">
+                      <span>{{ claim.text }}</span>
+                      <button
+                        v-if="claim.claim_type === 'fact' && msg.researchRunDetail.review_report?.decision === 'PASS'"
+                        class="feedback-btn"
+                        :disabled="msg.researchRunDetail.confirmed_claim_ids?.includes(claim.claim_id) || claim.confirming"
+                        @click="confirmResearchClaim(msg, claim)"
+                      >
+                        {{ msg.researchRunDetail.confirmed_claim_ids?.includes(claim.claim_id) ? '已记住' : (claim.confirming ? '保存中...' : '确认并记住') }}
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
             <div v-if="msg.role === 'assistant'" class="feedback-actions">
               <button class="feedback-btn" :disabled="msg.feedbackSubmitted" @click="submitFeedback(msg, 'helpful')">有帮助</button>
               <button class="feedback-btn" :disabled="msg.feedbackSubmitted" @click="submitFeedback(msg, 'incorrect')">不准确</button>
@@ -678,6 +720,11 @@ interface Message {
   sources?: SourceItem[]
   question?: string
   feedbackSubmitted?: boolean
+  researchRunId?: string
+  researchRunOpen?: boolean
+  researchRunLoading?: boolean
+  researchRunError?: string
+  researchRunDetail?: ResearchRunDetail
 }
 
 interface Session {
@@ -758,6 +805,27 @@ interface ResearchTask {
   due_date: string
   status: 'open' | 'in_progress' | 'done'
   source: string
+}
+
+interface ResearchRunDetail {
+  id: string
+  status: string
+  evidence_package?: {
+    evidences?: Array<{ source_id: string; title: string }>
+  }
+  analysis_report?: {
+    claims?: Array<{
+      claim_id: string
+      text: string
+      claim_type: string
+      source_ids?: string[]
+      confirming?: boolean
+    }>
+  }
+  review_report?: { decision?: string }
+  research_trace?: { failure_attribution?: string }
+  hidden_evidence_count: number
+  confirmed_claim_ids?: string[]
 }
 
 interface FeedbackIssue {
@@ -1078,6 +1146,7 @@ const partialAnswer = ref('')      // 流式累积中的部分回答
 const partialAnswerKey = ref<number | null>(null)  // 流式消息在 messages 中的索引
 const pendingVersionSource = ref('')  // SSE 中收到的版本溯源（等待 done 后追加到消息）
 const pendingSources = ref<SourceItem[]>([])
+const pendingResearchRunId = ref('')
 
 // 用于取消请求
 let abortController: AbortController | null = null
@@ -1277,6 +1346,50 @@ const loadResearchTasks = async (projectId: string) => {
   researchTasks.value = response.data.tasks || []
 }
 
+const toggleResearchRun = async (message: Message) => {
+  if (!message.researchRunId) return
+  if (message.researchRunOpen) {
+    message.researchRunOpen = false
+    return
+  }
+  message.researchRunOpen = true
+  if (message.researchRunDetail || message.researchRunLoading) return
+  message.researchRunLoading = true
+  message.researchRunError = ''
+  try {
+    const response = await axios.get<ResearchRunDetail>(
+      `${API_BASE}/research/runs/${message.researchRunId}`,
+    )
+    message.researchRunDetail = response.data
+  } catch (error: any) {
+    message.researchRunError = error?.response?.data?.detail || '研究运行记录暂不可用'
+  } finally {
+    message.researchRunLoading = false
+  }
+}
+
+const confirmResearchClaim = async (
+  message: Message,
+  claim: { claim_id: string; confirming?: boolean },
+) => {
+  if (!message.researchRunId || !claim.claim_id || claim.confirming) return
+  claim.confirming = true
+  message.researchRunError = ''
+  try {
+    await axios.post(
+      `${API_BASE}/research/runs/${message.researchRunId}/claims/${claim.claim_id}/confirm-memory`,
+    )
+    const detail = message.researchRunDetail
+    if (detail && !detail.confirmed_claim_ids?.includes(claim.claim_id)) {
+      detail.confirmed_claim_ids = [...(detail.confirmed_claim_ids || []), claim.claim_id]
+    }
+  } catch (error: any) {
+    message.researchRunError = error?.response?.data?.detail || '长期记忆保存失败'
+  } finally {
+    claim.confirming = false
+  }
+}
+
 const extractMeetingTasks = async () => {
   if (!selectedProject.value || !meetingTaskContent.value.trim()) return
   await axios.post(`${API_BASE}/research/projects/${selectedProject.value.id}/tasks/extract`, {
@@ -1455,6 +1568,7 @@ const loadHistory = async (sid: string) => {
           sources: Array.isArray(m.metadata?.sources) ? m.metadata.sources : [],
           question: m.role === 'assistant' ? lastUserQuestion : undefined,
           feedbackSubmitted: false,
+          researchRunId: m.metadata?.research_run_id || undefined,
         }
       })
     } else {
@@ -1700,6 +1814,7 @@ const sendMessage = async () => {
   currentAgent.value = 'planner'
   pendingSources.value = []
   pendingVersionSource.value = ''
+  pendingResearchRunId.value = ''
   scrollToBottom()
 
   // 创建占位消息用于流式更新
@@ -1728,6 +1843,7 @@ const sendMessage = async () => {
         session_id: sessionId.value,
         message: text,
         research_mode: requestResearchMode,
+        project_id: selectedProject.value?.id || undefined,
       }),
       signal: abortController.signal,
     })
@@ -1760,6 +1876,7 @@ const sendMessage = async () => {
                 sources: pendingSources.value,
                 question: text,
                 feedbackSubmitted: false,
+                researchRunId: pendingResearchRunId.value || undefined,
               }
               scrollToBottom()
             }
@@ -1776,6 +1893,8 @@ const sendMessage = async () => {
           } else if (event.type === 'version_source' && event.data) {
             // 缓存版本溯源，等待流结束后追加到消息
             pendingVersionSource.value = event.data
+          } else if (event.type === 'research_run_id' && event.data) {
+            pendingResearchRunId.value = event.data
           } else if (event.type === 'done') {
             // 流式完成，最终答案已通过 llm_token 累积
           }
@@ -1793,6 +1912,7 @@ const sendMessage = async () => {
       const lastMsg = messages.value[messages.value.length - 1]
       lastMsg.agent = currentAgent.value
       lastMsg.sources = pendingSources.value
+      lastMsg.researchRunId = pendingResearchRunId.value || undefined
       // 追加版本溯源信息到消息末尾
       if (pendingVersionSource.value) {
         lastMsg.content += '\n\n' + pendingVersionSource.value
@@ -1825,6 +1945,7 @@ const sendMessage = async () => {
     partialAnswer.value = ''
     pendingVersionSource.value = ''  // 重置版本溯源缓存
     pendingSources.value = []
+    pendingResearchRunId.value = ''
     abortController = null
     scrollToBottom()
   }

@@ -97,6 +97,32 @@ class ResearchService:
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS research_runs (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT REFERENCES research_projects(id) ON DELETE SET NULL,
+                    session_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    question TEXT NOT NULL,
+                    mode TEXT NOT NULL DEFAULT 'deep',
+                    status TEXT NOT NULL DEFAULT 'completed',
+                    final_answer TEXT NOT NULL DEFAULT '',
+                    source_cards_json TEXT NOT NULL DEFAULT '[]',
+                    evidence_package_json TEXT NOT NULL DEFAULT '{}',
+                    analysis_report_json TEXT NOT NULL DEFAULT '{}',
+                    review_report_json TEXT NOT NULL DEFAULT '{}',
+                    trace_json TEXT NOT NULL DEFAULT '{}',
+                    metrics_json TEXT NOT NULL DEFAULT '{}',
+                    created_at REAL NOT NULL,
+                    completed_at REAL
+                );
+                CREATE TABLE IF NOT EXISTS research_memory_confirmations (
+                    run_id TEXT NOT NULL REFERENCES research_runs(id) ON DELETE CASCADE,
+                    claim_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    confirmed_at REAL NOT NULL,
+                    memory_result_json TEXT NOT NULL DEFAULT '{}',
+                    PRIMARY KEY (run_id, claim_id, user_id)
+                );
                 CREATE INDEX IF NOT EXISTS idx_research_projects_status
                     ON research_projects(status);
                 CREATE INDEX IF NOT EXISTS idx_research_project_members_username
@@ -105,6 +131,12 @@ class ResearchService:
                     ON research_experiments(project_id, updated_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_research_tasks_project
                     ON research_tasks(project_id, status, updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_research_runs_user_session
+                    ON research_runs(user_id, session_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_research_runs_project
+                    ON research_runs(project_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_research_memory_confirmations_user
+                    ON research_memory_confirmations(user_id, confirmed_at DESC);
                 """
             )
 
@@ -244,6 +276,305 @@ class ResearchService:
         if not self._project_accessible(project, user, members):
             raise PermissionError("无权访问该项目")
         return project
+
+    @staticmethod
+    def _json_object(value: Any, default: Any) -> Any:
+        """把运行记录 JSON 字段安全还原为预期容器。"""
+        if isinstance(value, type(default)):
+            return value
+        try:
+            decoded = json.loads(value or json.dumps(default))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return default
+        return decoded if isinstance(decoded, type(default)) else default
+
+    def _run_accessible(self, run: dict, user: dict) -> bool:
+        """无项目运行仅本人可见；项目运行沿用项目当前 ACL。"""
+        username, _ = self._identity(user)
+        if not run.get("project_id"):
+            return run.get("user_id") == username
+        try:
+            self.get_project(str(run["project_id"]), user)
+            return True
+        except (PermissionError, ValueError):
+            return False
+
+    @staticmethod
+    def _filter_run_payload_for_document_acl(run: dict, user: dict) -> dict:
+        """权限变化后 fail closed，避免历史 trace 重新泄漏证据内容。"""
+        from src.rag.retrieval.acl_filter import check_doc_access
+
+        package = dict(run.get("evidence_package") or {})
+        evidences = list(package.get("evidences") or [])
+        allowed = []
+        hidden = 0
+        for evidence in evidences:
+            if not isinstance(evidence, dict):
+                hidden += 1
+                continue
+            metadata = evidence.get("metadata")
+            if not isinstance(metadata, dict) or not check_doc_access(metadata, user):
+                hidden += 1
+                continue
+            allowed.append(evidence)
+        package["evidences"] = allowed
+        run["evidence_package"] = package
+        run["hidden_evidence_count"] = hidden
+
+        if hidden:
+            # 最终答案、声明和复核文本可能转述已撤权证据；无法逐 token
+            # 可靠裁剪时宁可隐藏整块内容，也不能只删除来源卡片。
+            run["final_answer"] = "该运行包含您当前无权访问的证据，回答内容已隐藏。"
+            run["source_cards"] = []
+            run["analysis_report"] = {}
+            run["review_report"] = {}
+        return run
+
+    def save_research_run(self, payload: dict, user: dict) -> dict:
+        """保存一次已经完成的 Deep Research；不参与回答关键路径。"""
+        question = str(payload.get("question", "")).strip()
+        session_id = str(payload.get("session_id", "")).strip()
+        if not question:
+            raise ValueError("研究问题不能为空")
+        if not session_id:
+            raise ValueError("会话 ID 不能为空")
+
+        project_id = str(payload.get("project_id") or "").strip() or None
+        if project_id:
+            self.get_project(project_id, user)
+
+        username, _ = self._identity(user)
+        run_id = str(payload.get("id") or uuid.uuid4().hex)
+        status = str(payload.get("status") or "completed")
+        if status not in {"completed", "failed"}:
+            raise ValueError("研究运行状态不合法")
+        now = time.time()
+
+        json_fields = {
+            "source_cards_json": payload.get("source_cards") or [],
+            "evidence_package_json": payload.get("evidence_package") or {},
+            "analysis_report_json": payload.get("analysis_report") or {},
+            "review_report_json": payload.get("review_report") or {},
+            "trace_json": payload.get("research_trace") or {},
+            "metrics_json": payload.get("metrics") or {},
+        }
+        encoded = {
+            key: json.dumps(value, ensure_ascii=False, default=str)
+            for key, value in json_fields.items()
+        }
+        with self._connection() as conn:
+            conn.execute(
+                """INSERT OR IGNORE INTO research_runs
+                   (id, project_id, session_id, user_id, question, mode, status,
+                    final_answer, source_cards_json, evidence_package_json,
+                    analysis_report_json, review_report_json, trace_json,
+                    metrics_json, created_at, completed_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    run_id, project_id, session_id, username, question, "deep", status,
+                    str(payload.get("final_answer") or ""),
+                    encoded["source_cards_json"], encoded["evidence_package_json"],
+                    encoded["analysis_report_json"], encoded["review_report_json"],
+                    encoded["trace_json"], encoded["metrics_json"], now, now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM research_runs WHERE id = ?", (run_id,)).fetchone()
+        return self._serialize_research_run(row, include_payload=True, user=user)
+
+    def _serialize_research_run(
+        self,
+        row: sqlite3.Row,
+        *,
+        include_payload: bool,
+        user: dict,
+    ) -> dict:
+        item = dict(row)
+        item["source_cards"] = self._json_object(item.pop("source_cards_json"), [])
+        item["metrics"] = self._json_object(item.pop("metrics_json"), {})
+        if include_payload:
+            item["evidence_package"] = self._json_object(item.pop("evidence_package_json"), {})
+            item["analysis_report"] = self._json_object(item.pop("analysis_report_json"), {})
+            item["review_report"] = self._json_object(item.pop("review_report_json"), {})
+            item["research_trace"] = self._json_object(item.pop("trace_json"), {})
+            return self._filter_run_payload_for_document_acl(item, user)
+        item.pop("source_cards", None)
+        item["final_answer"] = str(item.get("final_answer") or "")[:240]
+        for key in (
+            "evidence_package_json", "analysis_report_json", "review_report_json", "trace_json",
+        ):
+            item.pop(key, None)
+        return item
+
+    def list_research_runs(
+        self,
+        user: dict,
+        *,
+        session_id: str = "",
+        project_id: str = "",
+        limit: int = 20,
+    ) -> list[dict]:
+        limit = max(1, min(int(limit), 100))
+        if project_id:
+            self.get_project(project_id, user)
+        with self._connection() as conn:
+            rows = conn.execute(
+                """SELECT * FROM research_runs
+                   WHERE (? = '' OR session_id = ?)
+                     AND (? = '' OR project_id = ?)
+                   ORDER BY created_at DESC LIMIT ?""",
+                (session_id, session_id, project_id, project_id, limit),
+            ).fetchall()
+        return [
+            self._serialize_research_run(row, include_payload=False, user=user)
+            for row in rows
+            if self._run_accessible(dict(row), user)
+        ]
+
+    def get_research_run(self, run_id: str, user: dict) -> dict:
+        with self._connection() as conn:
+            row = conn.execute("SELECT * FROM research_runs WHERE id = ?", (run_id,)).fetchone()
+        if not row:
+            raise ValueError("研究运行不存在")
+        if not self._run_accessible(dict(row), user):
+            raise PermissionError("无权访问该研究运行")
+        item = self._serialize_research_run(row, include_payload=True, user=user)
+        username, _ = self._identity(user)
+        with self._connection() as conn:
+            confirmations = conn.execute(
+                """SELECT claim_id FROM research_memory_confirmations
+                   WHERE run_id = ? AND user_id = ? ORDER BY confirmed_at""",
+                (run_id, username),
+            ).fetchall()
+        item["confirmed_claim_ids"] = [row["claim_id"] for row in confirmations]
+        return item
+
+    def find_reusable_research_episode(
+        self,
+        question: str,
+        user: dict,
+        *,
+        project_id: str = "",
+    ) -> Optional[dict]:
+        """查找同题、同权限范围的最近一次成功运行，仅返回检索计划。
+
+        历史答案和 Claim 不会进入新一轮上下文；新运行仍会按当前 ACL 重新检索，
+        因而 Research Run 只充当可复用的“研究过程记忆”。
+        """
+        normalized = str(question or "").strip()
+        if not normalized:
+            return None
+        with self._connection() as conn:
+            rows = conn.execute(
+                """SELECT * FROM research_runs
+                   WHERE question = ? AND status = 'completed'
+                     AND ((? = '' AND project_id IS NULL) OR project_id = ?)
+                   ORDER BY completed_at DESC LIMIT 20""",
+                (normalized, project_id, project_id),
+            ).fetchall()
+        for row in rows:
+            raw = dict(row)
+            if not self._run_accessible(raw, user):
+                continue
+            detail = self._serialize_research_run(row, include_payload=True, user=user)
+            if detail.get("hidden_evidence_count"):
+                continue
+            if (detail.get("review_report") or {}).get("decision") != "PASS":
+                continue
+            researcher = (
+                (detail.get("research_trace") or {}).get("stages") or {}
+            ).get("researcher") or {}
+            subquestions = [
+                str(item).strip()
+                for item in researcher.get("subquestions") or []
+                if str(item).strip()
+            ]
+            subquestions = list(dict.fromkeys(subquestions))[:4]
+            if len(subquestions) < 2:
+                continue
+            return {
+                "run_id": detail["id"],
+                "created_at": detail["created_at"],
+                "subquestions": subquestions,
+                "reuse_policy": "仅复用检索计划；证据按当前 ACL 重新检索",
+            }
+        return None
+
+    def prepare_confirmed_claim(self, run_id: str, claim_id: str, user: dict) -> dict:
+        """验证某条 Research Run 事实是否满足长期记忆提升门槛。
+
+        这里只准备候选，不写 Mem0。调用方必须收到用户显式确认后再执行写入。
+        """
+        detail = self.get_research_run(run_id, user)
+        if detail.get("status") != "completed":
+            raise ValueError("只有已完成的研究运行可以提升长期记忆")
+
+        review = detail.get("review_report") or {}
+        if review.get("decision") != "PASS" or review.get("acl_verified", True) is not True:
+            raise ValueError("该结论尚未通过 Reviewer 与 ACL 复核")
+
+        claims = (detail.get("analysis_report") or {}).get("claims") or []
+        claim = next(
+            (item for item in claims if str(item.get("claim_id") or "") == claim_id),
+            None,
+        )
+        if not claim:
+            raise ValueError("研究结论不存在")
+        if claim.get("claim_type") != "fact":
+            raise ValueError("只有事实类结论可以提升为长期记忆")
+
+        source_ids = [str(item) for item in claim.get("source_ids") or [] if str(item)]
+        evidences = {
+            str(item.get("source_id")): item
+            for item in (detail.get("evidence_package") or {}).get("evidences") or []
+            if isinstance(item, dict) and item.get("source_id")
+        }
+        if not source_ids or any(source_id not in evidences for source_id in source_ids):
+            raise ValueError("该事实缺少当前可访问的有效证据")
+
+        claim_text = str(claim.get("text") or "").strip()
+        rejected = [
+            item for item in review.get("items") or []
+            if isinstance(item, dict)
+            and item.get("supported") is False
+            and str(item.get("claim") or "").strip() == claim_text
+        ]
+        if rejected:
+            raise ValueError("该事实被 Reviewer 标记为不受支持")
+
+        return {
+            "run_id": run_id,
+            "claim_id": claim_id,
+            "text": claim_text,
+            "source_ids": source_ids,
+            "source_titles": [
+                str(evidences[source_id].get("title") or evidences[source_id].get("source") or source_id)
+                for source_id in source_ids
+            ],
+            "already_confirmed": claim_id in (detail.get("confirmed_claim_ids") or []),
+        }
+
+    def record_memory_confirmation(
+        self,
+        run_id: str,
+        claim_id: str,
+        user: dict,
+        memory_result: dict,
+    ) -> None:
+        """记录已经成功提交到 Mem0 的用户确认，提供幂等审计。"""
+        username, _ = self._identity(user)
+        with self._connection() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO research_memory_confirmations
+                   (run_id, claim_id, user_id, confirmed_at, memory_result_json)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    run_id,
+                    claim_id,
+                    username,
+                    time.time(),
+                    json.dumps(memory_result or {}, ensure_ascii=False, default=str),
+                ),
+            )
 
     def create_experiment(self, project_id: str, payload: dict, user: dict) -> dict:
         title = str(payload.get("title", "")).strip()

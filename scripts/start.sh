@@ -72,9 +72,16 @@ if port_in_use 8010; then
     echo "启动失败：端口 8010 已被其他进程占用。"
     exit 1
 fi
+FRONTEND_MODE="vite"
 if port_in_use 3000; then
-    echo "启动失败：端口 3000 已被其他进程占用。"
-    exit 1
+    if [[ -f "${PROJECT_DIR}/frontend/dist/index.html" ]]; then
+        FRONTEND_MODE="integrated"
+        echo "端口 3000 已被其他服务占用，将使用后端 8010 托管已构建前端。"
+    else
+        echo "启动失败：端口 3000 已被其他进程占用，且 frontend/dist 尚未构建。"
+        echo "请先执行：cd frontend && npm run build"
+        exit 1
+    fi
 fi
 
 if [[ ! -f "${PROJECT_DIR}/config/.env" ]]; then
@@ -111,16 +118,20 @@ if ! wait_for_url "http://127.0.0.1:8010/health/ready" 45; then
     exit 1
 fi
 
-echo "正在启动前端（端口 3000）..."
-nohup "${FRONTEND_BIN}" "${PROJECT_DIR}/frontend" --host 0.0.0.0 --port 3000 >"${FRONTEND_LOG}" 2>&1 </dev/null &
-frontend_pid=$!
-printf '%s\n' "${frontend_pid}" >"${FRONTEND_PID_FILE}"
+if [[ "${FRONTEND_MODE}" == "vite" ]]; then
+    echo "正在启动前端（端口 3000）..."
+    nohup "${FRONTEND_BIN}" "${PROJECT_DIR}/frontend" --host 0.0.0.0 --port 3000 >"${FRONTEND_LOG}" 2>&1 </dev/null &
+    frontend_pid=$!
+    printf '%s\n' "${frontend_pid}" >"${FRONTEND_PID_FILE}"
 
-if ! wait_for_url "http://127.0.0.1:3000/" 20; then
-    echo "前端启动失败，最近日志："
-    tail -n 30 "${FRONTEND_LOG}" || true
-    cleanup_started_processes
-    exit 1
+    if ! wait_for_url "http://127.0.0.1:3000/" 20; then
+        echo "前端启动失败，最近日志："
+        tail -n 30 "${FRONTEND_LOG}" || true
+        cleanup_started_processes
+        exit 1
+    fi
+else
+    rm -f "${FRONTEND_PID_FILE}"
 fi
 
 trap - INT TERM
@@ -135,13 +146,26 @@ SSH_USER="${USER:-你的用户名}"
 
 echo
 echo "项目启动成功："
-echo "  服务器本机前端：http://127.0.0.1:3000"
+if [[ "${FRONTEND_MODE}" == "vite" ]]; then
+    echo "  服务器本机前端：http://127.0.0.1:3000"
+else
+    echo "  服务器本机前端：http://127.0.0.1:8010（前后端一体模式）"
+fi
 echo "  服务器本机后端：http://127.0.0.1:8010/docs"
-echo "  同一内网可尝试：http://${ACCESS_HOST}:3000"
+if [[ "${FRONTEND_MODE}" == "vite" ]]; then
+    echo "  同一内网可尝试：http://${ACCESS_HOST}:3000"
+else
+    echo "  同一内网可尝试：http://${ACCESS_HOST}:8010"
+fi
 echo
 echo "从远程电脑访问时，请在远程电脑执行本地转发（-L）："
-echo "  ssh -N -T -o ExitOnForwardFailure=yes -L 3000:127.0.0.1:3000 -L 8010:127.0.0.1:8010 ${SSH_USER}@${SSH_HOST}"
-echo "然后在远程电脑打开：http://127.0.0.1:3000"
+if [[ "${FRONTEND_MODE}" == "vite" ]]; then
+    echo "  ssh -N -T -o ExitOnForwardFailure=yes -L 3000:127.0.0.1:3000 -L 8010:127.0.0.1:8010 ${SSH_USER}@${SSH_HOST}"
+    echo "然后在远程电脑打开：http://127.0.0.1:3000"
+else
+    echo "  ssh -N -T -o ExitOnForwardFailure=yes -L 8010:127.0.0.1:8010 ${SSH_USER}@${SSH_HOST}"
+    echo "然后在远程电脑打开：http://127.0.0.1:8010"
+fi
 echo "  后端日志：${BACKEND_LOG}"
 echo "  前端日志：${FRONTEND_LOG}"
 echo "停止项目：./scripts/stop.sh"

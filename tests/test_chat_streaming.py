@@ -1,6 +1,7 @@
 """聊天流只向用户发送最终回答，不泄露图内模型中间输出。"""
 
 import importlib
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -8,6 +9,7 @@ import pytest
 from langchain_core.documents import Document
 
 from src.rag.retrieval.acl_filter import UserContext
+from src.api.services.research_service import ResearchService
 
 
 chat_module = importlib.import_module("src.api.services.chat_service")
@@ -62,6 +64,42 @@ def test_source_cards_are_reauthorized_for_current_user():
     )
 
     assert [card["title"] for card in cards] == ["公开资料"]
+
+
+@pytest.mark.asyncio
+async def test_research_run_background_save_persists_completed_state(tmp_path, monkeypatch):
+    service = ResearchService(str(tmp_path / "research.db"))
+    monkeypatch.setattr(chat_module, "research_service", service)
+    user = UserContext(
+        user_id="u1",
+        username="alice",
+        role="student",
+        department="",
+        department_name="",
+        department_path="",
+    )
+
+    run_id = chat_module.ChatService()._schedule_research_run_save(
+        question="综合实验记录",
+        session_id="session-1",
+        project_id=None,
+        user_id="alice",
+        user_context=user,
+        final_state={
+            "final_answer": "研究简报",
+            "used_agent": "deep_research_agent",
+            "evidence_package": {"evidences": []},
+            "analysis_report": {"claims": []},
+            "review_report": {"decision": "PASS"},
+            "research_trace": {"stages": {}},
+        },
+        source_cards=[],
+    )
+    await asyncio.gather(*list(chat_module._background_chat_tasks))
+
+    saved = service.get_research_run(run_id, {"username": "alice", "role": "student"})
+    assert saved["final_answer"] == "研究简报"
+    assert saved["review_report"]["decision"] == "PASS"
 
 
 @pytest.mark.asyncio
@@ -167,3 +205,49 @@ async def test_stream_falls_back_to_final_graph_answer(monkeypatch):
 
     assert streamed_text == "工具执行完成后的回答"
     assert "内部工具选择" not in "".join(chunks)
+
+
+@pytest.mark.asyncio
+async def test_deep_stream_emits_research_run_id(monkeypatch):
+    graph = _FakeGraph(
+        [_model_event("研究简报", visible=True)],
+        {
+            "final_answer": "研究简报",
+            "retrieved_docs": [],
+            "used_agent": "deep_research_agent",
+            "version_source": "",
+            "evidence_package": {"evidences": []},
+            "analysis_report": {"claims": []},
+            "review_report": {"decision": "PASS"},
+            "research_trace": {"stages": {}},
+        },
+    )
+
+    async def _get_graph():
+        return graph
+
+    monkeypatch.setattr(chat_module, "get_agent_graph_async", _get_graph)
+    monkeypatch.setattr(chat_module.session_service, "ensure_session_exists", lambda *_: None)
+    monkeypatch.setattr(chat_module.session_service, "get_session", lambda *_: {"message_count": 1})
+    monkeypatch.setattr(chat_module.session_service, "save_message", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(chat_module.ChatService, "_schedule_memory_save", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        chat_module.ChatService,
+        "_schedule_research_run_save",
+        lambda *_args, **_kwargs: "run-123",
+    )
+
+    chunks = [
+        chunk
+        async for chunk in chat_module.ChatService().achat_stream(
+            "综合多份实验记录",
+            "session-deep",
+            username="alice",
+            research_mode="deep",
+            project_id="project-1",
+        )
+    ]
+    events = _decode_sse(chunks)
+
+    run_event = next(event for event in events if event["type"] == "research_run_id")
+    assert run_event["data"] == "run-123"

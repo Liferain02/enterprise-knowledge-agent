@@ -65,6 +65,11 @@ def test_unproven_crag_is_disabled_by_default():
     assert _settings().crag_enabled is False
 
 
+def test_mem0_is_enabled_by_default():
+    """记忆默认开启；节点自身负责在依赖失败时安全降级。"""
+    assert _settings().mem0_enabled is True
+
+
 @pytest.mark.parametrize("value", [False, "false", "0", "off", "release", "production"])
 def test_debug_false_values_are_real_booleans(value):
     settings = _settings(debug=value)

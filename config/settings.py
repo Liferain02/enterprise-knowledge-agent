@@ -353,8 +353,8 @@ class Settings(BaseSettings):
 
     # Mem0 记忆配置
     mem0_enabled: bool = Field(
-        default=False,
-        description="是否启用 Mem0 智能记忆功能"
+        default=True,
+        description="是否启用 Mem0 智能记忆功能；失败时自动降级，不阻塞问答主链"
     )
     mem0_max_context_chars: int = Field(
         default=500,
@@ -455,6 +455,18 @@ class Settings(BaseSettings):
     query_expand_rerank_fusion_k: int = Field(
         default=60,
         description="RRF 排序参数 k"
+    )
+    standalone_rewrite_enabled: bool = Field(
+        default=True,
+        description="多轮追问存在明确指代时，是否追加一条带上下文的独立检索查询",
+    )
+    standalone_rewrite_max_context_chars: int = Field(
+        default=120,
+        description="Standalone 查询最多携带的最近用户问题字符数",
+    )
+    query_expand_max_total_queries: int = Field(
+        default=4,
+        description="原查询、Standalone 与查询分解合计的最大检索查询数",
     )
 
     # 开发/盲测可直接调用固定链路；只有 Blind Holdout 达标后才在部署中开启。

@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..schemas import (
+    ConfirmResearchClaimResponse,
     CreateExperimentRequest,
     CreateProjectRequest,
     CreateResearchTaskRequest,
@@ -11,6 +12,8 @@ from ..schemas import (
     ProjectItem,
     ProjectListResponse,
     ResearchOverviewResponse,
+    ResearchRunDetailItem,
+    ResearchRunListResponse,
     ResearchTaskItem,
     ResearchTaskListResponse,
     UpdateResearchTaskRequest,
@@ -33,6 +36,102 @@ def _raise_service_error(error: Exception) -> None:
 @router.get("/overview", response_model=ResearchOverviewResponse)
 async def get_research_overview(current_user: dict = Depends(get_current_user)):
     return ResearchOverviewResponse(**research_service.get_overview(current_user))
+
+
+@router.get("/runs", response_model=ResearchRunListResponse)
+async def list_research_runs(
+    session_id: str = Query(default="", max_length=128),
+    project_id: str = Query(default="", max_length=64),
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        runs = research_service.list_research_runs(
+            current_user,
+            session_id=session_id.strip(),
+            project_id=project_id.strip(),
+            limit=limit,
+        )
+        return ResearchRunListResponse(runs=runs, total=len(runs))
+    except Exception as error:
+        _raise_service_error(error)
+
+
+@router.get("/runs/{run_id}", response_model=ResearchRunDetailItem)
+async def get_research_run(
+    run_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        return ResearchRunDetailItem(**research_service.get_research_run(run_id, current_user))
+    except Exception as error:
+        _raise_service_error(error)
+
+
+@router.post(
+    "/runs/{run_id}/claims/{claim_id}/confirm-memory",
+    response_model=ConfirmResearchClaimResponse,
+)
+async def confirm_research_claim_memory(
+    run_id: str,
+    claim_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """用户显式确认后，将有证据且 Reviewer PASS 的事实提交到 Mem0。"""
+    try:
+        from config.settings import get_settings
+        from src.agent.memory import get_mem0_manager
+
+        if not get_settings().mem0_enabled:
+            raise HTTPException(status_code=503, detail="长期记忆当前未启用")
+        candidate = research_service.prepare_confirmed_claim(
+            run_id, claim_id, current_user,
+        )
+        if candidate["already_confirmed"]:
+            return ConfirmResearchClaimResponse(
+                stored=True,
+                run_id=run_id,
+                claim_id=claim_id,
+                text=candidate["text"],
+                source_titles=candidate["source_titles"],
+            )
+        result = await get_mem0_manager().add_conversation(
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"我确认以下科研事实：{candidate['text']}"
+                    f"（证据来源：{'、'.join(candidate['source_titles'])}）"
+                ),
+            }],
+            user_id=current_user.get("username", "anonymous"),
+            metadata={
+                "memory_type": "confirmed_research_fact",
+                "research_run_id": run_id,
+                "claim_id": claim_id,
+                "source_ids": candidate["source_ids"],
+                "review_decision": "PASS",
+                "user_confirmed": True,
+            },
+            # Claim 已经过证据、Reviewer 和用户三重确认，不再让 Mem0 的
+            # 提取 LLM 改写一次；精确存储也显著降低按钮等待时间。
+            infer=False,
+        )
+        if not result.get("success") or result.get("message") == "Mem0 降级模式":
+            raise HTTPException(status_code=503, detail="长期记忆保存失败，请稍后重试")
+        research_service.record_memory_confirmation(
+            run_id, claim_id, current_user, result,
+        )
+        return ConfirmResearchClaimResponse(
+            stored=True,
+            run_id=run_id,
+            claim_id=claim_id,
+            text=candidate["text"],
+            source_titles=candidate["source_titles"],
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        _raise_service_error(error)
 
 
 @router.post("/seed-samples")

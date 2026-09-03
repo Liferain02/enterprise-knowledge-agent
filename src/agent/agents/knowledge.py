@@ -72,6 +72,8 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
         results, grade_result, rewrite_history = await _retrieve_documents(
             last_user_message, top_k, needs_expansion, user_context,
+            recent_messages=messages,
+            summary=summary,
         )
 
         retrieval_time = time.time() - t0
@@ -151,6 +153,9 @@ async def _retrieve_documents(
     top_k: int,
     needs_expansion: bool,
     user_context: Any,
+    *,
+    recent_messages: List[Any] | None = None,
+    summary: str = "",
 ) -> Tuple[List[Tuple[Document, float]], Any, List[str]]:
     """按配置选择默认检索或显式 CRAG 实验路径。"""
 
@@ -171,6 +176,20 @@ async def _retrieve_documents(
             user=user_context,
         )
 
+    from src.rag.retrieval.query_expander import StandaloneQueryRewriter
+
+    rewrite = StandaloneQueryRewriter.rewrite(
+        query,
+        recent_messages=recent_messages,
+        summary=summary,
+        max_context_chars=getattr(settings, "standalone_rewrite_max_context_chars", 120),
+    ) if getattr(settings, "standalone_rewrite_enabled", True) else None
+    standalone_queries = (
+        [variant.text for variant in rewrite.variants[1:]]
+        if rewrite and rewrite.triggered
+        else []
+    )
+
     if needs_expansion and getattr(settings, "query_expand_enabled", True):
         from src.rag.retrieval.query_expander import decompose_and_retrieve
 
@@ -178,10 +197,25 @@ async def _retrieve_documents(
             query=query,
             top_k=top_k,
             user=user_context,
+            additional_queries=standalone_queries,
+            max_total_queries=getattr(settings, "query_expand_max_total_queries", 4),
         )
         results = [(doc, score) for doc, score, _source in expanded]
-        history = list(dict.fromkeys([query, *expansion.all_queries]))
+        history = list(dict.fromkeys([query, *standalone_queries, *expansion.all_queries]))[
+            :getattr(settings, "query_expand_max_total_queries", 4)
+        ]
         return results, None, history
+
+    if standalone_queries:
+        from src.rag.retrieval.query_expander import multi_query_retrieve
+
+        queries = [query, *standalone_queries]
+        fused = await multi_query_retrieve(
+            queries,
+            top_k_per_query=top_k,
+            user=user_context,
+        )
+        return [(doc, score) for doc, score, _source in fused[:top_k]], None, queries
 
     from src.rag.retrieval.retriever import get_retriever_manager
 

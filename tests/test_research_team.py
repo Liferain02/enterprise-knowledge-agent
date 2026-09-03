@@ -230,6 +230,42 @@ async def test_researcher_rechecks_acl_and_drops_restricted_evidence(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_researcher_reuses_only_prior_plan_and_retrieves_current_evidence(monkeypatch):
+    from src.api.services.research_service import research_service
+
+    question = "综合比较实验记录与组会纪要并形成下一步研究建议"
+    episode = {
+        "run_id": "prior-run",
+        "subquestions": ["比较实验结果", "核对组会中的待办"],
+        "reuse_policy": "仅复用检索计划；证据按当前 ACL 重新检索",
+    }
+    monkeypatch.setattr(
+        research_service, "find_reusable_research_episode", lambda *_args, **_kwargs: episode,
+    )
+    forbidden_planner = AsyncMock(side_effect=AssertionError("同题运行不应重复规划"))
+    monkeypatch.setattr(team, "_plan_subquestions", forbidden_planner)
+    package = team.EvidencePackage(
+        original_question=question,
+        subquestions=episode["subquestions"],
+        evidences=[],
+        missing_evidence=episode["subquestions"],
+    )
+    retrieve = AsyncMock(return_value=(package, [], 2, []))
+    monkeypatch.setattr(team, "_retrieve_evidence", retrieve)
+
+    result = await team.research_agent_node({
+        "messages": [HumanMessage(content=question)],
+        "user_context": _student(),
+        "user_id": "student-1",
+    })
+
+    forbidden_planner.assert_not_awaited()
+    assert retrieve.await_args.args[0] == episode["subquestions"]
+    assert result["research_team_metrics"]["llm_calls"] == 0
+    assert result["research_trace"]["stages"]["researcher"]["episodic_memory"]["run_id"] == "prior-run"
+
+
+@pytest.mark.asyncio
 async def test_reviewer_overrides_pass_when_claim_has_invalid_citation(monkeypatch):
     package = team.EvidencePackage(
         original_question="问题",

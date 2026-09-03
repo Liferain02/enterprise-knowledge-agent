@@ -6,6 +6,7 @@ import logging
 import re
 import time
 import asyncio
+import uuid
 from typing import Dict, Any, AsyncGenerator, Optional, List
 from langchain_core.documents import Document
 from src.agent.graph import (
@@ -155,6 +156,7 @@ class ChatService:
         answer: str,
         used_agent: str,
         sources: Optional[List[Dict[str, Any]]] = None,
+        research_run_id: Optional[str] = None,
     ) -> None:
         """保存用户和助手的聊天消息"""
         try:
@@ -162,6 +164,8 @@ class ChatService:
             metadata = {"agent": used_agent} if used_agent else {}
             if sources:
                 metadata["sources"] = sources
+            if research_run_id:
+                metadata["research_run_id"] = research_run_id
             session_service.save_message(user_id, session_id, "assistant", answer, metadata)
         except Exception as e:
             logger.warning(f"保存消息失败: {e}")
@@ -171,6 +175,53 @@ class ChatService:
         task = asyncio.create_task(save_to_mem0_node(state))
         _background_chat_tasks.add(task)
         task.add_done_callback(_background_chat_tasks.discard)
+
+    def _schedule_research_run_save(
+        self,
+        *,
+        question: str,
+        session_id: str,
+        project_id: Optional[str],
+        user_id: str,
+        user_context,
+        final_state: Dict[str, Any],
+        source_cards: List[Dict[str, Any]],
+    ) -> str:
+        """非阻塞保存完成态 Deep Research，并提前返回稳定 run_id。"""
+        run_id = uuid.uuid4().hex
+        current_user = _user_context_to_dict(user_context) or {
+            "username": user_id,
+            "role": "student",
+        }
+        current_user["username"] = user_id
+        payload = {
+            "id": run_id,
+            "project_id": project_id,
+            "session_id": session_id,
+            "question": question,
+            "status": "failed" if final_state.get("used_agent") == "error" else "completed",
+            "final_answer": final_state.get("final_answer") or "",
+            "source_cards": source_cards,
+            "evidence_package": final_state.get("evidence_package") or {},
+            "analysis_report": final_state.get("analysis_report") or {},
+            "review_report": final_state.get("review_report") or {},
+            "research_trace": final_state.get("research_trace") or {},
+            "metrics": {
+                "research_team": final_state.get("research_team_metrics") or {},
+                "generation": final_state.get("generation_metrics") or {},
+            },
+        }
+
+        async def persist() -> None:
+            try:
+                await asyncio.to_thread(research_service.save_research_run, payload, current_user)
+            except Exception as error:
+                logger.warning("保存研究运行失败 run=%s: %s", run_id, error)
+
+        task = asyncio.create_task(persist())
+        _background_chat_tasks.add(task)
+        task.add_done_callback(_background_chat_tasks.discard)
+        return run_id
 
     def _sse_event(self, event_type: str, data) -> str:
         """格式化为 SSE 事件"""
@@ -286,6 +337,7 @@ class ChatService:
         images: list = None,
         user_context = None,
         research_mode: str = "normal",
+        project_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         处理聊天请求（异步版本，支持多模态图片输入）。
@@ -336,6 +388,7 @@ class ChatService:
             user_id=user_id,
             user_context=user_context,
             research_mode=research_mode,
+            project_id=project_id or "",
         )
 
         answer = result.get("final_answer", "抱歉，无法生成答案。")
@@ -348,12 +401,31 @@ class ChatService:
             "session_id": session_id,
             "user_id": user_id,
         })
+        research_run_id = None
+        if research_mode == "deep":
+            research_run_id = self._schedule_research_run_save(
+                question=message,
+                session_id=session_id,
+                project_id=project_id,
+                user_id=user_id,
+                user_context=user_context,
+                final_state=result,
+                source_cards=source_cards,
+            )
 
         # 生成标题（需在保存消息前判断，此时 message_count 仍为 0）
         title = self._generate_title(user_id, message, session_id)
 
         # 保存消息
-        self._save_chat_message(user_id, session_id, message, answer, used_agent, source_cards)
+        self._save_chat_message(
+            user_id,
+            session_id,
+            message,
+            answer,
+            used_agent,
+            source_cards,
+            research_run_id,
+        )
 
         # 更新标题
         if title:
@@ -373,6 +445,7 @@ class ChatService:
             "sources": self._format_sources(source_cards),
             "used_agent": used_agent,
             "image_understood": bool(images),
+            "research_run_id": research_run_id,
         }
 
     async def achat_stream(
@@ -383,6 +456,7 @@ class ChatService:
         images: list = None,
         user_context = None,
         research_mode: str = "normal",
+        project_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """流式聊天 SSE Generator。user_context 传入用于 ACL 检索过滤。"""
         from langchain_core.messages import HumanMessage
@@ -476,6 +550,7 @@ class ChatService:
             "user_id": user_id,
             "user_context": _user_context_to_dict(user_context),
             "research_mode": research_mode,
+            "project_id": project_id or "",
         }
 
         collected_tokens = []
@@ -551,6 +626,18 @@ class ChatService:
                     "user_id": user_id,
                 })
 
+            research_run_id = None
+            if research_mode == "deep" and checkpoint:
+                research_run_id = self._schedule_research_run_save(
+                    question=message,
+                    session_id=session_id,
+                    project_id=project_id,
+                    user_id=user_id,
+                    user_context=user_context,
+                    final_state=checkpoint,
+                    source_cards=source_cards,
+                )
+
             # 不经过可见生成节点的降级/工具回答，在图结束后一次性补发。
             if final_answer and not collected_tokens:
                 yield self._sse_event("llm_token", final_answer)
@@ -566,7 +653,11 @@ class ChatService:
                 session_id,
                 "assistant",
                 final_answer,
-                {"agent": used_agent, "sources": source_cards},
+                {
+                    "agent": used_agent,
+                    "sources": source_cards,
+                    **({"research_run_id": research_run_id} if research_run_id else {}),
+                },
             )
 
             if is_first_message:
@@ -578,6 +669,8 @@ class ChatService:
             yield self._sse_event("used_agent", used_agent)
             # 发送版本溯源信息（供前端结构化展示）
             yield self._sse_event("version_source", version_source)
+            if research_run_id:
+                yield self._sse_event("research_run_id", research_run_id)
             yield self._sse_event("done", final_answer[:100])
 
         except Exception as e:
