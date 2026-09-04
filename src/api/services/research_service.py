@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 import time
@@ -13,6 +14,7 @@ from typing import Any, Iterator, Optional
 
 DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 DEFAULT_DB_PATH = DATA_DIR / "research_workspace.db"
+logger = logging.getLogger(__name__)
 _PRIVILEGED_ROLES = {"admin", "pi"}
 _PROJECT_EDITOR_ROLES = {
     "admin", "pi", "teacher", "lab_admin", "senior_student", "editor", "manager",
@@ -339,6 +341,37 @@ class ResearchService:
             return False
 
     @staticmethod
+    def _current_document_metadata(metadata: dict) -> Optional[dict]:
+        """按稳定 doc_id 读取文档注册表中的当前 ACL 元数据。
+
+        历史 Evidence 没有 doc_id 时保持兼容；有 doc_id 但当前注册表查不到
+        时 fail closed，避免把已删除/失效文档当成仍可验证的证据。
+        """
+        doc_id = str(metadata.get("doc_id") or "").strip()
+        if not doc_id:
+            return dict(metadata)
+        try:
+            from src.api.database import get_document
+
+            current = get_document(doc_id)
+        except Exception as exc:
+            logger.warning("当前文档 ACL 回查失败 doc_id=%s: %s", doc_id, exc)
+            return None
+        if not current or current.get("status") == "archived":
+            return None
+
+        merged = dict(metadata)
+        # 注册表没有 visibility 字段，其余 ACL 字段以当前值覆盖历史快照；
+        # 空列表/None 也要覆盖旧限制，才能正确表达“解除限制”。
+        for key in (
+            "version", "effective_date", "expiry_date", "confidentiality",
+            "department_restrict", "role_restrict",
+        ):
+            if key in current:
+                merged[key] = current[key]
+        return merged
+
+    @staticmethod
     def _filter_run_payload_for_document_acl(run: dict, user: dict) -> dict:
         """权限变化后 fail closed，避免历史 trace 重新泄漏证据内容。"""
         from src.rag.retrieval.acl_filter import check_doc_access
@@ -352,7 +385,12 @@ class ResearchService:
                 hidden += 1
                 continue
             metadata = evidence.get("metadata")
-            if not isinstance(metadata, dict) or not check_doc_access(metadata, user):
+            current_metadata = (
+                ResearchService._current_document_metadata(metadata)
+                if isinstance(metadata, dict)
+                else None
+            )
+            if current_metadata is None or not check_doc_access(current_metadata, user):
                 hidden += 1
                 continue
             allowed.append(evidence)

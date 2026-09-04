@@ -691,6 +691,66 @@ def test_project_knowledge_provenance_fails_closed_after_acl_downgrade(tmp_path)
     assert service.list_knowledge_records(project["id"], _user("reader"), status="all") == []
 
 
+def test_research_run_prefers_current_registered_doc_acl(monkeypatch, tmp_path):
+    service = ResearchService(str(tmp_path / "current-doc-acl.db"))
+    historical = {
+        "doc_id": "DOC-1",
+        "visibility": "public",
+        "confidentiality": "internal",
+    }
+    run = {
+        "final_answer": "历史回答",
+        "source_cards": [{"title": "历史来源"}],
+        "analysis_report": {"claims": [{"text": "历史结论"}]},
+        "review_report": {"decision": "PASS"},
+        "evidence_package": {
+            "evidences": [{
+                "source_id": "S1",
+                "excerpt": "历史证据",
+                "metadata": historical,
+            }],
+        },
+    }
+
+    import src.api.database as database_module
+    monkeypatch.setattr(database_module, "get_document", lambda _doc_id: {
+        "id": "DOC-1",
+        "status": "published",
+        "version": "2.0",
+        "effective_date": None,
+        "expiry_date": None,
+        "confidentiality": "internal",
+        "department_restrict": [],
+        "role_restrict": ["teacher"],
+    })
+
+    hidden = service._filter_run_payload_for_document_acl(run.copy(), _user("alice", "student"))
+    assert hidden["hidden_evidence_count"] == 1
+    assert hidden["final_answer"] == "该运行包含您当前无权访问的证据，回答内容已隐藏。"
+
+    allowed = service._filter_run_payload_for_document_acl(run.copy(), _user("teacher", "teacher"))
+    assert allowed["hidden_evidence_count"] == 0
+    assert allowed["evidence_package"]["evidences"][0]["metadata"] == historical
+
+
+def test_research_run_missing_current_registered_doc_fails_closed(monkeypatch, tmp_path):
+    service = ResearchService(str(tmp_path / "missing-current-doc.db"))
+    run = {
+        "final_answer": "不应展示",
+        "evidence_package": {"evidences": [{
+            "source_id": "S1",
+            "metadata": {"doc_id": "DELETED", "visibility": "public"},
+        }]},
+    }
+    import src.api.database as database_module
+    monkeypatch.setattr(database_module, "get_document", lambda _doc_id: None)
+
+    filtered = service._filter_run_payload_for_document_acl(run, _user("alice", "student"))
+
+    assert filtered["hidden_evidence_count"] == 1
+    assert filtered["source_cards"] == []
+
+
 @pytest.mark.asyncio
 async def test_project_knowledge_controller_status_and_acl_contract(tmp_path, monkeypatch):
     from src.api.controllers import research_controller
