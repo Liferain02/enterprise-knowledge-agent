@@ -65,6 +65,17 @@ def test_unproven_crag_is_disabled_by_default():
     assert _settings().crag_enabled is False
 
 
+def test_normal_retrieval_baseline_defaults_are_explicit():
+    settings = _settings()
+
+    assert settings.hybrid_search_enabled is True
+    assert settings.reranker_enabled is True
+    assert settings.reranker_provider == "qwen"
+    assert settings.standalone_rewrite_enabled is True
+    assert settings.query_expand_enabled is True
+    assert settings.crag_enabled is False
+
+
 def test_mem0_is_enabled_by_default():
     """记忆默认开启；节点自身负责在依赖失败时安全降级。"""
     assert _settings().mem0_enabled is True

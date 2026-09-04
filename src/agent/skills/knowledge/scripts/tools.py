@@ -66,9 +66,10 @@ def knowledge_search(
     搜索实验室知识库（同步封装，异步逻辑在内部处理）。
 
     检索策略选择逻辑（统一由 Planner 复杂度判断）：
-    1. needs_expansion=True（Planner 判复杂）→ Query Expansion
-    2. needs_expansion=False（Planner 判简单）→ CRAG
-    3. needs_expansion=None（外部调用未传入）→ 回退到 needs_query_expansion() 自动判断
+    1. CRAG_ENABLED=true 时，按 needs_expansion 决定是否先做 Query Expansion；
+    2. CRAG_ENABLED=false（默认）时，使用标准 Hybrid + Rerank 流程；复杂查询
+       仍由主检索节点按配置选择 Query Expansion；
+    3. needs_expansion=None（外部调用未传入）时，回退到 needs_query_expansion()。
 
     Args:
         query: 搜索查询字符串
@@ -93,7 +94,8 @@ def knowledge_search(
     )
 
     try:
-        if getattr(settings, 'crag_enabled', True):
+        # 缺失属性也必须按默认关闭处理，避免旧配置意外启用高延迟 CRAG。
+        if getattr(settings, 'crag_enabled', False):
             # CRAG 主路径（内嵌 Query Expansion 前置 + 评估 + rewrite）
             # needs_expansion=True 时，pipeline.retrieve() 会在评估前先分解查询
             result = _run_crag_search(query, top_k, needs_expansion=force_expansion)

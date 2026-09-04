@@ -96,6 +96,28 @@ async def test_default_retrieval_path_skips_unproven_crag(monkeypatch):
     forbidden_crag.assert_not_called()
 
 
+def test_legacy_knowledge_tool_missing_crag_setting_falls_back_to_normal(monkeypatch):
+    """旧工具调用方未提供配置属性时，也不能意外开启 CRAG。"""
+    import config.settings as settings_module
+    from src.agent.skills.knowledge.scripts import tools as knowledge_tools
+
+    monkeypatch.setattr(settings_module, "get_settings", lambda: SimpleNamespace(
+        reranker_threshold=0.1,
+    ))
+    monkeypatch.setattr(
+        knowledge_tools,
+        "_knowledge_search_rerank",
+        lambda query, top_k, min_score: f"normal:{query}:{top_k}:{min_score}",
+    )
+    monkeypatch.setattr(
+        knowledge_tools,
+        "_run_crag_search",
+        lambda *_args, **_kwargs: pytest.fail("缺失 crag_enabled 不应进入 CRAG"),
+    )
+
+    assert knowledge_tools.knowledge_search("RDMA 吞吐", top_k=3) == "normal:RDMA 吞吐:3:0.1"
+
+
 @pytest.mark.asyncio
 async def test_multiturn_coreference_adds_one_standalone_query(monkeypatch):
     import config.settings as settings_module
