@@ -408,7 +408,7 @@ def get_all_agent_tools() -> List[BaseTool]:
         from ..skills.skill_loader import get_skill_loader
         loader = get_skill_loader()
 
-        for skill_name in ['datetime', 'calculator', 'general']:
+        for skill_name in ['datetime', 'calculator', 'statistics', 'general']:
             try:
                 skill = loader.load_skill(skill_name)
                 tools.extend(skill.tools)

@@ -43,7 +43,18 @@ def _quick_route(question: str) -> str:
         r"\d+(?:\.\d+)?\s*(?:[+\-*/×÷%^]|乘以|除以|加上|减去)\s*\d+(?:\.\d+)?",
         query,
     )
-    if arithmetic or any(word in query for word in ("计算器", "算术")):
+    statistics_words = (
+        "均值", "平均值", "中位数", "标准差", "方差", "统计指标",
+        "指标对比", "实验结果对比", "基线对比", "相对提升", "百分比变化",
+    )
+    statistics_intent = re.search(
+        r"(?:比较|对比).{0,20}(?:指标|结果|Recall|准确率|延迟|吞吐|F1|MRR|NDCG)",
+        query,
+        re.IGNORECASE,
+    )
+    if arithmetic or any(word in query for word in ("计算器", "算术")) or statistics_intent or any(
+        word in query for word in statistics_words
+    ):
         return "operation_agent"
 
     # 产品默认能力是内部知识问答，未知意图安全降级到检索而非自由生成。
