@@ -38,6 +38,11 @@ npm --prefix frontend install
 ./scripts/stop.sh
 ```
 
+## 项目文档
+
+- [文档索引](实验室科研助手_文档索引.md)：当前有效文档、评测证据和停止边界
+- [秋招版评测收口说明](实验室科研助手_秋招版评测收口说明.md)：Retrieval 与知识演化的可复现实验结论
+
 ## 知识库导入
 
 将资料放入本地 `data/knowledge/` 后执行：
