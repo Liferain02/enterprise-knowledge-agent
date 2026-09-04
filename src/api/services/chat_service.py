@@ -251,7 +251,14 @@ class ChatService:
         results = []
         for item in retrieved_docs:
             doc = item[0] if isinstance(item, tuple) else item
-            if user_context is not None and (
+            metadata = doc.metadata or {} if isinstance(doc, Document) else {}
+            # 项目知识已由 ResearchService 复用项目、Run、Evidence ACL 复核；
+            # 不再用普通资料的 visibility 规则二次误拒项目成员。
+            project_knowledge_verified = bool(
+                metadata.get("project_knowledge_acl_verified")
+                and metadata.get("knowledge_record_id")
+            )
+            if user_context is not None and not project_knowledge_verified and (
                 not isinstance(doc, Document)
                 or not check_doc_access(doc.metadata or {}, user_context)
             ):

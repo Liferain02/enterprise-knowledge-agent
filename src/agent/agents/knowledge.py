@@ -53,6 +53,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     session_id = state.get("session_id", "default")
     user_id = state.get("user_id", "default_user")
     user_context = state.get("user_context")
+    project_id = state.get("project_id", "") or ""
 
     if not last_user_message:
         return {
@@ -74,6 +75,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             last_user_message, top_k, needs_expansion, user_context,
             recent_messages=messages,
             summary=summary,
+            project_id=project_id,
         )
 
         retrieval_time = time.time() - t0
@@ -156,6 +158,7 @@ async def _retrieve_documents(
     *,
     recent_messages: List[Any] | None = None,
     summary: str = "",
+    project_id: str = "",
 ) -> Tuple[List[Tuple[Document, float]], Any, List[str]]:
     """按配置选择默认检索或显式 CRAG 实验路径。"""
 
@@ -166,15 +169,38 @@ async def _retrieve_documents(
         return [], None, [query]
 
     settings = get_settings()
+    project_knowledge_enabled = bool(
+        getattr(settings, "project_knowledge_retrieval_enabled", False)
+        and str(project_id or "").strip()
+    )
+    project_knowledge_top_k = max(
+        0, int(getattr(settings, "project_knowledge_retrieval_top_k", 2))
+    )
+
+    def merge(results: List[Tuple[Document, float]]) -> List[Tuple[Document, float]]:
+        if not project_knowledge_enabled or project_knowledge_top_k <= 0:
+            return results
+        from src.rag.retrieval.project_knowledge import merge_project_knowledge
+
+        return merge_project_knowledge(
+            results,
+            query,
+            project_id,
+            user_context,
+            top_k=project_knowledge_top_k,
+            limit=top_k,
+        )
+
     if getattr(settings, "crag_enabled", False):
         from src.rag.evaluation.retrieval_grader import get_corrective_rag_pipeline
 
-        return await get_corrective_rag_pipeline().retrieve(
+        results, grade, history = await get_corrective_rag_pipeline().retrieve(
             query=query,
             top_k=top_k,
             needs_expansion=needs_expansion,
             user=user_context,
         )
+        return merge(results), grade, history
 
     from src.rag.retrieval.query_expander import StandaloneQueryRewriter
 
@@ -204,7 +230,7 @@ async def _retrieve_documents(
         history = list(dict.fromkeys([query, *standalone_queries, *expansion.all_queries]))[
             :getattr(settings, "query_expand_max_total_queries", 4)
         ]
-        return results, None, history
+        return merge(results), None, history
 
     if standalone_queries:
         from src.rag.retrieval.query_expander import multi_query_retrieve
@@ -215,7 +241,7 @@ async def _retrieve_documents(
             top_k_per_query=top_k,
             user=user_context,
         )
-        return [(doc, score) for doc, score, _source in fused[:top_k]], None, queries
+        return merge([(doc, score) for doc, score, _source in fused[:top_k]]), None, queries
 
     from src.rag.retrieval.retriever import get_retriever_manager
 
@@ -224,7 +250,7 @@ async def _retrieve_documents(
         k=top_k,
         user=user_context,
     )
-    return results, None, [query]
+    return merge(results), None, [query]
 
 def _build_retrieval_context(
     query: str,

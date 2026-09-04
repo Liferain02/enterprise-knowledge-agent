@@ -222,6 +222,14 @@ class Settings(BaseSettings):
         default=5,
         description="检索返回的top k结果数"
     )
+    project_knowledge_retrieval_enabled: bool = Field(
+        default=False,
+        description="是否将当前项目的 active 结构化知识合并到检索结果；默认关闭，仅显式实验开启",
+    )
+    project_knowledge_retrieval_top_k: int = Field(
+        default=2,
+        description="每次最多合并的项目知识记录数",
+    )
     similarity_threshold: float = Field(
         default=0.7,
         description="相似度阈值 (0-1，越低越宽松)"
