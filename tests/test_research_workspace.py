@@ -451,7 +451,12 @@ def test_project_knowledge_publish_trace_idempotency_and_revoke(tmp_path):
     assert repeated["id"] == published["id"]
     assert published["statement"] == "当前吞吐量为 91 Gbps。"
     assert published["source_ids"] == ["S1"]
-    assert published["sources"] == [{"source_id": "S1", "title": "实验记录 S1"}]
+    assert published["sources"] == [{
+        "source_id": "S1",
+        "title": "实验记录 S1",
+        "excerpt": "当前吞吐量为 91 Gbps。",
+        "locator": "source_id=S1",
+    }]
     assert published["research_run_id"] == run["id"]
     assert published["claim_id"] == "C1"
     assert published["created_by"] == "lead"

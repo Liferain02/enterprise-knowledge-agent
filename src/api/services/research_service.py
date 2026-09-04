@@ -746,17 +746,27 @@ class ResearchService:
         ):
             raise PermissionError("项目知识来源在当前权限下不可完整验证")
         item["research_question"] = detail.get("question", "")
-        item["sources"] = [
-            {
+        sources = []
+        for source_id in item["source_ids"]:
+            evidence = evidences[source_id]
+            metadata = evidence.get("metadata") or {}
+            locator = next(
+                (
+                    f"{key}={value}"
+                    for key in ("page", "page_number", "section", "chunk_id")
+                    if (value := evidence.get(key) or metadata.get(key)) not in (None, "")
+                ),
+                f"source_id={source_id}",
+            )
+            sources.append({
                 "source_id": source_id,
                 "title": str(
-                    evidences[source_id].get("title")
-                    or evidences[source_id].get("source")
-                    or source_id
+                    evidence.get("title") or evidence.get("source") or source_id
                 ),
-            }
-            for source_id in item["source_ids"]
-        ]
+                "excerpt": str(evidence.get("excerpt") or evidence.get("content") or ""),
+                "locator": str(locator),
+            })
+        item["sources"] = sources
         return item
 
     def publish_knowledge_record(

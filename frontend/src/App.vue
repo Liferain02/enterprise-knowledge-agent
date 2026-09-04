@@ -529,7 +529,8 @@
                       <p><b>Claim：</b>{{ record.claim_id }}</p>
                       <ul>
                         <li v-for="source in record.sources" :key="source.source_id">
-                          {{ source.title }}（{{ source.source_id }}）
+                          <b>{{ source.title }}</b>（{{ source.locator || source.source_id }}）
+                          <blockquote v-if="source.excerpt">{{ source.excerpt }}</blockquote>
                         </li>
                       </ul>
                     </template>
@@ -924,7 +925,7 @@ interface KnowledgeRecord {
   updated_at: number
   supersedes_id?: string
   research_question?: string
-  sources: Array<{ source_id: string; title: string }>
+  sources: Array<{ source_id: string; title: string; excerpt?: string; locator?: string }>
   detailLoading?: boolean
   detailError?: string
   revoking?: boolean
