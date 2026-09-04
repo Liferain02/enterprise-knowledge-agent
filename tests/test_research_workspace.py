@@ -324,7 +324,10 @@ async def test_confirmed_fact_is_stored_exactly_without_second_llm_inference(tmp
         user,
     )
     manager = SimpleNamespace(
-        add_conversation=AsyncMock(return_value={"success": True, "result": {"id": "M1"}}),
+        add_conversation=AsyncMock(return_value={
+            "success": True,
+            "result": {"results": [{"id": "M1", "event": "ADD"}]},
+        }),
     )
     monkeypatch.setattr(research_controller, "research_service", service)
     monkeypatch.setattr("config.settings.get_settings", lambda: SimpleNamespace(mem0_enabled=True))
@@ -356,6 +359,17 @@ async def test_confirmed_fact_is_stored_exactly_without_second_llm_inference(tmp
     )
     assert repeated.stored is True
     manager.add_conversation.assert_not_awaited()
+
+    manager.delete_memory = AsyncMock(return_value={"success": True})
+    revoked = await research_controller.revoke_research_claim_memory(
+        saved["id"], "C1", user,
+    )
+    assert revoked.stored is False
+    manager.delete_memory.assert_awaited_once_with("M1", user_id="researcher")
+    assert service.get_research_run(saved["id"], user)["confirmed_claim_ids"] == []
+    assert service.validate_confirmed_research_memory(
+        saved["id"], "C1", ["S1"], "", user,
+    ) is False
 
 
 @pytest.mark.asyncio

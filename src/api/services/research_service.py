@@ -608,6 +608,60 @@ class ResearchService:
                 ),
             )
 
+    def get_memory_confirmation(
+        self,
+        run_id: str,
+        claim_id: str,
+        user: dict,
+    ) -> dict:
+        """读取当前用户的确认记录及对应 Mem0 ID，用于精确撤销。"""
+        self.get_research_run(run_id, user)
+        username, _ = self._identity(user)
+        with self._connection() as conn:
+            row = conn.execute(
+                """SELECT memory_result_json FROM research_memory_confirmations
+                   WHERE run_id = ? AND claim_id = ? AND user_id = ?""",
+                (run_id, claim_id, username),
+            ).fetchone()
+        if not row:
+            raise ValueError("该科研事实尚未保存为长期记忆")
+
+        result = self._json_object(row["memory_result_json"], {})
+        memory_ids: list[str] = []
+        payload = result.get("result") if isinstance(result, dict) else None
+        candidates: list[Any] = [payload]
+        if isinstance(payload, dict):
+            candidates.extend(payload.get("results") or [])
+        elif isinstance(payload, list):
+            candidates.extend(payload)
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            memory_id = candidate.get("id") or candidate.get("memory_id")
+            if isinstance(memory_id, str) and memory_id.strip():
+                memory_ids.append(memory_id.strip())
+        return {
+            "memory_ids": list(dict.fromkeys(memory_ids)),
+            "memory_result": result,
+        }
+
+    def remove_memory_confirmation(
+        self,
+        run_id: str,
+        claim_id: str,
+        user: dict,
+    ) -> bool:
+        """撤销确认记录；Recall Gate 会立即拒绝对应的科研记忆。"""
+        self.get_research_run(run_id, user)
+        username, _ = self._identity(user)
+        with self._connection() as conn:
+            cursor = conn.execute(
+                """DELETE FROM research_memory_confirmations
+                   WHERE run_id = ? AND claim_id = ? AND user_id = ?""",
+                (run_id, claim_id, username),
+            )
+        return cursor.rowcount > 0
+
     def create_experiment(self, project_id: str, payload: dict, user: dict) -> dict:
         title = str(payload.get("title", "")).strip()
         if not title:

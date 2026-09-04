@@ -137,6 +137,49 @@ async def confirm_research_claim_memory(
         _raise_service_error(error)
 
 
+@router.delete(
+    "/runs/{run_id}/claims/{claim_id}/confirm-memory",
+    response_model=ConfirmResearchClaimResponse,
+)
+async def revoke_research_claim_memory(
+    run_id: str,
+    claim_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """撤销用户确认；即使 Mem0 暂时删除失败，Recall Gate 也会立即失效。"""
+    try:
+        from src.agent.memory import get_mem0_manager
+
+        candidate = research_service.prepare_confirmed_claim(
+            run_id, claim_id, current_user,
+        )
+        confirmation = research_service.get_memory_confirmation(
+            run_id, claim_id, current_user,
+        )
+        manager = get_mem0_manager()
+        for memory_id in confirmation["memory_ids"]:
+            await manager.delete_memory(
+                memory_id,
+                user_id=current_user.get("username", "anonymous"),
+            )
+
+        # 先确保门禁失效，避免外部向量库短暂不可用时仍将旧事实注入回答。
+        research_service.remove_memory_confirmation(
+            run_id, claim_id, current_user,
+        )
+        return ConfirmResearchClaimResponse(
+            stored=False,
+            run_id=run_id,
+            claim_id=claim_id,
+            text=candidate["text"],
+            source_titles=candidate["source_titles"],
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        _raise_service_error(error)
+
+
 @router.post("/seed-samples")
 async def seed_lab_samples(current_user: dict = Depends(get_current_user)):
     try:

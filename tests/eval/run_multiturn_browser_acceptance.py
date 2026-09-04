@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
+import statistics
 import time
 from pathlib import Path
 
@@ -72,6 +74,75 @@ def _source_matches(source: dict, expected: str) -> bool:
     return any(expected in value or expected_stem in value for value in candidates)
 
 
+def _percentile_95(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return round(ordered[max(0, math.ceil(len(ordered) * 0.95) - 1)], 2)
+
+
+def _build_result(
+    *,
+    cases: list[dict],
+    bad_responses: list[dict],
+    console_errors: list[str],
+    started: float,
+    status: str,
+) -> dict:
+    completed = sum(bool(case.get("completed")) for case in cases)
+    route_passed = sum(bool(case.get("route_ok")) for case in cases)
+    source_passed = sum(bool(case.get("gold_hit")) for case in cases)
+    latencies = [
+        float(turn["latency_seconds"])
+        for case in cases
+        for turn in (case.get("first_turn"), case.get("followup_turn"))
+        if isinstance(turn, dict) and isinstance(turn.get("latency_seconds"), (int, float))
+    ]
+    return {
+        "status": status,
+        "dataset": "lab-multi-turn-coreference-v1",
+        "selected_case_ids": list(SELECTED_CASE_IDS),
+        "base_url": BASE_URL,
+        "mem0_expected_disabled": True,
+        "summary": {
+            "total": len(SELECTED_CASE_IDS),
+            "attempted": len(cases),
+            "completed": completed,
+            "route_passed": route_passed,
+            "gold_source_hit": source_passed,
+            "latency_sample_count": len(latencies),
+            "latency_p50_seconds": round(statistics.median(latencies), 2) if latencies else None,
+            "latency_p95_seconds": _percentile_95(latencies),
+            "http_error_count": len(bad_responses),
+            "console_error_count": len(console_errors),
+            "elapsed_seconds": round(time.monotonic() - started, 2),
+        },
+        "bad_responses": bad_responses,
+        "console_errors": console_errors,
+        "cases": cases,
+    }
+
+
+def _save_checkpoint(
+    *,
+    cases: list[dict],
+    bad_responses: list[dict],
+    console_errors: list[str],
+    started: float,
+    status: str,
+) -> dict:
+    result = _build_result(
+        cases=cases,
+        bad_responses=bad_responses,
+        console_errors=console_errors,
+        started=started,
+        status=status,
+    )
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_PATH.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    return result
+
+
 async def main() -> None:
     settings = get_settings()
     selected = {
@@ -110,7 +181,12 @@ async def main() -> None:
         inputs = page.locator(".login-input")
         await inputs.nth(0).fill(settings.admin_username)
         await inputs.nth(1).fill(settings.admin_password)
-        await page.locator(".login-btn").click()
+        async with page.expect_response(
+            lambda response: response.request.method == "GET"
+            and response.url.endswith("/api/v1/history/default")
+        ) as login_history_info:
+            await page.locator(".login-btn").click()
+        await login_history_info.value
         await page.locator(".user-info").wait_for(state="visible", timeout=30_000)
         token = await page.evaluate("localStorage.getItem('eka_token')")
 
@@ -125,12 +201,24 @@ async def main() -> None:
                 "gold_sources": list(case.gold_sources),
             }
             try:
-                async with page.expect_response(
-                    lambda response: response.request.method == "POST"
-                    and response.url.endswith("/api/v1/sessions")
-                ) as response_info:
+                async with (
+                    page.expect_response(
+                        lambda response: response.request.method == "POST"
+                        and response.url.endswith("/api/v1/sessions")
+                    ) as response_info,
+                    page.expect_response(
+                        lambda response: response.request.method == "GET"
+                        and "/api/v1/history/session_" in response.url
+                    ) as new_history_info,
+                ):
                     await page.locator(".btn-new-session").click()
                 session_id = (await (await response_info.value).json())["session_id"]
+                await new_history_info.value
+                await page.locator(".empty-state").wait_for(state="visible", timeout=30_000)
+                await page.wait_for_function(
+                    "() => document.querySelectorAll('.message').length === 0",
+                    timeout=30_000,
+                )
 
                 record["first_turn"] = await _ask(page, case.previous_user_query)
                 record["followup_turn"] = await _ask(page, case.followup_query)
@@ -171,15 +259,25 @@ async def main() -> None:
                 record.update({
                     "completed": False,
                     "error_type": type(exc).__name__,
-                    "error": str(exc)[:300],
+                    "error": str(exc).splitlines()[0][:300],
                 })
             finally:
                 if session_id:
-                    await context.request.delete(
-                        f"{BASE_URL}/api/v1/sessions/{session_id}",
-                        headers={"Authorization": f"Bearer {token}"},
-                    )
+                    try:
+                        await context.request.delete(
+                            f"{BASE_URL}/api/v1/sessions/{session_id}",
+                            headers={"Authorization": f"Bearer {token}"},
+                        )
+                    except Exception as cleanup_exc:
+                        record["cleanup_error_type"] = type(cleanup_exc).__name__
             cases.append(record)
+            _save_checkpoint(
+                cases=cases,
+                bad_responses=bad_responses,
+                console_errors=console_errors,
+                started=started,
+                status="in_progress",
+            )
             print(json.dumps({
                 "case_id": case_id,
                 "completed": record.get("completed", False),
@@ -189,28 +287,13 @@ async def main() -> None:
 
         await browser.close()
 
-    completed = sum(bool(case.get("completed")) for case in cases)
-    route_passed = sum(bool(case.get("route_ok")) for case in cases)
-    source_passed = sum(bool(case.get("gold_hit")) for case in cases)
-    result = {
-        "dataset": "lab-multi-turn-coreference-v1",
-        "selected_case_ids": list(SELECTED_CASE_IDS),
-        "base_url": BASE_URL,
-        "mem0_expected_disabled": True,
-        "summary": {
-            "total": len(cases),
-            "completed": completed,
-            "route_passed": route_passed,
-            "gold_source_hit": source_passed,
-            "http_error_count": len(bad_responses),
-            "console_error_count": len(console_errors),
-            "elapsed_seconds": round(time.monotonic() - started, 2),
-        },
-        "bad_responses": bad_responses,
-        "console_errors": console_errors,
-        "cases": cases,
-    }
-    OUTPUT_PATH.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    result = _save_checkpoint(
+        cases=cases,
+        bad_responses=bad_responses,
+        console_errors=console_errors,
+        started=started,
+        status="completed",
+    )
     print(json.dumps(result["summary"], ensure_ascii=False, indent=2))
 
 

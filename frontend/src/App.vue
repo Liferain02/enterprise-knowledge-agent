@@ -612,10 +612,14 @@
                       <button
                         v-if="claim.claim_type === 'fact' && msg.researchRunDetail.review_report?.decision === 'PASS'"
                         class="feedback-btn"
-                        :disabled="msg.researchRunDetail.confirmed_claim_ids?.includes(claim.claim_id) || claim.confirming"
-                        @click="confirmResearchClaim(msg, claim)"
+                        :disabled="claim.confirming"
+                        @click="toggleResearchClaimMemory(msg, claim)"
                       >
-                        {{ msg.researchRunDetail.confirmed_claim_ids?.includes(claim.claim_id) ? '已记住' : (claim.confirming ? '保存中...' : '确认并记住') }}
+                        {{ claim.confirming
+                          ? '处理中...'
+                          : (msg.researchRunDetail.confirmed_claim_ids?.includes(claim.claim_id)
+                            ? '已记住（点击撤销）'
+                            : '确认并记住') }}
                       </button>
                     </div>
                   </div>
@@ -1368,7 +1372,7 @@ const toggleResearchRun = async (message: Message) => {
   }
 }
 
-const confirmResearchClaim = async (
+const toggleResearchClaimMemory = async (
   message: Message,
   claim: { claim_id: string; confirming?: boolean },
 ) => {
@@ -1376,15 +1380,23 @@ const confirmResearchClaim = async (
   claim.confirming = true
   message.researchRunError = ''
   try {
-    await axios.post(
-      `${API_BASE}/research/runs/${message.researchRunId}/claims/${claim.claim_id}/confirm-memory`,
-    )
     const detail = message.researchRunDetail
-    if (detail && !detail.confirmed_claim_ids?.includes(claim.claim_id)) {
-      detail.confirmed_claim_ids = [...(detail.confirmed_claim_ids || []), claim.claim_id]
+    const isConfirmed = detail?.confirmed_claim_ids?.includes(claim.claim_id) || false
+    const url = `${API_BASE}/research/runs/${message.researchRunId}/claims/${claim.claim_id}/confirm-memory`
+    if (isConfirmed) {
+      await axios.delete(url)
+      if (detail) {
+        detail.confirmed_claim_ids = (detail.confirmed_claim_ids || [])
+          .filter(id => id !== claim.claim_id)
+      }
+    } else {
+      await axios.post(url)
+      if (detail) {
+        detail.confirmed_claim_ids = [...(detail.confirmed_claim_ids || []), claim.claim_id]
+      }
     }
   } catch (error: any) {
-    message.researchRunError = error?.response?.data?.detail || '长期记忆保存失败'
+    message.researchRunError = error?.response?.data?.detail || '长期记忆操作失败'
   } finally {
     claim.confirming = false
   }
