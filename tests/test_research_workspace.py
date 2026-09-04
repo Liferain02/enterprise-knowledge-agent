@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from src.api.security import get_current_user
 from src.api.services.research_service import ResearchService
@@ -95,6 +95,7 @@ def test_project_workspace_acl_and_overview(tmp_path):
     assert service.list_projects(_user("alice"))[0]["id"] == project["id"]
     assert service.list_projects(_user("outsider")) == []
     assert service.get_overview(_user("alice"))["active_projects"] == 1
+    assert project["active_knowledge_count"] == 0
 
 
 def test_restricted_project_is_visible_to_pi(tmp_path):
@@ -462,6 +463,7 @@ def test_project_knowledge_publish_trace_idempotency_and_revoke(tmp_path):
     assert published["created_by"] == "lead"
     assert published["published_by"] == "lead"
     assert service.list_knowledge_records(project["id"], owner)[0]["id"] == published["id"]
+    assert service.get_project(project["id"], owner)["active_knowledge_count"] == 1
     detail = service.get_research_run(run["id"], owner)
     assert detail["published_claim_ids"] == ["C1"]
     assert detail["published_claim_statuses"] == {"C1": "active"}
@@ -472,6 +474,7 @@ def test_project_knowledge_publish_trace_idempotency_and_revoke(tmp_path):
     assert revoked_again["status"] == "revoked"
     assert service.list_knowledge_records(project["id"], owner) == []
     assert service.list_knowledge_records(project["id"], owner, status="all")[0]["status"] == "revoked"
+    assert service.get_project(project["id"], owner)["active_knowledge_count"] == 0
 
 
 @pytest.mark.parametrize(
@@ -534,6 +537,21 @@ def test_project_knowledge_requires_project_write_permission(tmp_path):
 
     with pytest.raises(PermissionError, match="无权向该项目发布知识"):
         service.publish_knowledge_record(run["id"], "C1", _user("reader"))
+
+
+def test_project_knowledge_wiki_is_read_only_for普通成员(tmp_path):
+    service = ResearchService(str(tmp_path / "research.db"))
+    owner = _user("lead", "teacher")
+    member = _user("alice", "student")
+    project = service.create_project({"title": "Wiki 只读项目", "members": ["alice"]}, owner)
+    run = _save_claim_run(
+        service, owner, project_id=project["id"], evidence_visibility="public",
+    )
+    record = service.publish_knowledge_record(run["id"], "C1", owner)
+
+    assert service.get_knowledge_record(record["id"], member)["id"] == record["id"]
+    with pytest.raises(PermissionError, match="无权撤销"):
+        service.revoke_knowledge_record(record["id"], member)
 
 
 def test_project_knowledge_supersede_lifecycle_and_guards(tmp_path):
@@ -613,6 +631,45 @@ def test_project_knowledge_provenance_fails_closed_after_acl_downgrade(tmp_path)
     with pytest.raises(PermissionError, match="来源.*不可完整验证"):
         service.get_knowledge_record(record["id"], _user("reader"))
     assert service.list_knowledge_records(project["id"], _user("reader"), status="all") == []
+
+
+@pytest.mark.asyncio
+async def test_project_knowledge_controller_status_and_acl_contract(tmp_path, monkeypatch):
+    from src.api.controllers import research_controller
+
+    service = ResearchService(str(tmp_path / "research.db"))
+    owner = _user("lead", "teacher")
+    member = _user("alice", "student")
+    project = service.create_project({"title": "Wiki API 项目", "members": ["alice"]}, owner)
+    run = _save_claim_run(
+        service, owner, project_id=project["id"], evidence_visibility="public",
+    )
+    record = service.publish_knowledge_record(run["id"], "C1", owner)
+    monkeypatch.setattr(research_controller, "research_service", service)
+
+    active = await research_controller.list_project_knowledge(
+        project["id"], current_user=owner,
+    )
+    assert active.total == 1 and active.records[0].status == "active"
+
+    with pytest.raises(HTTPException) as invalid_status:
+        await research_controller.list_project_knowledge(
+            project["id"], status="unknown", current_user=owner,
+        )
+    assert invalid_status.value.status_code == 400
+
+    with pytest.raises(HTTPException) as forbidden:
+        await research_controller.revoke_project_knowledge(record["id"], member)
+    assert forbidden.value.status_code == 403
+
+    revoked = await research_controller.revoke_project_knowledge(record["id"], owner)
+    assert revoked.status == "revoked"
+    assert (await research_controller.list_project_knowledge(
+        project["id"], current_user=owner,
+    )).total == 0
+    assert (await research_controller.list_project_knowledge(
+        project["id"], status="all", current_user=owner,
+    )).total == 1
 
 
 @pytest.mark.asyncio

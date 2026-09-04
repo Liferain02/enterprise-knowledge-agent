@@ -202,6 +202,16 @@ class ResearchService:
             or username in member_names
         )
 
+    @staticmethod
+    def _can_manage_project_knowledge(project: dict, user: dict) -> bool:
+        """Wiki 生命周期操作仅由负责人或项目管理角色执行。"""
+        username, role = ResearchService._identity(user)
+        return (
+            role in _PROJECT_EDITOR_ROLES
+            or username == project["created_by"]
+            or username == project["lead"]
+        )
+
     def _members(self, conn: sqlite3.Connection, project_id: str) -> list[dict]:
         rows = conn.execute(
             """SELECT username, member_role, created_at
@@ -222,9 +232,15 @@ class ResearchService:
             "SELECT COUNT(*) FROM research_tasks WHERE project_id = ? AND status != 'done'",
             (project["id"],),
         ).fetchone()[0]
+        active_knowledge_count = conn.execute(
+            """SELECT COUNT(*) FROM research_knowledge_records
+               WHERE project_id = ? AND status = 'active'""",
+            (project["id"],),
+        ).fetchone()[0]
         project["members"] = members
         project["experiment_count"] = experiment_count
         project["open_task_count"] = task_count
+        project["active_knowledge_count"] = active_knowledge_count
         return project
 
     def create_project(self, payload: dict, user: dict) -> dict:
@@ -891,7 +907,7 @@ class ResearchService:
             raise ValueError("被替代知识不属于指定项目")
         project = self.get_project(project_id, user)
         members = {item["username"] for item in project["members"]}
-        if not self._can_write_project(project, user, members):
+        if not self._can_manage_project_knowledge(project, user):
             raise PermissionError("无权替代该项目知识")
 
         # 重试同一个替代请求应返回已经创建的新版本。
@@ -947,7 +963,7 @@ class ResearchService:
         row = self._knowledge_record_row(record_id)
         project = self.get_project(row["project_id"], user)
         members = {item["username"] for item in project["members"]}
-        if not self._can_write_project(project, user, members):
+        if not self._can_manage_project_knowledge(project, user):
             raise PermissionError("无权撤销该项目知识")
         if row["status"] == "superseded":
             raise ValueError("已被替代的知识应保留其版本关系")

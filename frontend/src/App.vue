@@ -432,7 +432,7 @@
                 <p>{{ project.summary || '该项目暂未填写简介。' }}</p>
                 <div class="project-card-foot">
                   <span>{{ formatProjectStatus(project.status) }}</span>
-                  <span>{{ project.members.length }} 人 · {{ project.experiment_count }} 次实验</span>
+                  <span>{{ project.members.length }} 人 · {{ project.experiment_count }} 次实验 · {{ project.active_knowledge_count }} 条有效知识</span>
                 </div>
               </article>
             </template>
@@ -881,6 +881,7 @@ interface ResearchProject {
   members: ProjectMember[]
   experiment_count: number
   open_task_count: number
+  active_knowledge_count: number
 }
 
 interface ResearchExperiment {
@@ -1113,9 +1114,8 @@ const canWriteSelectedProject = computed(() => {
   const project = selectedProject.value
   const user = currentUser.value
   if (!project || !user) return false
-  return ['admin', 'pi'].includes(user.role)
+  return ['admin', 'pi', 'teacher', 'lab_admin', 'senior_student', 'editor', 'manager', 'hr', 'it_support'].includes(user.role)
     || project.lead === user.username
-    || project.members.some(member => member.username === user.username)
 })
 
 const applyAuthHeader = () => {

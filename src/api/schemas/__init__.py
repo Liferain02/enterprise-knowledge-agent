@@ -215,6 +215,7 @@ class ProjectItem(BaseModel):
     updated_at: float
     experiment_count: int = 0
     open_task_count: int = 0
+    active_knowledge_count: int = 0
     members: List[ProjectMemberItem] = Field(default_factory=list)
 
 

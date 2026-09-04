@@ -217,8 +217,9 @@ async def list_project_knowledge(
     current_user: dict = Depends(get_current_user),
 ):
     try:
+        status_value = getattr(status, "default", status)
         records = research_service.list_knowledge_records(
-            project_id, current_user, status=status.strip() or "active",
+            project_id, current_user, status=str(status_value).strip() or "active",
         )
         return KnowledgeRecordListResponse(
             records=[KnowledgeRecordItem(**record) for record in records],
