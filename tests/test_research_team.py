@@ -226,6 +226,30 @@ def test_analysis_normalization_moves_transient_limitation_out_of_claims():
     assert normalized.limitations == ["缺少定量实验数据"]
 
 
+def test_reviewer_blocks_empty_analysis_when_evidence_exists():
+    package = team.EvidencePackage(
+        original_question="请根据资料列出复现前需要核对的环境项",
+        evidences=[team.EvidenceItem(
+            source_id="S1",
+            subquestion="环境项",
+            title="实验规范",
+            source="实验规范.md",
+            excerpt="需要记录驱动版本和 NUMA 绑定",
+        )],
+    )
+    issues = team._deterministic_review_issues(package, team.AnalysisReport())
+
+    assert len(issues) == 1
+    assert issues[0].issue_type == "citation_gap"
+    assert issues[0].supported is False
+    assert "未形成 Claim" in issues[0].revision_instruction
+
+    assert team.route_after_reviewer({
+        "review_report": team.ReviewReport(decision="REVISE").model_dump(),
+        "research_revision_count": 0,
+    }) == "research_revision"
+
+
 def test_claim_accepts_qwen_wire_aliases_and_normalizes_missing_type():
     claim = team.Claim.model_validate({
         "claim_text": "建议下一步补做消融实验",

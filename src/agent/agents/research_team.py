@@ -798,6 +798,20 @@ def _deterministic_review_issues(
 ) -> List[ReviewItem]:
     valid_ids = {item.source_id for item in package.evidences}
     issues: List[ReviewItem] = []
+    # 有可用证据却没有任何 Claim 时，不能让 Reviewer 将空分析放行为 PASS。
+    # 这只触发现有的一次 Revision，不增加节点或循环；若修订仍为空，最终答案
+    # 继续走当前的“证据不足”安全降级。
+    if package.evidences and not analysis.claims:
+        issues.append(ReviewItem(
+            claim="Analyst 未从已有 EvidencePackage 形成任何 Claim",
+            source_ids=[],
+            supported=False,
+            issue_type="citation_gap",
+            revision_instruction=(
+                "EvidencePackage 已包含证据，但 Analyst 未形成 Claim；"
+                "请将与问题相关的证据转为带 source_ids 的结构化 Claim。"
+            ),
+        ))
     for claim in analysis.claims:
         invalid = [source_id for source_id in claim.source_ids if source_id not in valid_ids]
         if invalid:
