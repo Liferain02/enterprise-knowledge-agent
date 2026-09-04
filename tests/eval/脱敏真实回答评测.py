@@ -39,8 +39,11 @@ def selected_cases(limit: int) -> list[ComplexResearchQuery]:
 
 
 def _variant_metrics(results: list[dict], key: str) -> dict:
-    rows = [{"case": row["case"], "variants": {key: row["variants"][key]}} for row in results]
-    metrics = aggregate(rows, [key])[key]
+    # 既有 aggregate 只接受 A/B/C；Selective 只是复用其中一份实际结果，
+    # 用 A 作为内部占位后再改回展示标签，不复制模型调用或改变评分逻辑。
+    alias = "A" if key == "S" else key
+    rows = [{"case": row["case"], "variants": {alias: row["variants"][key]}} for row in results]
+    metrics = aggregate(rows, [alias])[alias]
     metrics["label"] = {"A": "All Normal", "C": "All Deep", "S": "Selective Deep"}[key]
     return metrics
 
@@ -65,8 +68,39 @@ def _render(payload: dict) -> str:
             f"{item['latency_p50_ms']:.0f}/{item['latency_p95_ms']:.0f} | "
             f"{item['avg_logical_api_calls_estimate']:.2f} |"
         )
-    lines.extend(["", "## 解释", "", "自动指标是回归 proxy，不能替代人工评分。若 Deep 的复杂样本收益不稳定而延迟/调用显著增加，停止自动路由上线，保留显式 Deep。", ""])
+    gate = payload.get("gate") or {}
+    lines.extend([
+        "", "## 复杂样本门槛", "",
+        f"- 关键词覆盖变化（Deep - Normal）：{gate.get('complex_keyword_delta', 0):.3f}",
+        f"- 引用支持 proxy 变化（Deep - Normal）：{gate.get('complex_citation_delta', 0):.3f}",
+        f"- 门槛结论：{gate.get('decision', '未计算')}",
+        "",
+        "自动指标是回归 proxy，不能替代人工评分。当前结果若引用支持下降或延迟/调用显著增加，停止自动路由上线，保留显式 Deep。",
+        "",
+    ])
     return "\n".join(lines)
+
+
+def _add_gate(payload: dict) -> dict:
+    complex_rows = [
+        row for row in payload.get("results", [])
+        if row.get("case", {}).get("category") != "normal"
+    ]
+    normal = [row["variants"]["A"] for row in complex_rows if not row["variants"]["A"].get("error")]
+    deep = [row["variants"]["C"] for row in complex_rows if not row["variants"]["C"].get("error")]
+    avg = lambda rows, key: sum(float(row.get(key, 0) or 0) for row in rows) / len(rows) if rows else 0.0
+    keyword_delta = avg(deep, "keyword_correctness") - avg(normal, "keyword_correctness")
+    citation_delta = avg(deep, "citation_support_rate") - avg(normal, "citation_support_rate")
+    passed = keyword_delta >= 0.05 and citation_delta >= -0.02
+    payload["gate"] = {
+        "complex_case_count": len(complex_rows),
+        "complex_keyword_delta": round(keyword_delta, 4),
+        "complex_citation_delta": round(citation_delta, 4),
+        "citation_degradation_tolerance": -0.02,
+        "passed": passed,
+        "decision": "进入人工盲评" if passed else "停止自动路由上线，继续使用显式 Deep",
+    }
+    return payload
 
 
 async def run(limit: int = 6, checkpoint: Path = CHECKPOINT) -> dict:
@@ -98,7 +132,7 @@ async def run(limit: int = 6, checkpoint: Path = CHECKPOINT) -> dict:
         "results": results,
         "methodology_note": "A=All Normal，C=All Deep，S=确定性选择性；自动 proxy 不等同人工事实评分。",
     }
-    return payload
+    return _add_gate(payload)
 
 
 async def main() -> None:
@@ -106,7 +140,14 @@ async def main() -> None:
     parser.add_argument("--limit", type=int, default=6)
     parser.add_argument("--checkpoint", type=Path, default=CHECKPOINT)
     parser.add_argument("--write", action="store_true")
+    parser.add_argument("--rebuild", action="store_true", help="只基于已有 JSON 重建带门槛结论的报告，不调用模型")
     args = parser.parse_args()
+    if args.rebuild:
+        payload = _add_gate(json.loads(OUTPUT.read_text(encoding="utf-8")))
+        OUTPUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        REPORT.write_text(_render(payload) + "\n", encoding="utf-8")
+        print(_render(payload))
+        return
     payload = await run(args.limit, args.checkpoint)
     print(_render(payload))
     if args.write:
