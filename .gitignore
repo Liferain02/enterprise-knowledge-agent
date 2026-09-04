@@ -72,7 +72,7 @@ data/*.md
 data/*.png
 
 # 仅本地维护的设计、复盘和面试文档
-docs/
+
 
 # 日志
 *.log
