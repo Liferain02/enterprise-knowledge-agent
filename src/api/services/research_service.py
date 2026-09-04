@@ -17,6 +17,9 @@ _PRIVILEGED_ROLES = {"admin", "pi"}
 _PROJECT_EDITOR_ROLES = {
     "admin", "pi", "teacher", "lab_admin", "senior_student", "editor", "manager",
 }
+# 项目知识是可被后续检索复用的正式事实，生命周期操作需要比普通项目写入
+# 更严格的治理权限。项目创建者/负责人仍通过用户名条件获得治理权限。
+_PROJECT_KNOWLEDGE_MANAGER_ROLES = {"admin", "pi", "teacher", "lab_admin"}
 _VALID_VISIBILITIES = {"public", "project", "restricted"}
 _VALID_PROJECT_STATUSES = {"planned", "active", "paused", "completed"}
 _VALID_EXPERIMENT_STATUSES = {"planned", "running", "completed", "failed"}
@@ -207,7 +210,7 @@ class ResearchService:
         """Wiki 生命周期操作仅由负责人或项目管理角色执行。"""
         username, role = ResearchService._identity(user)
         return (
-            role in _PROJECT_EDITOR_ROLES
+            role in _PROJECT_KNOWLEDGE_MANAGER_ROLES
             or username == project["created_by"]
             or username == project["lead"]
         )
@@ -810,8 +813,7 @@ class ResearchService:
         if not project_id:
             raise ValueError("只有属于科研项目的 Research Run 才能发布项目知识")
         project = self.get_project(project_id, user)
-        members = {item["username"] for item in project["members"]}
-        if not self._can_write_project(project, user, members):
+        if not self._can_manage_project_knowledge(project, user):
             raise PermissionError("无权向该项目发布知识")
         if not any(
             origin in {"raw_document", "external_evidence"}

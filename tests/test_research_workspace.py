@@ -539,6 +539,64 @@ def test_project_knowledge_requires_project_write_permission(tmp_path):
         service.publish_knowledge_record(run["id"], "C1", _user("reader"))
 
 
+@pytest.mark.parametrize("role", ["admin", "pi", "teacher", "lab_admin"])
+def test_project_knowledge_governance_roles_can_publish(tmp_path, role):
+    service = ResearchService(str(tmp_path / f"{role}.db"))
+    creator = _user("creator", "teacher")
+    project = service.create_project(
+        {"title": f"知识治理-{role}", "visibility": "public"}, creator,
+    )
+    run = _save_claim_run(
+        service, creator, project_id=project["id"], evidence_visibility="public",
+    )
+
+    published = service.publish_knowledge_record(run["id"], "C1", _user(role, role))
+
+    assert published["published_by"] == role
+
+
+def test_project_knowledge_creator_can_govern_even_with_student_role(tmp_path):
+    service = ResearchService(str(tmp_path / "creator-student.db"))
+    creator = _user("creator", "teacher")
+    project = service.create_project({"title": "负责人治理", "visibility": "public"}, creator)
+    run = _save_claim_run(
+        service, creator, project_id=project["id"], evidence_visibility="public",
+    )
+
+    published = service.publish_knowledge_record(run["id"], "C1", _user("creator", "student"))
+    revoked = service.revoke_knowledge_record(published["id"], _user("creator", "student"))
+
+    assert revoked["status"] == "revoked"
+
+
+def test_project_knowledge普通成员不能_publish_or_supersede(tmp_path):
+    service = ResearchService(str(tmp_path / "member-governance.db"))
+    owner = _user("lead", "teacher")
+    member = _user("alice", "student")
+    project = service.create_project(
+        {"title": "成员只读治理", "visibility": "public", "members": ["alice"]}, owner,
+    )
+    old_run = _save_claim_run(
+        service, owner, project_id=project["id"], evidence_visibility="public",
+    )
+    new_run = _save_claim_run(
+        service, owner, project_id=project["id"], claim_id="C2",
+        text="当前吞吐量为 92 Gbps。", evidence_visibility="public",
+    )
+    published = service.publish_knowledge_record(old_run["id"], "C1", owner)
+
+    with pytest.raises(PermissionError, match="无权向该项目发布知识"):
+        service.publish_knowledge_record(new_run["id"], "C2", member)
+    with pytest.raises(PermissionError, match="无权撤销"):
+        service.revoke_knowledge_record(published["id"], member)
+    with pytest.raises(PermissionError, match="无权替代"):
+        service.supersede_knowledge_record(
+            project["id"], published["id"], new_run["id"], "C2", member,
+        )
+
+    assert service.get_knowledge_record(published["id"], member)["id"] == published["id"]
+
+
 def test_project_knowledge_wiki_is_read_only_for普通成员(tmp_path):
     service = ResearchService(str(tmp_path / "research.db"))
     owner = _user("lead", "teacher")

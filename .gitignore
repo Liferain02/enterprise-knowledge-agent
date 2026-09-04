@@ -108,4 +108,4 @@ node_modules/
 
 # 本地 Agent / Codex 工作状态
 .agents/
-.codex
+coding-test/

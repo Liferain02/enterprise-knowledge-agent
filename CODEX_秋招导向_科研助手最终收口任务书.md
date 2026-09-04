@@ -1,0 +1,1305 @@
+# 实验室科研助手：秋招导向 Codex 最终收口任务书
+
+> 项目：`Liferain02/enterprise-knowledge-agent`  
+> 当前参考 HEAD：`ca52b7ce4b11acf90260295988187876902738a4`  
+> 目标：**以秋招展示与面试可解释性为最高优先级，停止功能堆叠，围绕 Retrieval、Deep Research、Knowledge Evolution 三条核心主线完成最终收口。**
+>
+> 本文作为后续 Codex 的唯一执行指导。若仓库中的旧 `goal*.md`、历史 P0～P6 文档或旧路线与本文冲突，以本文为准。
+
+---
+
+# 0. 总原则
+
+后续开发必须遵守：
+
+1. 不再追求功能数量。
+2. 不增加 Agent，不重写 LangGraph 主图。
+3. 每个改动必须能回答：为什么做、解决什么问题、如何评测、是否值得保留。
+4. 没有失败归因或 Benchmark 证据，不实现新能力。
+5. 不为了让实验更漂亮去修改冻结数据、Gold、Judge、阈值或统计口径。
+6. 优先保证秋招中主链路能在 3～5 分钟内讲清楚。
+7. 功能完成不等于任务完成；必须有对照实验、边界说明或真实 E2E 证据。
+8. 若某优化没有稳定收益，删除、回滚或默认关闭。
+
+---
+
+# 1. 最终项目只保留三条核心主线
+
+```text
+                    实验室科研知识协作 Agent
+                               │
+          ┌────────────────────┼────────────────────┐
+          │                    │                    │
+       Retrieval          Deep Research       Knowledge Evolution
+          │                    │                    │
+ Hybrid + ACL         Researcher             Research Run
+ Rewrite + Rerank       ↓                    ↓
+          │           Analyst              Verified Claim
+          │             ↓                 ↙          ↘
+          │          Reviewer        Personal Mem0  Project Knowledge
+          │             ↓                           ↓
+          └────────── Generation ←──────────── Retrieval / Wiki
+```
+
+## 1.1 Retrieval
+
+回答：
+
+> 普通科研问题如何低延迟、稳定、可引用地检索？
+
+核心链路：
+
+```text
+Vector + BM25
+→ RRF
+→ ACL
+→ Rerank
+→ Selective Standalone Rewrite
+→ Selective Query Expansion
+```
+
+## 1.2 Deep Research
+
+回答：
+
+> 为什么复杂科研任务需要多角色协作？
+
+固定主链：
+
+```text
+Researcher
+→ EvidencePackage
+
+Analyst
+→ Claims
+
+Reviewer
+→ Evidence-backed Review
+
+≤ 1 Revision
+→ Generation
+```
+
+禁止新增：
+
+```text
+Supervisor
+Dynamic Worker
+第二轮 Revision
+Reviewer v2
+新的 Router Agent
+```
+
+## 1.3 Knowledge Evolution
+
+回答：
+
+> 一次科研分析结束后，可信知识如何留下并继续被使用？
+
+```text
+Research Run
+→ Verified Claim
+→ Personal Memory / Project Knowledge
+→ Provenance
+→ Revoke / Supersede
+→ Optional Future Retrieval
+```
+
+“自进化”统一表述为：
+
+> **受控知识演化 / Verified Knowledge Evolution**
+
+禁止写：
+
+> “LLM 自动学习并持续自进化”
+
+---
+
+# 2. 已完成内容：不要重复实现
+
+## 2.1 Standalone Multi-turn Rewrite
+
+已有：
+
+- 冻结数据集 24 条；
+- Trigger Precision / Recall / F1 = 1.000 / 1.000 / 1.000；
+- 正例 Hit@5：0.867 → 1.000；
+- 正例 MRR@5：0.867 → 0.933；
+- ACL violation = 0；
+- Positive Regression Rate = 0；
+- 真实 Chromium 多轮验收 8/8 路由正确、8/8 Gold Source 命中。
+
+停止：
+
+```text
+Standalone v2
+LLM 共指 Agent
+专门 Rewrite Agent
+```
+
+## 2.2 Deep Research
+
+当前固定：
+
+```text
+Researcher
+→ Analyst
+→ Reviewer
+→ ≤1 Revision
+→ Generation
+```
+
+已有：
+
+- Evidence / Claim / Review 结构化协议；
+- Research Run / Trace；
+- V3 Claim-level 评测；
+- Actionability Gate 因质量下降而回滚；
+- Reviewer Structured Output fail-safe；
+- Analyst 空 Claim 最新门禁。
+
+主图冻结，不再扩张。
+
+## 2.3 Evidence-backed Memory
+
+已有：
+
+```text
+Reviewer PASS
++
+fact
++
+有效 Evidence
++
+用户确认
+→ Mem0 infer=False
+```
+
+支持：
+
+- 跨会话 Recall；
+- Current User ACL Gate；
+- Revoke；
+- 权限降低后 fail closed；
+- 真实浏览器 E2E。
+
+停止：
+
+```text
+Memory Agent
+第二套 Memory Vector Store
+```
+
+## 2.4 Project Knowledge / Wiki
+
+已有：
+
+```text
+Research Claim
+→ Publish
+→ Knowledge Record
+→ active / superseded / revoked
+→ Wiki
+```
+
+Wiki 只作为 Knowledge Record 视图，不做 Notion 类编辑器。
+
+---
+
+# 3. 参考项目 `research_copilot`：只借鉴方法，不照搬技术栈
+
+## 3.1 值得借鉴：Retrieval Benchmark
+
+参考项目的强项是独立评测 Retrieval：
+
+```text
+Gold Evidence
++ Distractor
++ Paraphrase
++ 多策略消融
+```
+
+指标：
+
+```text
+Hit@1
+Hit@3
+Hit@5
+MRR@5
+Coverage@5
+Average Gold Rank
+Rank StdDev
+Drift Rate
+```
+
+本项目应借鉴这种**检索层单独评测方法**。
+
+不要复制参考项目的任何提升数字。
+
+## 3.2 值得借鉴：Memory Lifecycle 思想
+
+参考项目：
+
+```text
+Working
+→ Episodic
+→ Semantic
+```
+
+本项目整理为：
+
+```text
+Working Memory
+= 当前会话消息 / Summary
+
+Episodic Memory
+= Research Run / Research Plan Reuse
+
+Personal Semantic Memory
+= Mem0
+
+Project Semantic Knowledge
+= Project Knowledge Record
+```
+
+不要复制：
+
+```text
+LLM Answer
+→ 自动抽取 Semantic Fact
+```
+
+本项目必须保持：
+
+```text
+Evidence
+→ Claim
+→ Reviewer
+→ Human Confirm / Publish
+```
+
+## 3.3 条件性借鉴：technical tokenizer / Parent-Child
+
+只做失败驱动 POC，不作为必做功能。
+
+## 3.4 不借鉴：Plan-ReAct-MCP 主链
+
+参考项目偏 Tool-heavy：
+
+```text
+Planner
+→ Task
+→ per-task ReAct
+→ MCP
+→ Observation
+→ Synthesis
+```
+
+本项目不改主链。
+
+---
+
+# 4. P0：先修两个真正的架构边界
+
+## P0-1 收紧 Project Knowledge Publish 权限
+
+### 问题
+
+正式 Knowledge Publish 当前可能复用普通项目写权限，导致：
+
+```text
+普通 student member
+→ 可以发布正式项目知识
+
+但
+→ 不能 revoke / supersede
+```
+
+语义不一致。
+
+### 目标
+
+增加独立：
+
+```python
+_can_publish_project_knowledge(...)
+```
+
+建议允许：
+
+```text
+admin
+pi
+teacher / lab_admin
+project creator
+project lead
+```
+
+普通 student/member：
+
+```text
+Read Wiki                  ✅
+Personal Memory Confirm    ✅
+Publish Project Knowledge  ❌
+Revoke                     ❌
+Supersede                  ❌
+```
+
+### 必补测试
+
+```text
+project lead publish       → 200
+PI publish                 → 200
+ordinary member publish    → 403
+non-member publish         → 403
+
+ordinary member read       → 200
+ordinary member revoke     → 403
+ordinary member supersede  → 403
+```
+
+### 完成标准
+
+Publish / Revoke / Supersede 三者治理语义统一。
+
+---
+
+## P0-2 明确 Current ACL Source-of-Truth
+
+### 当前风险
+
+当前历史 Research Run / Memory / Knowledge 主要是：
+
+```text
+历史 Evidence metadata
++
+Current User
+→ check_doc_access
+```
+
+能处理：
+
+```text
+PI → Student
+```
+
+但源文档若：
+
+```text
+public → restricted
+```
+
+历史 Run 中 metadata 可能仍旧。
+
+### 优先方案
+
+如果已有稳定 `doc_id`：
+
+```text
+Evidence.doc_id
+→ Current Document Metadata
+→ check_doc_access(current metadata, current user)
+```
+
+历史 metadata 只做审计。
+
+### 必测
+
+```text
+用户 PI → Student
+文档 public → restricted
+role_restrict 更新
+expiry_date 到期
+```
+
+统一影响：
+
+```text
+Research Run
+Mem0 Research Fact
+Project Knowledge
+```
+
+### Stop Rule
+
+若 stable doc_id → current metadata 需要重构整个 Document Registry：
+
+> 不扩架构。
+
+保留当前实现，并在 `security-and-acl.md` 明确 limitation。
+
+---
+
+## P0-3 统一 Normal Retrieval Baseline
+
+确认并统一：
+
+```text
+Hybrid
+Rerank
+Query Expansion
+Standalone
+CRAG
+```
+
+代码默认值、env 和 README 描述。
+
+建议最终 Normal Baseline：
+
+```text
+Hybrid Retrieval
++ ACL
++ Rerank
++ Selective Standalone
++ Selective Query Expansion
+```
+
+若没有正式消融证明 CRAG 默认开启稳定有益，则默认关闭 CRAG。
+
+---
+
+# 5. P1：完成 Analyst 空 Claim 修复的正式评测
+
+当前最新逻辑：
+
+```text
+EvidencePackage 非空
++
+AnalysisReport.claims 为空
+→ deterministic citation_gap
+→ Reviewer REVISE
+→ 现有一次 Revision
+```
+
+必须正式评测后才算完成。
+
+## 5.1 对照
+
+```text
+Before = ca52b7c 前一版本
+After  = ca52b7c
+```
+
+样本：
+
+```text
+所有已知 Analyst-empty failure cases
++
+5～8 条正常复杂任务 regression cases
+```
+
+## 5.2 指标
+
+```text
+Empty Claim Failure Count
+Claim Precision
+Claim Recall
+Claim F1
+Faithfulness
+Revision Trigger Rate
+Latency P50/P95
+Input Token
+Output Token
+Logical Calls
+ACL Violation
+```
+
+## 5.3 保留门槛
+
+```text
+目标 failure 被修复或不再错误 PASS
+Faithfulness 下降 <= 0.02
+ACL violation = 0
+正常样本无明显回退
+成本增量可解释
+```
+
+否则 rollback。
+
+## 5.4 完成后
+
+> **冻结 Deep Research 主链。**
+
+后续不再针对 V3 开发集继续 Prompt tuning。
+
+---
+
+# 6. P2：建立秋招版 Retrieval Benchmark
+
+这是后续最重要的新评测。
+
+目标：
+
+> 建一组直观、可解释、适合简历展示的真实 Retrieval 指标。
+
+## P2-1 数据集规模
+
+只做：
+
+```text
+25～30 条
+```
+
+建议：
+
+```text
+8  simple factual
+6  technical exact token
+5  paraphrase
+5  distractor-heavy
+4  multi-document
+```
+
+允许标签重叠。
+
+## P2-2 Case Schema
+
+每条至少：
+
+```json
+{
+  "case_id": "...",
+  "query": "...",
+  "category": "...",
+  "gold_doc_ids": [],
+  "gold_chunk_ids": [],
+  "acceptable_sources": [],
+  "distractor_ids": []
+}
+```
+
+如果只知道文档级 Gold，明确标：
+
+```text
+gold_level = document
+```
+
+不要伪造 chunk gold。
+
+## P2-3 必须有 Distractor
+
+例如：
+
+```text
+Query:
+RDMA 低吞吐为什么检查 NUMA？
+
+Gold:
+RDMA + NUMA 实验规范
+
+Distractors:
+TCP NUMA 优化
+GPU NUMA
+RDMA 安装手册
+旧版实验结果
+已 superseded 项目知识
+```
+
+## P2-4 必须有 Paraphrase
+
+例如：
+
+```text
+原问题：
+为什么 RDMA 吞吐突然下降？
+
+改写1：
+RDMA 性能异常通常先排查哪些方向？
+
+改写2：
+ib_write_bw 最近变慢应该关注什么？
+
+改写3：
+网卡没换但 RDMA bandwidth 降了，可能是什么？
+```
+
+测：
+
+```text
+Hit Stability
+Rank StdDev
+Regression Rate
+```
+
+## P2-5 只比较四个 Variant
+
+```text
+A. Dense Only
+
+B. Dense + BM25 + RRF
+
+C. Hybrid + Rerank
+
+D. Current Final
+   Hybrid + Rerank + selective rewrite
+```
+
+不要一次扩成十几个策略。
+
+## P2-6 指标
+
+```text
+Hit@1
+Hit@5
+MRR@5
+NDCG@5
+Coverage@5
+Top1 Drift Rate
+Regression Rate
+ACL Violation
+P50/P95 Latency
+```
+
+所有后续 Retrieval 优化统一复用该 Benchmark。
+
+## P2-7 最终必须回答
+
+```text
+Dense 为什么不够？
+BM25 带来了什么？
+RRF 有什么作用？
+Reranker 是否提升 Top1 / MRR？
+Rewrite 是否改善多轮/语义查询？
+代价是多少？
+```
+
+---
+
+# 7. P3：只有 Benchmark 暴露问题时才做 Retrieval POC
+
+## P3-A Technical-aware BM25
+
+仅当 technical exact token 子集明显差时做。
+
+对比：
+
+```text
+A. current tokenizer
+B. jieba.cut_for_search
+C. cut_for_search + [a-zA-Z0-9_./-]+
+```
+
+重点：
+
+```text
+RDMA
+ib_write_bw
+mlx5_0
+CUDA-12.4
+NCCL
+PCIe
+NUMA
+192.168.1.10
+src/rag/retriever.py
+commit hash
+```
+
+实验前写固定门槛，例如：
+
+```text
+technical MRR@5 >= +0.03
+overall regression <= 0.02
+ACL violation = 0
+latency increase negligible
+```
+
+无稳定收益，不合入。
+
+## P3-B Parent / Child
+
+只有 long-document subset 暴露：
+
+```text
+能命中细节
+但生成上下文不完整
+```
+
+才做。
+
+对比：
+
+```text
+Flat Chunk
+
+vs
+
+Child Retrieval
+→ Parent Context
+```
+
+指标：
+
+```text
+Hit@5
+Context Completeness
+Faithfulness
+Input Token
+Latency
+```
+
+无明显收益，不迁移全库。
+
+## P3-C Step-back
+
+默认不做。
+
+只有 Benchmark 明确显示：
+
+```text
+diagnostic / causal
+→ 缺少上位概念召回
+```
+
+才启动。
+
+---
+
+# 8. P4：Knowledge Evolution 只做一组小型真实评测
+
+Project Knowledge 功能已经够，不继续扩 UI/Graph。
+
+目标：
+
+> 证明沉淀后的可信 Knowledge 能帮助下一轮科研问答，同时不会传播撤销、旧版本或越权知识。
+
+## P4-1 数据集
+
+只做：
+
+```text
+8～10 条
+```
+
+代表 case。
+
+### A. 新实验结论
+
+```text
+Raw:
+计划吞吐 80 Gbps
+
+Research:
+真实测得 91 Gbps
+
+Publish:
+91 Gbps
+
+New Query:
+当前确认吞吐是多少？
+```
+
+### B. Supersede
+
+```text
+v1 = 80
+v2 = 91
+最终只允许 v2
+```
+
+### C. Revoke
+
+```text
+Knowledge revoked
+→ 后续不能使用
+```
+
+### D. ACL
+
+```text
+当前用户无权查看根 Evidence
+→ Project Knowledge 不得进入上下文
+```
+
+### E. Derived-only
+
+```text
+Derived Knowledge
+→ Derived Research
+→ 无 root raw evidence
+→ 不得形成可信自我证明链
+```
+
+## P4-2 只比较
+
+```text
+A. Raw Documents Only
+B. Raw Documents + Active Project Knowledge
+```
+
+## P4-3 指标
+
+```text
+Gold Fact Hit
+Answer / Claim Correctness
+Faithfulness
+Citation Support
+
+Revoked Hit
+Superseded Wrong Hit
+ACL Violation
+
+Latency
+Input Token
+```
+
+目标：
+
+```text
+Raw 无法覆盖的新科研结论
+→ Knowledge assisted 可补足
+
+同时：
+revoked = 0
+superseded wrong hit = 0
+ACL violation = 0
+```
+
+做到这里即可对外讲：
+
+> **受控知识自沉淀并重新进入后续检索。**
+
+---
+
+# 9. Multi-Agent 不再做大规模 Role Ablation
+
+不再额外跑：
+
+```text
+Researcher only
+Researcher + Analyst
+Researcher + Analyst + Reviewer
+Full
+```
+
+原因：
+
+- 已有 Normal / Deep Gated / Deep Full；
+- 已有 V3 Claim-level Eval；
+- 已有 Actionability Gate rollback；
+- 已有质量 / 成本边界。
+
+面试解释：
+
+```text
+Researcher = Evidence acquisition
+Analyst    = Evidence → Claim
+Reviewer   = Claim → Evidence verification
+Revision   = 最多一次纠错
+```
+
+即可。
+
+---
+
+# 10. Selective Deep Routing 停止上线
+
+最终产品决策：
+
+```text
+Default → Normal
+User Explicit Deep → Deep Research
+```
+
+不继续开发：
+
+```text
+Auto Routing
+LLM Router
+Complexity Agent
+```
+
+README 可以写：
+
+> 已评估选择性 Deep，真实回答收益不足以覆盖延迟和引用支持风险，因此保留用户显式开启。
+
+---
+
+# 11. Human Calibration：有资源再做
+
+若有实验室成员：
+
+```text
+4 frozen cases
+36 labels
+```
+
+只评：
+
+```text
+supported
+not_supported
+boundary reason
+```
+
+输出：
+
+```text
+Agreement
+Precision / Recall
+Cohen's κ
+```
+
+若无人评：
+
+```text
+Independent Human Calibration Pending
+```
+
+保持即可。
+
+禁止把 Codex 模拟当真人评测。
+
+---
+
+# 12. External Evidence 暂停
+
+目前不实现：
+
+```text
+arXiv
+Semantic Scholar
+Web Search
+通用 Research MCP
+```
+
+项目秋招主线是：
+
+> 实验室内部科研知识协作与可信知识沉淀
+
+不是通用 Web Deep Research。
+
+以后若实现，只允许：
+
+```text
+Researcher
+→ Read-only Adapter
+→ EvidenceItem
+→ Existing Analyst / Reviewer
+```
+
+不能改为 ReAct 主链。
+
+---
+
+# 13. 明确不做
+
+```text
+❌ 新 Agent
+❌ Supervisor
+❌ Dynamic Worker
+❌ Memory Agent
+❌ Plan-ReAct-MCP 替换主链
+❌ 自动 Deep Router
+❌ Step-back（无失败证据前）
+❌ Tool Registry / Progressive Disclosure
+❌ SFT / DPO
+❌ Qdrant
+❌ Redis
+❌ MinIO
+❌ Neo4j
+❌ Wiki 编辑器
+❌ Knowledge Dashboard
+❌ 自动知识发布
+❌ 大规模 UI 重构
+```
+
+---
+
+# 14. 仓库收口
+
+## 14.1 文档
+
+最终收敛为：
+
+```text
+docs/
+├── architecture.md
+├── retrieval-evaluation.md
+├── deep-research-evaluation.md
+├── knowledge-evolution.md
+├── security-and-acl.md
+└── roadmap.md
+```
+
+旧 Goal 移到：
+
+```text
+docs/archive/
+```
+
+或删除。
+
+## 14.2 删除无关个人配置
+
+例如：
+
+```text
+codex-switch.md
+本机路径
+个人 profile
+本地运维说明
+```
+
+不应作为秋招作品仓核心内容。
+
+## 14.3 最小 CI
+
+只做：
+
+```text
+pytest
+frontend type/build check
+```
+
+不要在 CI 调：
+
+```text
+Qwen API
+Mem0 online
+真实 Chromium online eval
+```
+
+在线评测保持 manual。
+
+---
+
+# 15. README 最终只保留一张主架构图
+
+```text
+                     User Query
+                         │
+                      Planner
+                    /                          Normal       Deep
+                   │            │
+        Standalone / Expansion  Researcher
+                   │            │
+          Hybrid Retrieval    EvidencePackage
+                   │            │
+              ACL + Rerank    Analyst
+                   │            │
+                   │           Claims
+                   │            │
+                   │         Reviewer
+                   │            │
+                   │      ≤1 Revision
+                   \            /
+                    \          /
+                     Generation
+                         │
+                     Citation
+                         │
+                   Research Run
+                    /                        Personal      Project
+                Mem0        Knowledge
+                                │
+                           Wiki / Reuse
+```
+
+不要在主图塞：
+
+```text
+所有 API
+所有 DB 表
+MCP plumbing
+所有 Eval 脚本
+```
+
+---
+
+# 16. 秋招必须准备的三个核心 Case
+
+## Case 1：Standalone Multi-turn
+
+讲：
+
+```text
+“它还要求做哪些基准测试？”
+→ Standalone Rewrite
+→ Hybrid Retrieval
+→ Gold Source
+```
+
+证据：
+
+```text
+24 条离线冻结集
++
+8 条真实 Chromium
+```
+
+## Case 2：为什么 Deep 不默认开启
+
+讲：
+
+```text
+Normal
+→ 更快 / 总体 F1 更稳
+
+Deep
+→ Recall / Faithfulness 在复杂任务有局部收益
+→ 延迟约 4～5 倍
+```
+
+再讲：
+
+```text
+Actionability Gate
+Latency -14.6%
+Faithfulness -4.4pp
+超过 2pp 容差
+→ rollback
+```
+
+核心：
+
+> 评测驱动架构，而不是 Multi-Agent 越多越好。
+
+## Case 3：如何防止 AI 把错误答案永久记住
+
+讲：
+
+```text
+LLM Answer
+不能直接写 Knowledge
+
+Research Run
+→ Claim
+→ Reviewer
+→ Evidence
+→ Human Confirm / Publish
+→ Mem0 / Project Knowledge
+```
+
+支持：
+
+```text
+Provenance
+Revoke
+Supersede
+ACL
+```
+
+---
+
+# 17. 最终简历结构目标
+
+控制在 3～4 条。
+
+## Bullet 1：Retrieval
+
+> 构建 Vector + BM25 + RRF + Rerank 的 ACL-aware Hybrid RAG，并针对多轮省略/指代实现选择性 Standalone Rewrite；建立冻结 Retrieval Benchmark，从 Hit@1/Hit@5、MRR、NDCG、漂移率和 ACL 违规等维度评估检索稳定性，最终填写真实实验数据。
+
+## Bullet 2：Deep Research
+
+> 基于 LangGraph 设计 Researcher → Analyst → Reviewer 有界 Deep Research，将检索证据结构化为 Evidence / Claim / Review，并限制最多一次 Revision；构建声明级冻结因果评测，量化 Claim F1、Faithfulness、延迟和 Token，识别 Deep Research 的真实适用边界。
+
+## Bullet 3：Memory / Knowledge Evolution
+
+> 设计 Evidence-backed Memory 与项目知识沉淀闭环：Reviewer PASS 的事实经用户确认写入 Mem0，正式科研结论经独立 Publish 动作进入 Project Knowledge，并保留 Research Run / Claim / Evidence Provenance，支持撤销、替代和 ACL 复核，避免模型回答自动污染长期知识。
+
+## Bullet 4：可选工程稳定性
+
+> 通过真实 Chromium 完成多轮检索、Research Run 与跨会话 Memory E2E 验收，8 组冻结多轮样本路由与 Gold Source 命中均为 8/8，并修复 SSE 分片、Mem0 生命周期和 Structured Output 等真实链路问题。
+
+---
+
+# 18. Codex 最终执行顺序
+
+严格按以下顺序：
+
+```text
+1. fix
+   收紧 Project Knowledge 正式发布权限
+
+2. fix/docs
+   低成本补 Current Document ACL；
+   若代价过大则记录明确 limitation，不重构
+
+3. config/docs
+   统一 Normal Retrieval baseline 与 CRAG 默认语义
+
+4. eval
+   完成 Analyst 空 Claim before/after
+   满足 Gate 才保留
+
+5. eval
+   建 25～30 条真实 Retrieval Frozen Benchmark
+
+6. eval
+   跑 Dense / Hybrid / Rerank / Final 四层消融
+
+7. conditional eval
+   technical tokenizer 仅在技术词子集退化时实验
+
+8. eval
+   做 8～10 条 Knowledge Evolution 生成级评测
+
+9. docs
+   收敛 README、架构图、Evaluation、ACL、Knowledge 文档
+
+10. cleanup
+    清理旧 Goal 和个人 Codex 配置
+
+11. optional
+    独立真人 Calibration
+
+12. STOP
+    冻结主架构，开始准备简历与面试
+```
+
+---
+
+# 19. 每阶段提交规则
+
+每阶段开始先：
+
+```bash
+git status --short
+```
+
+只修改本阶段需要的文件。
+
+运行最小必要测试。
+
+不要为了全绿修改冻结数据。
+
+独立提交：
+
+```text
+fix: ...
+eval: ...
+docs: ...
+```
+
+禁止一个 commit 混入多个阶段。
+
+---
+
+# 20. 最终停止条件
+
+以下全部满足后停止新增功能：
+
+- Project Knowledge 权限语义清楚；
+- ACL 边界明确；
+- Analyst 空 Claim 改动已验证或回滚；
+- 有一套可复现 Retrieval Benchmark；
+- 有 Hybrid / Rerank / Rewrite 的真实检索数据；
+- Knowledge Evolution 有最小真实收益与安全验证；
+- Deep Research 质量/成本边界已能解释；
+- 多轮、Memory、Wiki 已有真实 E2E；
+- README 有一张能讲清三条主线的架构图；
+- 简历 3～4 条 bullet 有真实数据可填。
+
+达到这里：
+
+> **停止开发。**
+
+后续不再以“参考项目还有什么功能”为开发依据，而只以：
+
+```text
+真实 Benchmark 暴露的问题
+或
+面试无法解释的核心架构缺口
+```
+
+作为重新开发的触发条件。
