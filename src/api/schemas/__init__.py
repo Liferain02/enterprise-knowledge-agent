@@ -340,6 +340,8 @@ class ResearchRunDetailItem(ResearchRunSummaryItem):
     research_trace: dict[str, Any] = Field(default_factory=dict)
     hidden_evidence_count: int = 0
     confirmed_claim_ids: List[str] = Field(default_factory=list)
+    published_claim_ids: List[str] = Field(default_factory=list)
+    published_claim_statuses: dict[str, str] = Field(default_factory=dict)
 
 
 class ConfirmResearchClaimResponse(BaseModel):
@@ -349,6 +351,41 @@ class ConfirmResearchClaimResponse(BaseModel):
     claim_id: str
     text: str
     source_titles: List[str] = Field(default_factory=list)
+
+
+class PublishKnowledgeRequest(BaseModel):
+    """独立发布动作；知识正文与来源必须由服务端从 Research Run 读取。"""
+
+
+class SupersedeKnowledgeRequest(BaseModel):
+    """用另一次 Research Run 中已复核的 Claim 替代当前知识。"""
+    run_id: str = Field(min_length=1, max_length=64)
+    claim_id: str = Field(min_length=1, max_length=64)
+
+
+class KnowledgeRecordItem(BaseModel):
+    """可追溯的项目知识记录。"""
+    id: str
+    project_id: str
+    knowledge_type: Literal["fact"]
+    statement: str
+    status: Literal["active", "superseded", "revoked"]
+    version: int
+    research_run_id: str
+    claim_id: str
+    source_ids: List[str] = Field(default_factory=list)
+    created_by: str
+    published_by: str
+    created_at: float
+    updated_at: float
+    supersedes_id: Optional[str] = None
+    research_question: str = ""
+    sources: List[dict[str, str]] = Field(default_factory=list)
+
+
+class KnowledgeRecordListResponse(BaseModel):
+    records: List[KnowledgeRecordItem] = Field(default_factory=list)
+    total: int
 
 
 # ==================== Response Models ====================
@@ -478,6 +515,10 @@ __all__ = [
     "ResearchTaskItem",
     "ResearchTaskListResponse",
     "ResearchOverviewResponse",
+    "PublishKnowledgeRequest",
+    "SupersedeKnowledgeRequest",
+    "KnowledgeRecordItem",
+    "KnowledgeRecordListResponse",
     "ChatResponse",
     "SearchResponse",
     "KnowledgeDocumentItem",

@@ -21,6 +21,7 @@ _VALID_VISIBILITIES = {"public", "project", "restricted"}
 _VALID_PROJECT_STATUSES = {"planned", "active", "paused", "completed"}
 _VALID_EXPERIMENT_STATUSES = {"planned", "running", "completed", "failed"}
 _VALID_TASK_STATUSES = {"open", "in_progress", "done"}
+_VALID_KNOWLEDGE_STATUSES = {"active", "superseded", "revoked"}
 
 
 class ResearchService:
@@ -123,6 +124,23 @@ class ResearchService:
                     memory_result_json TEXT NOT NULL DEFAULT '{}',
                     PRIMARY KEY (run_id, claim_id, user_id)
                 );
+                CREATE TABLE IF NOT EXISTS research_knowledge_records (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL REFERENCES research_projects(id) ON DELETE CASCADE,
+                    knowledge_type TEXT NOT NULL DEFAULT 'fact',
+                    statement TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    version INTEGER NOT NULL DEFAULT 1,
+                    research_run_id TEXT NOT NULL REFERENCES research_runs(id) ON DELETE RESTRICT,
+                    claim_id TEXT NOT NULL,
+                    source_ids_json TEXT NOT NULL DEFAULT '[]',
+                    created_by TEXT NOT NULL,
+                    published_by TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    supersedes_id TEXT REFERENCES research_knowledge_records(id) ON DELETE RESTRICT,
+                    UNIQUE(research_run_id, claim_id)
+                );
                 CREATE INDEX IF NOT EXISTS idx_research_projects_status
                     ON research_projects(status);
                 CREATE INDEX IF NOT EXISTS idx_research_project_members_username
@@ -137,6 +155,8 @@ class ResearchService:
                     ON research_runs(project_id, created_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_research_memory_confirmations_user
                     ON research_memory_confirmations(user_id, confirmed_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_research_knowledge_project_status
+                    ON research_knowledge_records(project_id, status, updated_at DESC);
                 """
             )
 
@@ -445,7 +465,16 @@ class ResearchService:
                    WHERE run_id = ? AND user_id = ? ORDER BY confirmed_at""",
                 (run_id, username),
             ).fetchall()
+            publications = conn.execute(
+                """SELECT claim_id, status FROM research_knowledge_records
+                   WHERE research_run_id = ? ORDER BY created_at""",
+                (run_id,),
+            ).fetchall()
         item["confirmed_claim_ids"] = [row["claim_id"] for row in confirmations]
+        item["published_claim_ids"] = [row["claim_id"] for row in publications]
+        item["published_claim_statuses"] = {
+            row["claim_id"]: row["status"] for row in publications
+        }
         return item
 
     def find_reusable_research_episode(
@@ -532,11 +561,13 @@ class ResearchService:
             raise ValueError("该事实缺少当前可访问的有效证据")
 
         claim_text = str(claim.get("text") or "").strip()
+        review_items = review.get("items") or review.get("review_items") or []
         rejected = [
-            item for item in review.get("items") or []
+            item for item in review_items
             if isinstance(item, dict)
             and item.get("supported") is False
-            and str(item.get("claim") or "").strip() == claim_text
+            and str(item.get("claim") or item.get("claim_id") or "").strip()
+            in {claim_id, claim_text}
         ]
         if rejected:
             raise ValueError("该事实被 Reviewer 标记为不受支持")
@@ -544,6 +575,7 @@ class ResearchService:
         return {
             "run_id": run_id,
             "project_id": str(detail.get("project_id") or ""),
+            "run_created_by": str(detail.get("user_id") or ""),
             "claim_id": claim_id,
             "text": claim_text,
             "source_ids": source_ids,
@@ -552,6 +584,14 @@ class ResearchService:
                 for source_id in source_ids
             ],
             "already_confirmed": claim_id in (detail.get("confirmed_claim_ids") or []),
+            "source_origins": [
+                str(
+                    (evidences[source_id].get("metadata") or {}).get("knowledge_origin")
+                    or (evidences[source_id].get("metadata") or {}).get("source_kind")
+                    or "raw_document"
+                )
+                for source_id in source_ids
+            ],
         }
 
     def validate_confirmed_research_memory(
@@ -661,6 +701,258 @@ class ResearchService:
                 (run_id, claim_id, username),
             )
         return cursor.rowcount > 0
+
+    @staticmethod
+    def _serialize_knowledge_record(row: sqlite3.Row | dict) -> dict:
+        item = dict(row)
+        item["source_ids"] = ResearchService._json_object(
+            item.pop("source_ids_json", "[]"), [],
+        )
+        return item
+
+    def _knowledge_record_row(self, record_id: str) -> sqlite3.Row:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM research_knowledge_records WHERE id = ?",
+                (record_id,),
+            ).fetchone()
+        if not row:
+            raise ValueError("项目知识记录不存在")
+        return row
+
+    def _enrich_knowledge_record(self, row: sqlite3.Row | dict, user: dict) -> dict:
+        """按当前项目与 Evidence ACL 重新验证并补齐来源追溯。"""
+        item = self._serialize_knowledge_record(row)
+        self.get_project(item["project_id"], user)
+        detail = self.get_research_run(item["research_run_id"], user)
+        claims = (detail.get("analysis_report") or {}).get("claims") or []
+        claim = next(
+            (
+                value for value in claims
+                if str(value.get("claim_id") or "") == item["claim_id"]
+            ),
+            None,
+        )
+        evidences = {
+            str(value.get("source_id")): value
+            for value in (detail.get("evidence_package") or {}).get("evidences") or []
+            if isinstance(value, dict) and value.get("source_id")
+        }
+        if (
+            not claim
+            or str(claim.get("text") or "").strip() != item["statement"]
+            or set(claim.get("source_ids") or []) != set(item["source_ids"])
+            or any(source_id not in evidences for source_id in item["source_ids"])
+        ):
+            raise PermissionError("项目知识来源在当前权限下不可完整验证")
+        item["research_question"] = detail.get("question", "")
+        item["sources"] = [
+            {
+                "source_id": source_id,
+                "title": str(
+                    evidences[source_id].get("title")
+                    or evidences[source_id].get("source")
+                    or source_id
+                ),
+            }
+            for source_id in item["source_ids"]
+        ]
+        return item
+
+    def publish_knowledge_record(
+        self,
+        run_id: str,
+        claim_id: str,
+        user: dict,
+    ) -> dict:
+        """把通过可信门禁的事实发布为项目知识；正文与来源只取自 Run。"""
+        return self._publish_knowledge_record(run_id, claim_id, user)
+
+    def _publish_knowledge_record(
+        self,
+        run_id: str,
+        claim_id: str,
+        user: dict,
+        *,
+        supersedes_id: str = "",
+    ) -> dict:
+        candidate = self.prepare_confirmed_claim(run_id, claim_id, user)
+        detail = self.get_research_run(run_id, user)
+        if (detail.get("review_report") or {}).get("acl_verified") is not True:
+            raise ValueError("项目知识发布前必须完成明确的 ACL 复核")
+        project_id = candidate["project_id"]
+        if not project_id:
+            raise ValueError("只有属于科研项目的 Research Run 才能发布项目知识")
+        project = self.get_project(project_id, user)
+        members = {item["username"] for item in project["members"]}
+        if not self._can_write_project(project, user, members):
+            raise PermissionError("无权向该项目发布知识")
+        if not any(
+            origin in {"raw_document", "external_evidence"}
+            for origin in candidate["source_origins"]
+        ):
+            raise ValueError("项目知识必须保留至少一条原始或外部证据来源")
+
+        username, _ = self._identity(user)
+        normalized_supersedes_id = supersedes_id.strip()
+        with self._connection() as conn:
+            existing = conn.execute(
+                """SELECT * FROM research_knowledge_records
+                   WHERE research_run_id = ? AND claim_id = ?""",
+                (run_id, claim_id),
+            ).fetchone()
+            if existing:
+                if existing["status"] == "active" and not normalized_supersedes_id:
+                    return self._enrich_knowledge_record(existing, user)
+                if (
+                    normalized_supersedes_id
+                    and existing["status"] == "active"
+                    and existing["supersedes_id"] == normalized_supersedes_id
+                ):
+                    superseded_status = conn.execute(
+                        "SELECT status FROM research_knowledge_records WHERE id = ?",
+                        (normalized_supersedes_id,),
+                    ).fetchone()
+                    if superseded_status and superseded_status["status"] == "superseded":
+                        return self._enrich_knowledge_record(existing, user)
+                raise ValueError("该 Research Claim 已有历史知识记录，不能原地重新发布")
+
+            superseded = None
+            version = 1
+            if normalized_supersedes_id:
+                superseded = conn.execute(
+                    "SELECT * FROM research_knowledge_records WHERE id = ?",
+                    (normalized_supersedes_id,),
+                ).fetchone()
+                if not superseded:
+                    raise ValueError("被替代的项目知识不存在")
+                if superseded["project_id"] != project_id:
+                    raise ValueError("只能替代同一项目中的知识")
+                if superseded["status"] != "active":
+                    raise ValueError("只能替代当前有效的项目知识")
+                version = int(superseded["version"]) + 1
+
+            record_id = uuid.uuid4().hex
+            now = time.time()
+            conn.execute(
+                """INSERT INTO research_knowledge_records
+                   (id, project_id, knowledge_type, statement, status, version,
+                    research_run_id, claim_id, source_ids_json, created_by,
+                    published_by, created_at, updated_at, supersedes_id)
+                   VALUES (?, ?, 'fact', ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record_id,
+                    project_id,
+                    candidate["text"],
+                    version,
+                    run_id,
+                    claim_id,
+                    json.dumps(candidate["source_ids"], ensure_ascii=False),
+                    candidate["run_created_by"] or username,
+                    username,
+                    now,
+                    now,
+                    normalized_supersedes_id or None,
+                ),
+            )
+            if superseded:
+                conn.execute(
+                    """UPDATE research_knowledge_records
+                       SET status = 'superseded', updated_at = ? WHERE id = ?""",
+                    (now, normalized_supersedes_id),
+                )
+            row = conn.execute(
+                "SELECT * FROM research_knowledge_records WHERE id = ?",
+                (record_id,),
+            ).fetchone()
+        return self._enrich_knowledge_record(row, user)
+
+    def supersede_knowledge_record(
+        self,
+        project_id: str,
+        record_id: str,
+        run_id: str,
+        claim_id: str,
+        user: dict,
+    ) -> dict:
+        """以新的可信 Claim 替代旧知识，不允许客户端提供正文或来源。"""
+        old = self._knowledge_record_row(record_id)
+        if old["project_id"] != project_id:
+            raise ValueError("被替代知识不属于指定项目")
+        project = self.get_project(project_id, user)
+        members = {item["username"] for item in project["members"]}
+        if not self._can_write_project(project, user, members):
+            raise PermissionError("无权替代该项目知识")
+
+        # 重试同一个替代请求应返回已经创建的新版本。
+        with self._connection() as conn:
+            existing = conn.execute(
+                """SELECT * FROM research_knowledge_records
+                   WHERE research_run_id = ? AND claim_id = ?""",
+                (run_id, claim_id),
+            ).fetchone()
+        if existing and existing["supersedes_id"] == record_id:
+            if old["status"] == "superseded" and existing["status"] == "active":
+                return self._enrich_knowledge_record(existing, user)
+        if old["status"] != "active":
+            raise ValueError("只能替代当前有效的项目知识")
+
+        return self._publish_knowledge_record(
+            run_id,
+            claim_id,
+            user,
+            supersedes_id=record_id,
+        )
+
+    def list_knowledge_records(
+        self,
+        project_id: str,
+        user: dict,
+        *,
+        status: str = "active",
+    ) -> list[dict]:
+        """列出当前仍可验证来源的项目知识，默认仅返回 active。"""
+        self.get_project(project_id, user)
+        if status != "all":
+            self._validate_choice(status, _VALID_KNOWLEDGE_STATUSES, "项目知识状态")
+        with self._connection() as conn:
+            rows = conn.execute(
+                """SELECT * FROM research_knowledge_records
+                   WHERE project_id = ? AND (? = 'all' OR status = ?)
+                   ORDER BY updated_at DESC""",
+                (project_id, status, status),
+            ).fetchall()
+        records = []
+        for row in rows:
+            try:
+                records.append(self._enrich_knowledge_record(row, user))
+            except (PermissionError, ValueError):
+                continue
+        return records
+
+    def get_knowledge_record(self, record_id: str, user: dict) -> dict:
+        return self._enrich_knowledge_record(self._knowledge_record_row(record_id), user)
+
+    def revoke_knowledge_record(self, record_id: str, user: dict) -> dict:
+        row = self._knowledge_record_row(record_id)
+        project = self.get_project(row["project_id"], user)
+        members = {item["username"] for item in project["members"]}
+        if not self._can_write_project(project, user, members):
+            raise PermissionError("无权撤销该项目知识")
+        if row["status"] == "superseded":
+            raise ValueError("已被替代的知识应保留其版本关系")
+        if row["status"] == "active":
+            with self._connection() as conn:
+                conn.execute(
+                    """UPDATE research_knowledge_records
+                       SET status = 'revoked', updated_at = ? WHERE id = ?""",
+                    (time.time(), record_id),
+                )
+                row = conn.execute(
+                    "SELECT * FROM research_knowledge_records WHERE id = ?",
+                    (record_id,),
+                ).fetchone()
+        return self._enrich_knowledge_record(row, user)
 
     def create_experiment(self, project_id: str, payload: dict, user: dict) -> dict:
         title = str(payload.get("title", "")).strip()

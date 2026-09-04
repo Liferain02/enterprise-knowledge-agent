@@ -609,18 +609,32 @@
                     <div class="source-list-title">已复核结论</div>
                     <div v-for="claim in msg.researchRunDetail.analysis_report.claims" :key="claim.claim_id" class="research-run-claim">
                       <span>{{ claim.text }}</span>
-                      <button
+                      <div
                         v-if="claim.claim_type === 'fact' && msg.researchRunDetail.review_report?.decision === 'PASS'"
-                        class="feedback-btn"
-                        :disabled="claim.confirming"
-                        @click="toggleResearchClaimMemory(msg, claim)"
+                        class="research-claim-actions"
                       >
-                        {{ claim.confirming
-                          ? '处理中...'
-                          : (msg.researchRunDetail.confirmed_claim_ids?.includes(claim.claim_id)
-                            ? '已记住（点击撤销）'
-                            : '确认并记住') }}
-                      </button>
+                        <button
+                          class="feedback-btn"
+                          :disabled="claim.confirming"
+                          @click="toggleResearchClaimMemory(msg, claim)"
+                        >
+                          {{ claim.confirming
+                            ? '处理中...'
+                            : (msg.researchRunDetail.confirmed_claim_ids?.includes(claim.claim_id)
+                              ? '已记住（点击撤销）'
+                              : '确认并记住') }}
+                        </button>
+                        <button
+                          v-if="msg.researchRunDetail.project_id"
+                          class="feedback-btn"
+                          :disabled="claim.publishing || Boolean(msg.researchRunDetail.published_claim_ids?.includes(claim.claim_id))"
+                          @click="publishResearchClaim(msg, claim)"
+                        >
+                          {{ claim.publishing
+                            ? '发布中...'
+                            : formatPublishedClaimStatus(msg.researchRunDetail.published_claim_statuses?.[claim.claim_id]) }}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </template>
@@ -813,6 +827,7 @@ interface ResearchTask {
 
 interface ResearchRunDetail {
   id: string
+  project_id?: string
   status: string
   evidence_package?: {
     evidences?: Array<{ source_id: string; title: string }>
@@ -824,12 +839,15 @@ interface ResearchRunDetail {
       claim_type: string
       source_ids?: string[]
       confirming?: boolean
+      publishing?: boolean
     }>
   }
   review_report?: { decision?: string }
   research_trace?: { failure_attribution?: string }
   hidden_evidence_count: number
   confirmed_claim_ids?: string[]
+  published_claim_ids?: string[]
+  published_claim_statuses?: Record<string, 'active' | 'superseded' | 'revoked'>
 }
 
 interface FeedbackIssue {
@@ -1399,6 +1417,42 @@ const toggleResearchClaimMemory = async (
     message.researchRunError = error?.response?.data?.detail || '长期记忆操作失败'
   } finally {
     claim.confirming = false
+  }
+}
+
+const formatPublishedClaimStatus = (status?: 'active' | 'superseded' | 'revoked') => {
+  if (status === 'active') return '已发布为项目知识'
+  if (status === 'superseded') return '项目知识已被替代'
+  if (status === 'revoked') return '项目知识已撤销'
+  return '发布为项目知识'
+}
+
+const publishResearchClaim = async (
+  message: Message,
+  claim: { claim_id: string; publishing?: boolean },
+) => {
+  if (!message.researchRunId || !claim.claim_id || claim.publishing) return
+  claim.publishing = true
+  message.researchRunError = ''
+  try {
+    await axios.post(
+      `${API_BASE}/research/runs/${message.researchRunId}/claims/${claim.claim_id}/publish-knowledge`,
+      {},
+    )
+    const detail = message.researchRunDetail
+    if (detail) {
+      detail.published_claim_ids = [
+        ...new Set([...(detail.published_claim_ids || []), claim.claim_id]),
+      ]
+      detail.published_claim_statuses = {
+        ...(detail.published_claim_statuses || {}),
+        [claim.claim_id]: 'active',
+      }
+    }
+  } catch (error: any) {
+    message.researchRunError = error?.response?.data?.detail || '项目知识发布失败'
+  } finally {
+    claim.publishing = false
   }
 }
 

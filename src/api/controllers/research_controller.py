@@ -9,6 +9,9 @@ from ..schemas import (
     ExtractMeetingTasksRequest,
     ExperimentItem,
     ExperimentListResponse,
+    KnowledgeRecordItem,
+    KnowledgeRecordListResponse,
+    PublishKnowledgeRequest,
     ProjectItem,
     ProjectListResponse,
     ResearchOverviewResponse,
@@ -16,6 +19,7 @@ from ..schemas import (
     ResearchRunListResponse,
     ResearchTaskItem,
     ResearchTaskListResponse,
+    SupersedeKnowledgeRequest,
     UpdateResearchTaskRequest,
 )
 from ..security import get_current_user
@@ -176,6 +180,107 @@ async def revoke_research_claim_memory(
         )
     except HTTPException:
         raise
+    except Exception as error:
+        _raise_service_error(error)
+
+
+@router.post(
+    "/runs/{run_id}/claims/{claim_id}/publish-knowledge",
+    response_model=KnowledgeRecordItem,
+)
+async def publish_research_claim_knowledge(
+    run_id: str,
+    claim_id: str,
+    request: PublishKnowledgeRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """将可信事实发布为项目知识；发布与个人记忆确认严格分离。"""
+    try:
+        return KnowledgeRecordItem(
+            **research_service.publish_knowledge_record(
+                run_id,
+                claim_id,
+                current_user,
+            )
+        )
+    except Exception as error:
+        _raise_service_error(error)
+
+
+@router.get(
+    "/projects/{project_id}/knowledge",
+    response_model=KnowledgeRecordListResponse,
+)
+async def list_project_knowledge(
+    project_id: str,
+    status: str = Query(default="active", max_length=16),
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        records = research_service.list_knowledge_records(
+            project_id, current_user, status=status.strip() or "active",
+        )
+        return KnowledgeRecordListResponse(
+            records=[KnowledgeRecordItem(**record) for record in records],
+            total=len(records),
+        )
+    except Exception as error:
+        _raise_service_error(error)
+
+
+@router.get(
+    "/knowledge/{record_id}",
+    response_model=KnowledgeRecordItem,
+)
+async def get_project_knowledge(
+    record_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        return KnowledgeRecordItem(
+            **research_service.get_knowledge_record(record_id, current_user)
+        )
+    except Exception as error:
+        _raise_service_error(error)
+
+
+@router.post(
+    "/knowledge/{record_id}/revoke",
+    response_model=KnowledgeRecordItem,
+)
+async def revoke_project_knowledge(
+    record_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        return KnowledgeRecordItem(
+            **research_service.revoke_knowledge_record(record_id, current_user)
+        )
+    except Exception as error:
+        _raise_service_error(error)
+
+
+@router.post(
+    "/projects/{project_id}/knowledge/{record_id}/supersede",
+    response_model=KnowledgeRecordItem,
+)
+async def supersede_project_knowledge(
+    project_id: str,
+    record_id: str,
+    request: SupersedeKnowledgeRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """用新的可信事实替代同项目中的 active 知识。"""
+    try:
+        return KnowledgeRecordItem(
+            **research_service.supersede_knowledge_record(
+                project_id,
+                record_id,
+                request.run_id.strip(),
+                request.claim_id.strip(),
+                current_user,
+            )
+        )
     except Exception as error:
         _raise_service_error(error)
 

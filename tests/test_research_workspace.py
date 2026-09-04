@@ -1,14 +1,80 @@
 """科研项目空间和结构化实验记录测试。"""
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
+from fastapi import FastAPI
 
+from src.api.security import get_current_user
 from src.api.services.research_service import ResearchService
 
 
 def _user(username: str, role: str = "student") -> dict:
     return {"username": username, "role": role}
+
+
+def _save_claim_run(
+    service: ResearchService,
+    user: dict,
+    *,
+    project_id: str = "",
+    claim_id: str = "C1",
+    text: str = "当前吞吐量为 91 Gbps。",
+    claim_type: str = "fact",
+    source_ids: list[str] | None = None,
+    evidence_ids: list[str] | None = None,
+    decision: str = "PASS",
+    acl_verified: bool | None = True,
+    review_items: list[dict] | None = None,
+    knowledge_origin: str = "raw_document",
+    evidence_visibility: str | None = None,
+) -> dict:
+    """构造最小 Research Run；发布测试只改变一个门禁变量。"""
+    claim_sources = ["S1"] if source_ids is None else source_ids
+    visible_sources = ["S1"] if evidence_ids is None else evidence_ids
+    review_report: dict = {
+        "decision": decision,
+        "items": review_items or [],
+    }
+    if acl_verified is not None:
+        review_report["acl_verified"] = acl_verified
+    return service.save_research_run(
+        {
+            "project_id": project_id,
+            "session_id": f"knowledge-{claim_id}-{text}",
+            "question": "总结项目吞吐量实验",
+            "final_answer": text,
+            "evidence_package": {
+                "evidences": [
+                    {
+                        "source_id": source_id,
+                        "title": f"实验记录 {source_id}",
+                        "excerpt": text,
+                        "metadata": {
+                            "visibility": evidence_visibility or (
+                                "project" if project_id else "public"
+                            ),
+                            "confidentiality": "internal",
+                            "knowledge_origin": knowledge_origin,
+                        },
+                    }
+                    for source_id in visible_sources
+                ],
+            },
+            "analysis_report": {
+                "claims": [{
+                    "claim_id": claim_id,
+                    "text": text,
+                    "claim_type": claim_type,
+                    "source_ids": claim_sources,
+                }],
+            },
+            "review_report": review_report,
+        },
+        user,
+    )
 
 
 def test_project_workspace_acl_and_overview(tmp_path):
@@ -370,6 +436,227 @@ async def test_confirmed_fact_is_stored_exactly_without_second_llm_inference(tmp
     assert service.validate_confirmed_research_memory(
         saved["id"], "C1", ["S1"], "", user,
     ) is False
+
+
+def test_project_knowledge_publish_trace_idempotency_and_revoke(tmp_path):
+    service = ResearchService(str(tmp_path / "research.db"))
+    owner = _user("lead", "teacher")
+    project = service.create_project({"title": "可信知识项目"}, owner)
+    run = _save_claim_run(service, owner, project_id=project["id"])
+
+    published = service.publish_knowledge_record(run["id"], "C1", owner)
+    repeated = service.publish_knowledge_record(run["id"], "C1", owner)
+
+    assert repeated["id"] == published["id"]
+    assert published["statement"] == "当前吞吐量为 91 Gbps。"
+    assert published["source_ids"] == ["S1"]
+    assert published["sources"] == [{"source_id": "S1", "title": "实验记录 S1"}]
+    assert published["research_run_id"] == run["id"]
+    assert published["claim_id"] == "C1"
+    assert published["created_by"] == "lead"
+    assert published["published_by"] == "lead"
+    assert service.list_knowledge_records(project["id"], owner)[0]["id"] == published["id"]
+    detail = service.get_research_run(run["id"], owner)
+    assert detail["published_claim_ids"] == ["C1"]
+    assert detail["published_claim_statuses"] == {"C1": "active"}
+
+    revoked = service.revoke_knowledge_record(published["id"], owner)
+    revoked_again = service.revoke_knowledge_record(published["id"], owner)
+    assert revoked["status"] == "revoked"
+    assert revoked_again["status"] == "revoked"
+    assert service.list_knowledge_records(project["id"], owner) == []
+    assert service.list_knowledge_records(project["id"], owner, status="all")[0]["status"] == "revoked"
+
+
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("no_project", "属于科研项目"),
+        ("not_pass", "Reviewer"),
+        ("acl_false", "Reviewer"),
+        ("acl_missing", "明确的 ACL"),
+        ("not_fact", "事实类"),
+        ("no_sources", "有效证据"),
+        ("missing_source", "有效证据"),
+        ("negative_review", "不受支持"),
+        ("derived_only", "原始或外部证据"),
+    ],
+)
+def test_project_knowledge_publish_gate_rejects_invalid_claims(tmp_path, case, message):
+    service = ResearchService(str(tmp_path / f"{case}.db"))
+    owner = _user("lead", "teacher")
+    project = service.create_project({"title": f"门禁-{case}"}, owner)
+    options = {"project_id": project["id"]}
+    if case == "no_project":
+        options["project_id"] = ""
+    elif case == "not_pass":
+        options["decision"] = "REVISE"
+    elif case == "acl_false":
+        options["acl_verified"] = False
+    elif case == "acl_missing":
+        options["acl_verified"] = None
+    elif case == "not_fact":
+        options["claim_type"] = "inference"
+    elif case == "no_sources":
+        options["source_ids"] = []
+    elif case == "missing_source":
+        options["source_ids"] = ["S404"]
+    elif case == "negative_review":
+        options["review_items"] = [{
+            "claim": "C1",
+            "supported": False,
+            "issue_type": "unsupported",
+        }]
+    elif case == "derived_only":
+        options["knowledge_origin"] = "derived_only"
+
+    run = _save_claim_run(service, owner, **options)
+
+    with pytest.raises(ValueError, match=message):
+        service.publish_knowledge_record(run["id"], "C1", owner)
+
+
+def test_project_knowledge_requires_project_write_permission(tmp_path):
+    service = ResearchService(str(tmp_path / "research.db"))
+    owner = _user("lead", "teacher")
+    project = service.create_project(
+        {"title": "公开但只读", "visibility": "public"}, owner,
+    )
+    run = _save_claim_run(
+        service, owner, project_id=project["id"], evidence_visibility="public",
+    )
+
+    with pytest.raises(PermissionError, match="无权向该项目发布知识"):
+        service.publish_knowledge_record(run["id"], "C1", _user("reader"))
+
+
+def test_project_knowledge_supersede_lifecycle_and_guards(tmp_path):
+    service = ResearchService(str(tmp_path / "research.db"))
+    owner = _user("lead", "teacher")
+    project = service.create_project({"title": "知识版本项目"}, owner)
+    old_run = _save_claim_run(service, owner, project_id=project["id"], text="吞吐量为 80 Gbps。")
+    new_run = _save_claim_run(service, owner, project_id=project["id"], text="吞吐量为 91 Gbps。")
+    old = service.publish_knowledge_record(old_run["id"], "C1", owner)
+
+    new = service.supersede_knowledge_record(
+        project["id"], old["id"], new_run["id"], "C1", owner,
+    )
+    repeated = service.supersede_knowledge_record(
+        project["id"], old["id"], new_run["id"], "C1", owner,
+    )
+
+    assert repeated["id"] == new["id"]
+    assert new["status"] == "active"
+    assert new["version"] == 2
+    assert new["supersedes_id"] == old["id"]
+    assert service.get_knowledge_record(old["id"], owner)["status"] == "superseded"
+
+    third_run = _save_claim_run(
+        service, owner, project_id=project["id"], claim_id="C2", text="吞吐量为 92 Gbps。",
+    )
+    with pytest.raises(ValueError, match="当前有效"):
+        service.supersede_knowledge_record(
+            project["id"], old["id"], third_run["id"], "C2", owner,
+        )
+
+
+def test_project_knowledge_cannot_supersede_across_projects(tmp_path):
+    service = ResearchService(str(tmp_path / "research.db"))
+    owner = _user("lead", "teacher")
+    first_project = service.create_project({"title": "项目甲"}, owner)
+    second_project = service.create_project({"title": "项目乙"}, owner)
+    old_run = _save_claim_run(service, owner, project_id=first_project["id"])
+    other_run = _save_claim_run(
+        service, owner, project_id=second_project["id"], text="另一个项目的结果。",
+    )
+    old = service.publish_knowledge_record(old_run["id"], "C1", owner)
+
+    with pytest.raises(ValueError, match="同一项目"):
+        service.supersede_knowledge_record(
+            first_project["id"], old["id"], other_run["id"], "C1", owner,
+        )
+    with pytest.raises(ValueError, match="不属于指定项目"):
+        service.supersede_knowledge_record(
+            second_project["id"], old["id"], other_run["id"], "C1", owner,
+        )
+
+
+def test_project_knowledge_provenance_fails_closed_after_acl_downgrade(tmp_path):
+    service = ResearchService(str(tmp_path / "research.db"))
+    privileged = _user("researcher", "pi")
+    project = service.create_project(
+        {"title": "权限变化项目", "visibility": "public"}, privileged,
+    )
+    run = _save_claim_run(service, privileged, project_id=project["id"])
+    record = service.publish_knowledge_record(run["id"], "C1", privileged)
+
+    with service._connection() as conn:
+        row = conn.execute(
+            "SELECT evidence_package_json FROM research_runs WHERE id = ?", (run["id"],),
+        ).fetchone()
+        package = service._json_object(row["evidence_package_json"], {})
+        package["evidences"][0]["metadata"].update({
+            "visibility": "restricted",
+            "confidentiality": "secret",
+        })
+        conn.execute(
+            "UPDATE research_runs SET evidence_package_json = ? WHERE id = ?",
+            (json.dumps(package, ensure_ascii=False), run["id"]),
+        )
+
+    with pytest.raises(PermissionError, match="来源.*不可完整验证"):
+        service.get_knowledge_record(record["id"], _user("reader"))
+    assert service.list_knowledge_records(project["id"], _user("reader"), status="all") == []
+
+
+@pytest.mark.asyncio
+async def test_project_knowledge_http_contract_uses_server_side_provenance(tmp_path, monkeypatch):
+    from src.api.controllers import research_controller
+
+    service = ResearchService(str(tmp_path / "research.db"))
+    user = _user("lead", "teacher")
+    project = service.create_project({"title": "HTTP 契约项目"}, user)
+    old_run = _save_claim_run(service, user, project_id=project["id"])
+    new_run = _save_claim_run(
+        service, user, project_id=project["id"], claim_id="C2", text="服务端可信新结论。",
+    )
+    monkeypatch.setattr(research_controller, "research_service", service)
+    app = FastAPI()
+    app.include_router(research_controller.router)
+    app.dependency_overrides[get_current_user] = lambda: user
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/research/runs/{old_run['id']}/claims/C1/publish-knowledge",
+            json={"statement": "客户端伪造正文", "source_ids": ["FORGED"]},
+        )
+        assert response.status_code == 200
+        old = response.json()
+        assert old["statement"] == "当前吞吐量为 91 Gbps。"
+        assert old["source_ids"] == ["S1"]
+
+        listed = await client.get(
+            f"/api/v1/research/projects/{project['id']}/knowledge",
+        )
+        detailed = await client.get(f"/api/v1/research/knowledge/{old['id']}")
+        assert listed.status_code == 200 and listed.json()["total"] == 1
+        assert detailed.status_code == 200 and detailed.json()["id"] == old["id"]
+
+        superseded = await client.post(
+            f"/api/v1/research/projects/{project['id']}/knowledge/{old['id']}/supersede",
+            json={"run_id": new_run["id"], "claim_id": "C2"},
+        )
+        assert superseded.status_code == 200
+        assert superseded.json()["version"] == 2
+        assert superseded.json()["statement"] == "服务端可信新结论。"
+
+        revoked = await client.post(
+            f"/api/v1/research/knowledge/{superseded.json()['id']}/revoke",
+        )
+        assert revoked.status_code == 200
+        assert revoked.json()["status"] == "revoked"
 
 
 @pytest.mark.asyncio
