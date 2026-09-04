@@ -1,5 +1,6 @@
 """科研项目空间和结构化实验记录测试。"""
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -657,6 +658,23 @@ async def test_project_knowledge_http_contract_uses_server_side_provenance(tmp_p
         )
         assert revoked.status_code == 200
         assert revoked.json()["status"] == "revoked"
+
+
+def test_frontend_exposes_project_knowledge_lifecycle_controls():
+    app_source = (
+        Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.vue"
+    ).read_text(encoding="utf-8")
+
+    for contract in (
+        "可信项目知识",
+        "查看来源",
+        "撤销",
+        "替代所选知识",
+        "/publish-knowledge",
+        "/supersede",
+        "error?.response?.data?.detail || '项目知识发布失败'",
+    ):
+        assert contract in app_source
 
 
 @pytest.mark.asyncio

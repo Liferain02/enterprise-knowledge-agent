@@ -473,6 +473,70 @@
                 <span v-if="experimentFormError" class="login-error">{{ experimentFormError }}</span>
               </form>
 
+              <section class="knowledge-record-board">
+                <div class="experiment-board-heading">
+                  <div>
+                    <span class="eyebrow">VERIFIED KNOWLEDGE</span>
+                    <h3>可信项目知识</h3>
+                  </div>
+                  <div class="knowledge-status-tabs" aria-label="项目知识状态">
+                    <button
+                      :class="{ active: researchKnowledgeStatus === 'active' }"
+                      @click="setResearchKnowledgeStatus('active')"
+                    >当前有效</button>
+                    <button
+                      :class="{ active: researchKnowledgeStatus === 'all' }"
+                      @click="setResearchKnowledgeStatus('all')"
+                    >全部版本</button>
+                  </div>
+                </div>
+                <p v-if="researchKnowledgeError" class="form-error">{{ researchKnowledgeError }}</p>
+                <div v-else-if="researchKnowledgeLoading" class="library-empty">正在加载项目知识...</div>
+                <div v-else-if="researchKnowledgeRecords.length === 0" class="library-empty">
+                  {{ researchKnowledgeStatus === 'active' ? '尚无当前有效的可信知识。' : '尚无项目知识记录。' }}
+                </div>
+                <article
+                  v-for="record in researchKnowledgeRecords"
+                  v-else
+                  :key="record.id"
+                  class="knowledge-record"
+                >
+                  <div class="knowledge-record-head">
+                    <span class="knowledge-record-status" :class="record.status">
+                      {{ formatKnowledgeStatus(record.status) }} · v{{ record.version }}
+                    </span>
+                    <time>{{ formatTimestamp(record.updated_at) }}</time>
+                  </div>
+                  <h4>{{ record.statement }}</h4>
+                  <p>{{ record.published_by }} 发布 · {{ record.source_ids.length }} 条来源</p>
+                  <div class="knowledge-record-actions">
+                    <button @click="toggleKnowledgeDetail(record)">
+                      {{ expandedKnowledgeId === record.id ? '收起来源' : '查看来源' }}
+                    </button>
+                    <button
+                      v-if="record.status === 'active' && canWriteSelectedProject"
+                      class="danger"
+                      :disabled="record.revoking"
+                      @click="revokeProjectKnowledge(record)"
+                    >{{ record.revoking ? '撤销中...' : '撤销' }}</button>
+                  </div>
+                  <div v-if="expandedKnowledgeId === record.id" class="knowledge-provenance">
+                    <p v-if="record.detailLoading">正在核验当前权限与来源...</p>
+                    <p v-else-if="record.detailError" class="form-error">{{ record.detailError }}</p>
+                    <template v-else>
+                      <p><b>研究问题：</b>{{ record.research_question || '未记录' }}</p>
+                      <p><b>Research Run：</b>{{ record.research_run_id }}</p>
+                      <p><b>Claim：</b>{{ record.claim_id }}</p>
+                      <ul>
+                        <li v-for="source in record.sources" :key="source.source_id">
+                          {{ source.title }}（{{ source.source_id }}）
+                        </li>
+                      </ul>
+                    </template>
+                  </div>
+                </article>
+              </section>
+
               <section class="task-board">
                 <div class="experiment-board-heading">
                   <div>
@@ -634,6 +698,25 @@
                             ? '发布中...'
                             : formatPublishedClaimStatus(msg.researchRunDetail.published_claim_statuses?.[claim.claim_id]) }}
                         </button>
+                        <template
+                          v-if="msg.researchRunDetail.project_id
+                            && !msg.researchRunDetail.published_claim_ids?.includes(claim.claim_id)
+                            && msg.researchRunDetail.projectKnowledge?.length"
+                        >
+                          <select v-model="claim.supersedesId" class="research-knowledge-select">
+                            <option value="">选择要替代的知识</option>
+                            <option
+                              v-for="record in msg.researchRunDetail.projectKnowledge"
+                              :key="record.id"
+                              :value="record.id"
+                            >v{{ record.version }} · {{ record.statement }}</option>
+                          </select>
+                          <button
+                            class="feedback-btn"
+                            :disabled="!claim.supersedesId || claim.replacing"
+                            @click="supersedeResearchKnowledge(msg, claim)"
+                          >{{ claim.replacing ? '替代中...' : '替代所选知识' }}</button>
+                        </template>
                       </div>
                     </div>
                   </div>
@@ -825,6 +908,28 @@ interface ResearchTask {
   source: string
 }
 
+interface KnowledgeRecord {
+  id: string
+  project_id: string
+  knowledge_type: 'fact'
+  statement: string
+  status: 'active' | 'superseded' | 'revoked'
+  version: number
+  research_run_id: string
+  claim_id: string
+  source_ids: string[]
+  created_by: string
+  published_by: string
+  created_at: number
+  updated_at: number
+  supersedes_id?: string
+  research_question?: string
+  sources: Array<{ source_id: string; title: string }>
+  detailLoading?: boolean
+  detailError?: string
+  revoking?: boolean
+}
+
 interface ResearchRunDetail {
   id: string
   project_id?: string
@@ -840,6 +945,8 @@ interface ResearchRunDetail {
       source_ids?: string[]
       confirming?: boolean
       publishing?: boolean
+      replacing?: boolean
+      supersedesId?: string
     }>
   }
   review_report?: { decision?: string }
@@ -848,6 +955,7 @@ interface ResearchRunDetail {
   confirmed_claim_ids?: string[]
   published_claim_ids?: string[]
   published_claim_statuses?: Record<string, 'active' | 'superseded' | 'revoked'>
+  projectKnowledge?: KnowledgeRecord[]
 }
 
 interface FeedbackIssue {
@@ -954,6 +1062,11 @@ const researchLoading = ref(false)
 const researchProjects = ref<ResearchProject[]>([])
 const researchExperiments = ref<ResearchExperiment[]>([])
 const researchTasks = ref<ResearchTask[]>([])
+const researchKnowledgeRecords = ref<KnowledgeRecord[]>([])
+const researchKnowledgeStatus = ref<'active' | 'all'>('active')
+const researchKnowledgeLoading = ref(false)
+const researchKnowledgeError = ref('')
+const expandedKnowledgeId = ref('')
 const selectedProject = ref<ResearchProject | null>(null)
 const projectQuery = ref('')
 const showProjectForm = ref(false)
@@ -995,6 +1108,14 @@ const canManageKnowledge = computed(() => {
   return ['admin', 'pi', 'teacher', 'lab_admin', 'senior_student', 'editor', 'manager', 'hr', 'it_support'].includes(role)
 })
 const canReviewFeedback = computed(() => canManageKnowledge.value)
+const canWriteSelectedProject = computed(() => {
+  const project = selectedProject.value
+  const user = currentUser.value
+  if (!project || !user) return false
+  return ['admin', 'pi'].includes(user.role)
+    || project.lead === user.username
+    || project.members.some(member => member.username === user.username)
+})
 
 const applyAuthHeader = () => {
   if (token.value) {
@@ -1146,6 +1267,10 @@ const logout = () => {
   researchProjects.value = []
   researchExperiments.value = []
   researchTasks.value = []
+  researchKnowledgeRecords.value = []
+  researchKnowledgeStatus.value = 'active'
+  researchKnowledgeError.value = ''
+  expandedKnowledgeId.value = ''
   selectedProject.value = null
   loginMode.value = 'login'
   regUsername.value = ''
@@ -1340,6 +1465,7 @@ const loadResearchWorkspace = async () => {
       await Promise.all([
         loadResearchExperiments(selectedProject.value.id),
         loadResearchTasks(selectedProject.value.id),
+        loadProjectKnowledge(selectedProject.value.id),
       ])
     }
   } finally {
@@ -1355,7 +1481,12 @@ const openResearchWorkspace = async () => {
 const selectResearchProject = async (project: ResearchProject) => {
   selectedProject.value = project
   showExperimentForm.value = false
-  await Promise.all([loadResearchExperiments(project.id), loadResearchTasks(project.id)])
+  expandedKnowledgeId.value = ''
+  await Promise.all([
+    loadResearchExperiments(project.id),
+    loadResearchTasks(project.id),
+    loadProjectKnowledge(project.id),
+  ])
 }
 
 const loadResearchExperiments = async (projectId: string) => {
@@ -1366,6 +1497,68 @@ const loadResearchExperiments = async (projectId: string) => {
 const loadResearchTasks = async (projectId: string) => {
   const response = await axios.get(`${API_BASE}/research/projects/${projectId}/tasks`)
   researchTasks.value = response.data.tasks || []
+}
+
+const loadProjectKnowledge = async (projectId: string) => {
+  researchKnowledgeLoading.value = true
+  researchKnowledgeError.value = ''
+  try {
+    const response = await axios.get(`${API_BASE}/research/projects/${projectId}/knowledge`, {
+      params: { status: researchKnowledgeStatus.value },
+    })
+    researchKnowledgeRecords.value = response.data.records || []
+  } catch (error: any) {
+    researchKnowledgeRecords.value = []
+    researchKnowledgeError.value = error?.response?.data?.detail || '项目知识暂不可用'
+  } finally {
+    researchKnowledgeLoading.value = false
+  }
+}
+
+const setResearchKnowledgeStatus = async (status: 'active' | 'all') => {
+  researchKnowledgeStatus.value = status
+  expandedKnowledgeId.value = ''
+  if (selectedProject.value) await loadProjectKnowledge(selectedProject.value.id)
+}
+
+const formatKnowledgeStatus = (status: KnowledgeRecord['status']) => ({
+  active: '当前有效',
+  superseded: '已被替代',
+  revoked: '已撤销',
+}[status])
+
+const toggleKnowledgeDetail = async (record: KnowledgeRecord) => {
+  if (expandedKnowledgeId.value === record.id) {
+    expandedKnowledgeId.value = ''
+    return
+  }
+  expandedKnowledgeId.value = record.id
+  record.detailLoading = true
+  record.detailError = ''
+  try {
+    const response = await axios.get<KnowledgeRecord>(
+      `${API_BASE}/research/knowledge/${record.id}`,
+    )
+    Object.assign(record, response.data)
+  } catch (error: any) {
+    record.detailError = error?.response?.data?.detail || '来源追溯暂不可用'
+  } finally {
+    record.detailLoading = false
+  }
+}
+
+const revokeProjectKnowledge = async (record: KnowledgeRecord) => {
+  if (record.revoking || !confirm('确认撤销这条项目知识？记录及来源仍会保留在历史版本中。')) return
+  record.revoking = true
+  researchKnowledgeError.value = ''
+  try {
+    await axios.post(`${API_BASE}/research/knowledge/${record.id}/revoke`)
+    if (selectedProject.value) await loadProjectKnowledge(selectedProject.value.id)
+  } catch (error: any) {
+    researchKnowledgeError.value = error?.response?.data?.detail || '项目知识撤销失败'
+  } finally {
+    record.revoking = false
+  }
 }
 
 const toggleResearchRun = async (message: Message) => {
@@ -1383,6 +1576,12 @@ const toggleResearchRun = async (message: Message) => {
       `${API_BASE}/research/runs/${message.researchRunId}`,
     )
     message.researchRunDetail = response.data
+    if (response.data.project_id) {
+      const knowledge = await axios.get(
+        `${API_BASE}/research/projects/${response.data.project_id}/knowledge`,
+      )
+      message.researchRunDetail.projectKnowledge = knowledge.data.records || []
+    }
   } catch (error: any) {
     message.researchRunError = error?.response?.data?.detail || '研究运行记录暂不可用'
   } finally {
@@ -1435,7 +1634,7 @@ const publishResearchClaim = async (
   claim.publishing = true
   message.researchRunError = ''
   try {
-    await axios.post(
+    const response = await axios.post<KnowledgeRecord>(
       `${API_BASE}/research/runs/${message.researchRunId}/claims/${claim.claim_id}/publish-knowledge`,
       {},
     )
@@ -1448,11 +1647,51 @@ const publishResearchClaim = async (
         ...(detail.published_claim_statuses || {}),
         [claim.claim_id]: 'active',
       }
+      detail.projectKnowledge = [response.data, ...(detail.projectKnowledge || [])]
+    }
+    if (selectedProject.value?.id === response.data.project_id) {
+      await loadProjectKnowledge(response.data.project_id)
     }
   } catch (error: any) {
     message.researchRunError = error?.response?.data?.detail || '项目知识发布失败'
   } finally {
     claim.publishing = false
+  }
+}
+
+const supersedeResearchKnowledge = async (
+  message: Message,
+  claim: { claim_id: string; supersedesId?: string; replacing?: boolean },
+) => {
+  const detail = message.researchRunDetail
+  if (!message.researchRunId || !detail?.project_id || !claim.supersedesId || claim.replacing) return
+  claim.replacing = true
+  message.researchRunError = ''
+  try {
+    const oldId = claim.supersedesId
+    const response = await axios.post<KnowledgeRecord>(
+      `${API_BASE}/research/projects/${detail.project_id}/knowledge/${oldId}/supersede`,
+      { run_id: message.researchRunId, claim_id: claim.claim_id },
+    )
+    detail.published_claim_ids = [
+      ...new Set([...(detail.published_claim_ids || []), claim.claim_id]),
+    ]
+    detail.published_claim_statuses = {
+      ...(detail.published_claim_statuses || {}),
+      [claim.claim_id]: 'active',
+    }
+    detail.projectKnowledge = [
+      response.data,
+      ...(detail.projectKnowledge || []).filter(record => record.id !== oldId),
+    ]
+    claim.supersedesId = ''
+    if (selectedProject.value?.id === response.data.project_id) {
+      await loadProjectKnowledge(response.data.project_id)
+    }
+  } catch (error: any) {
+    message.researchRunError = error?.response?.data?.detail || '项目知识替代失败'
+  } finally {
+    claim.replacing = false
   }
 }
 
