@@ -132,3 +132,42 @@ async def test_default_retrieval_path_does_not_read_project_knowledge(monkeypatc
     )
     assert results == [(raw, 0.8)]
     adapter.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_enabled_retrieval_adds_project_knowledge_after_raw_results(monkeypatch):
+    import config.settings as settings_module
+    import src.rag.retrieval.retriever as retriever_module
+    from src.agent.agents import knowledge as knowledge_module
+
+    raw = Document(page_content="原始 RDMA 资料", metadata={"source": "raw.md"})
+    manager = MagicMock()
+    manager.search_with_rerank.return_value = [(raw, 0.8)]
+    monkeypatch.setattr(retriever_module, "get_retriever_manager", lambda: manager)
+    monkeypatch.setattr(
+        settings_module,
+        "get_settings",
+        lambda: SimpleNamespace(
+            crag_enabled=False,
+            query_expand_enabled=False,
+            project_knowledge_retrieval_enabled=True,
+            project_knowledge_retrieval_top_k=1,
+            standalone_rewrite_enabled=False,
+        ),
+    )
+    adapter = MagicMock(return_value=[
+        (raw, 0.8),
+        (Document(
+            page_content="可信项目结论",
+            metadata={"knowledge_record_id": "record-1"},
+        ), 0.7),
+    ])
+    monkeypatch.setattr(
+        "src.rag.retrieval.project_knowledge.merge_project_knowledge", adapter,
+    )
+    results, _grade, _history = await knowledge_module._retrieve_documents(
+        "RDMA 吞吐量", 5, False, {"username": "alice"}, project_id="project-1",
+    )
+    assert len(results) == 2
+    adapter.assert_called_once()
+    assert adapter.call_args.args[2] == "project-1"
