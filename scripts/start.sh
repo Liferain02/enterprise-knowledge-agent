@@ -107,6 +107,8 @@ fi
 trap 'cleanup_started_processes; exit 1' INT TERM
 
 echo "正在启动后端（端口 8010）..."
+# 统一工作目录，兼容从仓库根目录、scripts/ 或其他目录启动。
+cd "${PROJECT_DIR}"
 nohup "${BACKEND_PYTHON}" "${PROJECT_DIR}/main.py" >"${BACKEND_LOG}" 2>&1 </dev/null &
 backend_pid=$!
 printf '%s\n' "${backend_pid}" >"${BACKEND_PID_FILE}"

@@ -9,6 +9,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator, model_validator
 
 
+# 配置文件路径必须相对本文件解析，不能依赖启动命令所在的当前目录。
+# 否则从 scripts/、systemd 或其他工作目录启动时会误读不到 config/.env。
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_ENV_FILE = _PROJECT_ROOT / "config" / ".env"
+
 _INSECURE_ADMIN_PASSWORDS = frozenset({
     "",
     "admin",
@@ -31,7 +36,7 @@ class Settings(BaseSettings):
     """应用配置类"""
 
     model_config = SettingsConfigDict(
-        env_file="config/.env",
+        env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

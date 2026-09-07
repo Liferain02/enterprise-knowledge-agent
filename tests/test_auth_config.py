@@ -2,8 +2,16 @@
 
 import pytest
 from pydantic import ValidationError
+from pathlib import Path
 
 from config.settings import Settings
+
+
+def test_default_env_file_is_independent_of_current_directory():
+    """启动脚本从 scripts/ 等子目录运行时仍应读取项目配置。"""
+    env_file = Path(Settings.model_config["env_file"])
+
+    assert env_file == Path(__file__).resolve().parents[1] / "config" / ".env"
 
 
 def _settings(**overrides) -> Settings:
