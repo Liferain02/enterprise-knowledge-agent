@@ -1,0 +1,52 @@
+name: enterprise-knowledge
+services:
+  mysql:
+    image: ${MYSQL_IMAGE:?Run scripts/download_container_images.py first}
+    pull_policy: never
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Required}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_bin", "--max-connections=150"]
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", 'MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysqladmin ping -h localhost --silent']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    mem_limit: 2g
+  qdrant:
+    image: ${QDRANT_IMAGE:?Run scripts/download_container_images.py first}
+    pull_policy: never
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?Required}
+      QDRANT__TELEMETRY_DISABLED: "true"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    mem_limit: 4g
+  redis:
+    image: ${REDIS_IMAGE:?Run scripts/download_container_images.py first}
+    pull_policy: never
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Required}
+    command: ["sh", "-c", 'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    mem_limit: 768m
+volumes:
+  mysql_data:
+  qdrant_data:
+  redis_data:

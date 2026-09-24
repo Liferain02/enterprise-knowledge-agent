@@ -1,0 +1,337 @@
+{
+  "identity": {
+    "users": {
+      "columns": [
+        "id",
+        "username",
+        "password_hash",
+        "salt",
+        "created_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `users` (\n  `id` INT NOT NULL AUTO_INCREMENT,\n  `username` VARCHAR(191) NOT NULL,\n  `password_hash` LONGTEXT NOT NULL,\n  `salt` LONGTEXT NOT NULL,\n  `created_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_users_0` (`username`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "roles": {
+      "columns": [
+        "id",
+        "name",
+        "description",
+        "created_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `roles` (\n  `id` INT NOT NULL AUTO_INCREMENT,\n  `name` VARCHAR(191) NOT NULL,\n  `description` LONGTEXT,\n  `created_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_roles_0` (`name`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "user_roles": {
+      "columns": [
+        "user_id",
+        "role_id",
+        "assigned_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `user_roles` (\n  `user_id` INT NOT NULL,\n  `role_id` INT NOT NULL,\n  `assigned_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`user_id`, `role_id`),\n  FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE,\n  FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "role_permissions": {
+      "columns": [
+        "id",
+        "role_id",
+        "resource",
+        "action"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `role_permissions` (\n  `id` INT NOT NULL AUTO_INCREMENT,\n  `role_id` INT NOT NULL,\n  `resource` VARCHAR(191) NOT NULL,\n  `action` VARCHAR(191) NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_role_permissions_0` (`role_id`, `resource`, `action`),\n  FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    }
+  },
+  "catalog": {
+    "departments": {
+      "columns": [
+        "id",
+        "name",
+        "parent_id",
+        "path",
+        "description",
+        "created_at",
+        "updated_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `departments` (\n  `id` INT NOT NULL AUTO_INCREMENT,\n  `name` VARCHAR(191) NOT NULL,\n  `parent_id` INT,\n  `path` LONGTEXT NOT NULL,\n  `description` LONGTEXT,\n  `created_at` DOUBLE NOT NULL,\n  `updated_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_departments_0` (`name`),\n  FOREIGN KEY (`parent_id`) REFERENCES `departments` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "roles": {
+      "columns": [
+        "id",
+        "name",
+        "description",
+        "is_system",
+        "created_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `roles` (\n  `id` INT NOT NULL AUTO_INCREMENT,\n  `name` VARCHAR(191) NOT NULL,\n  `description` LONGTEXT,\n  `is_system` INT DEFAULT 0,\n  `created_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_roles_0` (`name`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "role_permissions": {
+      "columns": [
+        "role_id",
+        "permission"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `role_permissions` (\n  `role_id` INT NOT NULL,\n  `permission` VARCHAR(191) NOT NULL,\n  PRIMARY KEY (`role_id`, `permission`),\n  FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "users": {
+      "columns": [
+        "id",
+        "username",
+        "email",
+        "password_hash",
+        "salt",
+        "role_id",
+        "department_id",
+        "is_active",
+        "is_superadmin",
+        "last_login_at",
+        "created_at",
+        "updated_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `users` (\n  `id` INT NOT NULL AUTO_INCREMENT,\n  `username` VARCHAR(191) NOT NULL,\n  `email` VARCHAR(191) NOT NULL,\n  `password_hash` LONGTEXT NOT NULL,\n  `salt` LONGTEXT NOT NULL,\n  `role_id` INT,\n  `department_id` INT,\n  `is_active` INT DEFAULT 1,\n  `is_superadmin` INT DEFAULT 0,\n  `last_login_at` DOUBLE,\n  `created_at` DOUBLE NOT NULL,\n  `updated_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_users_email` (`email`),\n  KEY `idx_users_username` (`username`),\n  UNIQUE KEY `uq_users_2` (`email`),\n  UNIQUE KEY `uq_users_3` (`username`),\n  FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION,\n  FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "documents": {
+      "columns": [
+        "id",
+        "title",
+        "category",
+        "tags",
+        "version",
+        "effective_date",
+        "expiry_date",
+        "confidentiality",
+        "department_restrict",
+        "role_restrict",
+        "status",
+        "file_path",
+        "file_hash",
+        "file_size",
+        "uploaded_by",
+        "chunk_count",
+        "description",
+        "created_at",
+        "updated_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `documents` (\n  `id` VARCHAR(191) NOT NULL,\n  `title` LONGTEXT NOT NULL,\n  `category` VARCHAR(191) NOT NULL,\n  `tags` LONGTEXT,\n  `version` LONGTEXT NOT NULL DEFAULT ('1.0'),\n  `effective_date` LONGTEXT,\n  `expiry_date` LONGTEXT,\n  `confidentiality` LONGTEXT DEFAULT ('internal'),\n  `department_restrict` LONGTEXT,\n  `role_restrict` LONGTEXT,\n  `status` VARCHAR(191) DEFAULT 'draft',\n  `file_path` LONGTEXT,\n  `file_hash` LONGTEXT,\n  `file_size` INT,\n  `uploaded_by` LONGTEXT NOT NULL,\n  `chunk_count` INT DEFAULT 0,\n  `description` LONGTEXT,\n  `created_at` DOUBLE NOT NULL,\n  `updated_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_docs_status` (`status`),\n  KEY `idx_docs_category` (`category`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "audit_logs": {
+      "columns": [
+        "id",
+        "user_id",
+        "username",
+        "action",
+        "resource_type",
+        "resource_id",
+        "resource_name",
+        "ip_address",
+        "user_agent",
+        "detail",
+        "created_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `audit_logs` (\n  `id` INT NOT NULL AUTO_INCREMENT,\n  `user_id` INT,\n  `username` LONGTEXT NOT NULL,\n  `action` VARCHAR(191) NOT NULL,\n  `resource_type` LONGTEXT,\n  `resource_id` LONGTEXT,\n  `resource_name` LONGTEXT,\n  `ip_address` LONGTEXT,\n  `user_agent` LONGTEXT,\n  `detail` LONGTEXT,\n  `created_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_audit_created` (`created_at`),\n  KEY `idx_audit_action` (`action`),\n  KEY `idx_audit_user` (`user_id`),\n  FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    }
+  },
+  "sessions": {
+    "feedback": {
+      "columns": [
+        "id",
+        "username",
+        "session_id",
+        "question",
+        "answer",
+        "used_agent",
+        "feedback_type",
+        "comment",
+        "created_at",
+        "status",
+        "resolution_note",
+        "resolved_by",
+        "resolved_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `feedback` (\n  `id` INT NOT NULL AUTO_INCREMENT,\n  `username` LONGTEXT NOT NULL,\n  `session_id` LONGTEXT NOT NULL,\n  `question` LONGTEXT NOT NULL,\n  `answer` LONGTEXT NOT NULL,\n  `used_agent` LONGTEXT NOT NULL,\n  `feedback_type` LONGTEXT NOT NULL,\n  `comment` LONGTEXT,\n  `created_at` VARCHAR(191) NOT NULL,\n  `status` VARCHAR(191) NOT NULL DEFAULT 'open',\n  `resolution_note` LONGTEXT,\n  `resolved_by` LONGTEXT,\n  `resolved_at` LONGTEXT,\n  PRIMARY KEY (`id`),\n  KEY `idx_feedback_status_created` (`status`, `created_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "sessions": {
+      "columns": [
+        "session_id",
+        "title",
+        "created_at",
+        "updated_at",
+        "message_count",
+        "metadata"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `sessions` (\n  `session_id` VARCHAR(191) NOT NULL,\n  `title` LONGTEXT,\n  `created_at` LONGTEXT NOT NULL,\n  `updated_at` LONGTEXT NOT NULL,\n  `message_count` INT DEFAULT 0,\n  `metadata` LONGTEXT,\n  PRIMARY KEY (`session_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "messages": {
+      "columns": [
+        "id",
+        "session_id",
+        "role",
+        "content",
+        "created_at",
+        "metadata"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `messages` (\n  `id` INT NOT NULL AUTO_INCREMENT,\n  `session_id` VARCHAR(191) NOT NULL,\n  `role` LONGTEXT NOT NULL,\n  `content` LONGTEXT NOT NULL,\n  `created_at` LONGTEXT NOT NULL,\n  `metadata` LONGTEXT,\n  PRIMARY KEY (`id`),\n  FOREIGN KEY (`session_id`) REFERENCES `sessions` (`session_id`) ON UPDATE CASCADE ON DELETE NO ACTION\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    }
+  },
+  "research": {
+    "research_projects": {
+      "columns": [
+        "id",
+        "slug",
+        "title",
+        "summary",
+        "research_direction",
+        "status",
+        "visibility",
+        "lead",
+        "created_by",
+        "created_at",
+        "updated_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `research_projects` (\n  `id` VARCHAR(191) NOT NULL,\n  `slug` VARCHAR(191) NOT NULL,\n  `title` LONGTEXT NOT NULL,\n  `summary` LONGTEXT NOT NULL DEFAULT (''),\n  `research_direction` LONGTEXT NOT NULL DEFAULT (''),\n  `status` VARCHAR(191) NOT NULL DEFAULT 'active',\n  `visibility` LONGTEXT NOT NULL DEFAULT ('project'),\n  `lead` LONGTEXT NOT NULL DEFAULT (''),\n  `created_by` LONGTEXT NOT NULL,\n  `created_at` DOUBLE NOT NULL,\n  `updated_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_research_projects_status` (`status`),\n  UNIQUE KEY `uq_research_projects_1` (`slug`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "research_project_members": {
+      "columns": [
+        "project_id",
+        "username",
+        "member_role",
+        "created_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `research_project_members` (\n  `project_id` VARCHAR(191) NOT NULL,\n  `username` VARCHAR(191) NOT NULL,\n  `member_role` LONGTEXT NOT NULL DEFAULT ('member'),\n  `created_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`project_id`, `username`),\n  KEY `idx_research_project_members_username` (`username`),\n  FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "research_experiments": {
+      "columns": [
+        "id",
+        "project_id",
+        "title",
+        "hypothesis",
+        "environment",
+        "code_commit",
+        "dataset_version",
+        "metrics",
+        "conclusion",
+        "next_steps",
+        "status",
+        "created_by",
+        "created_at",
+        "updated_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `research_experiments` (\n  `id` VARCHAR(191) NOT NULL,\n  `project_id` VARCHAR(191) NOT NULL,\n  `title` LONGTEXT NOT NULL,\n  `hypothesis` LONGTEXT NOT NULL DEFAULT (''),\n  `environment` LONGTEXT NOT NULL DEFAULT (''),\n  `code_commit` LONGTEXT NOT NULL DEFAULT (''),\n  `dataset_version` LONGTEXT NOT NULL DEFAULT (''),\n  `metrics` LONGTEXT NOT NULL DEFAULT ('{}'),\n  `conclusion` LONGTEXT NOT NULL DEFAULT (''),\n  `next_steps` LONGTEXT NOT NULL DEFAULT (''),\n  `status` LONGTEXT NOT NULL DEFAULT ('planned'),\n  `created_by` LONGTEXT NOT NULL,\n  `created_at` DOUBLE NOT NULL,\n  `updated_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_research_experiments_project` (`project_id`, `updated_at`),\n  FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "research_tasks": {
+      "columns": [
+        "id",
+        "project_id",
+        "title",
+        "assignee",
+        "due_date",
+        "status",
+        "source",
+        "created_by",
+        "created_at",
+        "updated_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `research_tasks` (\n  `id` VARCHAR(191) NOT NULL,\n  `project_id` VARCHAR(191) NOT NULL,\n  `title` LONGTEXT NOT NULL,\n  `assignee` LONGTEXT NOT NULL DEFAULT (''),\n  `due_date` LONGTEXT NOT NULL DEFAULT (''),\n  `status` VARCHAR(191) NOT NULL DEFAULT 'open',\n  `source` LONGTEXT NOT NULL DEFAULT (''),\n  `created_by` LONGTEXT NOT NULL,\n  `created_at` DOUBLE NOT NULL,\n  `updated_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_research_tasks_project` (`project_id`, `status`, `updated_at`),\n  FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "research_runs": {
+      "columns": [
+        "id",
+        "project_id",
+        "session_id",
+        "user_id",
+        "question",
+        "mode",
+        "status",
+        "final_answer",
+        "source_cards_json",
+        "evidence_package_json",
+        "analysis_report_json",
+        "review_report_json",
+        "trace_json",
+        "metrics_json",
+        "created_at",
+        "completed_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `research_runs` (\n  `id` VARCHAR(191) NOT NULL,\n  `project_id` VARCHAR(191),\n  `session_id` VARCHAR(191) NOT NULL,\n  `user_id` VARCHAR(191) NOT NULL,\n  `question` LONGTEXT NOT NULL,\n  `mode` LONGTEXT NOT NULL DEFAULT ('deep'),\n  `status` LONGTEXT NOT NULL DEFAULT ('completed'),\n  `final_answer` LONGTEXT NOT NULL DEFAULT (''),\n  `source_cards_json` LONGTEXT NOT NULL DEFAULT ('[]'),\n  `evidence_package_json` LONGTEXT NOT NULL DEFAULT ('{}'),\n  `analysis_report_json` LONGTEXT NOT NULL DEFAULT ('{}'),\n  `review_report_json` LONGTEXT NOT NULL DEFAULT ('{}'),\n  `trace_json` LONGTEXT NOT NULL DEFAULT ('{}'),\n  `metrics_json` LONGTEXT NOT NULL DEFAULT ('{}'),\n  `created_at` DOUBLE NOT NULL,\n  `completed_at` DOUBLE,\n  PRIMARY KEY (`id`),\n  KEY `idx_research_runs_project` (`project_id`, `created_at`),\n  KEY `idx_research_runs_user_session` (`user_id`, `session_id`, `created_at`),\n  FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`id`) ON UPDATE NO ACTION ON DELETE SET NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "research_memory_confirmations": {
+      "columns": [
+        "run_id",
+        "claim_id",
+        "user_id",
+        "confirmed_at",
+        "memory_result_json"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `research_memory_confirmations` (\n  `run_id` VARCHAR(191) NOT NULL,\n  `claim_id` VARCHAR(191) NOT NULL,\n  `user_id` VARCHAR(191) NOT NULL,\n  `confirmed_at` DOUBLE NOT NULL,\n  `memory_result_json` LONGTEXT NOT NULL DEFAULT ('{}'),\n  PRIMARY KEY (`run_id`, `claim_id`, `user_id`),\n  KEY `idx_research_memory_confirmations_user` (`user_id`, `confirmed_at`),\n  FOREIGN KEY (`run_id`) REFERENCES `research_runs` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    },
+    "research_knowledge_records": {
+      "columns": [
+        "id",
+        "project_id",
+        "knowledge_type",
+        "statement",
+        "status",
+        "version",
+        "research_run_id",
+        "claim_id",
+        "source_ids_json",
+        "created_by",
+        "published_by",
+        "created_at",
+        "updated_at",
+        "supersedes_id"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `research_knowledge_records` (\n  `id` VARCHAR(191) NOT NULL,\n  `project_id` VARCHAR(191) NOT NULL,\n  `knowledge_type` LONGTEXT NOT NULL DEFAULT ('fact'),\n  `statement` LONGTEXT NOT NULL,\n  `status` VARCHAR(191) NOT NULL DEFAULT 'active',\n  `version` INT NOT NULL DEFAULT 1,\n  `research_run_id` VARCHAR(191) NOT NULL,\n  `claim_id` VARCHAR(191) NOT NULL,\n  `source_ids_json` LONGTEXT NOT NULL DEFAULT ('[]'),\n  `created_by` LONGTEXT NOT NULL,\n  `published_by` LONGTEXT NOT NULL,\n  `created_at` DOUBLE NOT NULL,\n  `updated_at` DOUBLE NOT NULL,\n  `supersedes_id` VARCHAR(191),\n  PRIMARY KEY (`id`),\n  KEY `idx_research_knowledge_project_status` (`project_id`, `status`, `updated_at`),\n  UNIQUE KEY `uq_research_knowledge_records_1` (`research_run_id`, `claim_id`),\n  FOREIGN KEY (`supersedes_id`) REFERENCES `research_knowledge_records` (`id`) ON UPDATE NO ACTION ON DELETE RESTRICT,\n  FOREIGN KEY (`research_run_id`) REFERENCES `research_runs` (`id`) ON UPDATE NO ACTION ON DELETE RESTRICT,\n  FOREIGN KEY (`project_id`) REFERENCES `research_projects` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    }
+  },
+  "versions": {
+    "document_versions": {
+      "columns": [
+        "id",
+        "doc_id",
+        "version",
+        "effective_date",
+        "expiry_date",
+        "status",
+        "superseded_by",
+        "source_system",
+        "changelog",
+        "uploaded_by",
+        "created_at"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `document_versions` (\n  `id` VARCHAR(191) NOT NULL,\n  `doc_id` VARCHAR(191) NOT NULL,\n  `version` LONGTEXT NOT NULL,\n  `effective_date` VARCHAR(191) NOT NULL,\n  `expiry_date` VARCHAR(191),\n  `status` LONGTEXT NOT NULL DEFAULT ('active'),\n  `superseded_by` LONGTEXT,\n  `source_system` LONGTEXT DEFAULT ('manual'),\n  `changelog` LONGTEXT,\n  `uploaded_by` LONGTEXT NOT NULL,\n  `created_at` DOUBLE NOT NULL,\n  PRIMARY KEY (`id`),\n  KEY `idx_effective` (`effective_date`, `expiry_date`),\n  KEY `idx_doc_id` (`doc_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    }
+  },
+  "ingestion": {
+    "ingestion_jobs": {
+      "columns": [
+        "job_id",
+        "file_path",
+        "category",
+        "metadata",
+        "status",
+        "retry_count",
+        "max_retries",
+        "error",
+        "created_at",
+        "started_at",
+        "completed_at",
+        "file_hash",
+        "original_filename",
+        "result"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `ingestion_jobs` (\n  `job_id` VARCHAR(191) NOT NULL,\n  `file_path` LONGTEXT NOT NULL,\n  `category` LONGTEXT NOT NULL,\n  `metadata` LONGTEXT NOT NULL,\n  `status` VARCHAR(191) NOT NULL DEFAULT 'pending',\n  `retry_count` INT DEFAULT 0,\n  `max_retries` INT DEFAULT 3,\n  `error` LONGTEXT,\n  `created_at` DOUBLE NOT NULL,\n  `started_at` DOUBLE,\n  `completed_at` DOUBLE,\n  `file_hash` VARCHAR(191),\n  `original_filename` LONGTEXT,\n  `result` LONGTEXT,\n  PRIMARY KEY (`job_id`),\n  KEY `idx_file_hash` (`file_hash`),\n  KEY `idx_created` (`created_at`),\n  KEY `idx_status` (`status`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    }
+  },
+  "mem0": {
+    "history": {
+      "columns": [
+        "id",
+        "memory_id",
+        "old_memory",
+        "new_memory",
+        "event",
+        "created_at",
+        "updated_at",
+        "is_deleted",
+        "actor_id",
+        "role"
+      ],
+      "create_sql": "CREATE TABLE IF NOT EXISTS `history` (\n `id` VARCHAR(191) PRIMARY KEY,\n `memory_id` VARCHAR(191),\n `old_memory` LONGTEXT,\n `new_memory` LONGTEXT,\n `event` VARCHAR(32),\n `created_at` VARCHAR(64),\n `updated_at` VARCHAR(64),\n `is_deleted` INT,\n `actor_id` VARCHAR(191),\n `role` VARCHAR(64),\n KEY idx_history_memory (`memory_id`, `created_at`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
+    }
+  }
+}
