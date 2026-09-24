@@ -3,6 +3,8 @@
 支持 OpenAI Embeddings 和 阿里千问 Embeddings
 """
 import os
+import math
+import time
 from typing import Optional, List, Union
 from langchain_core.embeddings import Embeddings
 from config.settings import get_settings
@@ -20,50 +22,98 @@ class DashScopeEmbeddings(Embeddings):
         self.api_key = api_key
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """对文档列表进行向量化"""
-        try:
-            import dashscope
-            from dashscope import TextEmbedding
-
-            if self.api_key:
-                dashscope.api_key = self.api_key
-
-            embeddings = []
-            for text in texts:
-                response = TextEmbedding.call(
-                    model=self.model,
-                    input=text
-                )
-                if response.status_code == 200:
-                    embedding = response.output['embeddings'][0]['embedding']
-                    embeddings.append(embedding)
-                else:
-                    raise Exception(f"Embedding API error: {response.message}")
-
-            return embeddings
-        except Exception as e:
-            raise Exception(f"DashScope embedding error: {str(e)}")
+        """Batch cache misses, deduplicate inputs, preserve exact input order."""
+        return self._embed(texts, "document")
 
     def embed_query(self, text: str) -> List[float]:
-        """对单个查询进行向量化"""
-        try:
-            import dashscope
-            from dashscope import TextEmbedding
+        return self._embed([text], "query")[0]
 
-            if self.api_key:
-                dashscope.api_key = self.api_key
+    @staticmethod
+    def _valid_vector(value):
+        return (isinstance(value, list) and bool(value)
+                and all(isinstance(x, (int, float)) and math.isfinite(x) for x in value))
 
-            response = TextEmbedding.call(
-                model=self.model,
-                input=text
-            )
+    def _embed(self, texts, purpose):
+        from dashscope import TextEmbedding
+        from src.rag.cache import cache, cache_key
 
-            if response.status_code == 200:
-                return response.output['embeddings'][0]['embedding']
+        settings = get_settings()
+        use_cache = getattr(settings, "embedding_cache_enabled", False)
+        batch_size = getattr(settings, "embedding_batch_size", 10)
+        keys = {text: cache_key("embedding", ["dashscope-native-v1", self.model, purpose, text])
+                for text in texts}
+        values, missing = {}, []
+        for text, key in keys.items():
+            hit = cache.get(key) if use_cache else None
+            if self._valid_vector(hit):
+                values[text] = hit
             else:
-                raise Exception(f"Embedding API error: {response.message}")
-        except Exception as e:
-            raise Exception(f"DashScope embedding error: {str(e)}")
+                missing.append(text)
+        for start in range(0, len(missing), batch_size):
+            batch = missing[start:start + batch_size]
+            for attempt in range(4):
+                response = TextEmbedding.call(model=self.model, input=batch, api_key=self.api_key)
+                if response.status_code == 200:
+                    break
+                if response.status_code not in (429, 500, 502, 503, 504) or attempt == 3:
+                    raise RuntimeError(f"Embedding API error: status={response.status_code}, code={response.code}")
+                time.sleep(2 ** attempt)
+            rows = response.output["embeddings"]
+            ordered = {row["text_index"]: row["embedding"] for row in rows}
+            if (set(ordered) != set(range(len(batch))) or len(rows) != len(batch)
+                    or not all(self._valid_vector(v) for v in ordered.values())):
+                raise ValueError("Invalid/incomplete embedding response")
+            for index, text in enumerate(batch):
+                values[text] = ordered[index]
+                if use_cache:
+                    cache.set(keys[text], ordered[index], settings.embedding_cache_ttl)
+        return [values[text] for text in texts]
+
+
+class LocalEmbeddings(Embeddings):
+    """Pinned BGE-M3 dense embeddings, local inference and Redis cache."""
+    def __init__(self, settings):
+        import threading
+        self.settings = settings
+        self._model = None
+        self._lock = threading.Lock()
+
+    def _embed(self, texts, purpose):
+        from src.rag.cache import cache, cache_key
+        settings = self.settings
+        keys = {t: cache_key("embedding", ["bge-m3-dense-normalized-v1",
+                                          settings.local_embedding_revision, purpose, t]) for t in texts}
+        values, missing = {}, []
+        for text, key in keys.items():
+            value = cache.get(key) if settings.embedding_cache_enabled else None
+            if DashScopeEmbeddings._valid_vector(value) and len(value) == 1024:
+                values[text] = value
+            else:
+                missing.append(text)
+        if missing:
+            with self._lock:
+                if self._model is None:
+                    import torch
+                    from sentence_transformers import SentenceTransformer
+                    path = settings.project_root / settings.local_embedding_path
+                    if (path / "REVISION").read_text().strip() != settings.local_embedding_revision:
+                        raise ValueError("Embedding snapshot revision does not match configuration")
+                    torch.set_num_threads(settings.local_embedding_threads)
+                    self._model = SentenceTransformer(str(path), device=settings.local_embedding_device,
+                                                      local_files_only=True, trust_remote_code=False)
+                encoded = self._model.encode(missing, batch_size=settings.embedding_batch_size,
+                                             normalize_embeddings=True, show_progress_bar=False).tolist()
+            for text, vector in zip(missing, encoded):
+                values[text] = vector
+                if settings.embedding_cache_enabled:
+                    cache.set(keys[text], vector, settings.embedding_cache_ttl)
+        return [values[t] for t in texts]
+
+    def embed_documents(self, texts):
+        return self._embed(texts, "document")
+
+    def embed_query(self, text):
+        return self._embed([text], "query")[0]
 
 
 # 全局 Embeddings 实例
@@ -101,7 +151,9 @@ def get_embeddings(
         return _embeddings_instance
     
     # 根据提供商创建不同的 Embeddings 实例
-    if embedding_provider == "qwen":
+    if embedding_provider == "local":
+        _embeddings_instance = LocalEmbeddings(settings)
+    elif embedding_provider == "qwen":
         # 使用 Qwen 的 dashscope SDK
         # 设置代理（dashscope 使用 HTTPX，需要设置环境变量）
         http_proxy = os.environ.get("http_proxy") or os.environ.get("HTTP_PROXY")

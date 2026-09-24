@@ -9,6 +9,16 @@ Checkpointer - 状态持久化
 """
 from langgraph.checkpoint.memory import MemorySaver
 
+_mysql_pool = None
+
+
+async def close_checkpointer():
+    global _mysql_pool
+    if _mysql_pool is not None:
+        _mysql_pool.close()
+        await _mysql_pool.wait_closed()
+        _mysql_pool = None
+
 
 def get_sync_checkpointer() -> MemorySaver:
     """
@@ -35,7 +45,22 @@ async def get_async_checkpointer():
     from config.settings import get_settings
     settings = get_settings()
 
-    if settings.use_sqlite_checkpointer:
+    if getattr(settings, "checkpointer_backend", "memory") == "mysql":
+        import aiomysql
+        from langgraph.checkpoint.mysql.aio import AIOMySQLSaver
+        from src.storage.relational import mysql_options
+        global _mysql_pool
+        if _mysql_pool is None:
+            options = mysql_options("checkpoints")
+            options["db"] = options.pop("database")
+            options.pop("read_timeout")
+            options.pop("write_timeout")
+            _mysql_pool = await aiomysql.create_pool(**options, autocommit=True, minsize=1, maxsize=5)
+        saver = AIOMySQLSaver(_mysql_pool)
+        await saver.setup()
+        return saver
+
+    if settings.use_sqlite_checkpointer or getattr(settings, "checkpointer_backend", "memory") == "sqlite":
         import aiosqlite
         from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 

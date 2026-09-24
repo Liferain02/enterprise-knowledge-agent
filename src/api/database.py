@@ -3,6 +3,7 @@
 包含用户、角色、权限、项目组、文档元数据和审计日志等核心表。
 """
 import sqlite3
+from src.storage.relational import connect
 import time
 import logging
 import re
@@ -11,6 +12,7 @@ import shutil
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
+from contextvars import ContextVar
 from enum import Enum
 from dataclasses import dataclass
 
@@ -68,15 +70,23 @@ class AuditAction(str, Enum):
 
 
 def _get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    conn = connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
+_transaction_connection = ContextVar("catalog_transaction_connection", default=None)
+
+
 @contextmanager
 def _db_cursor():
+    existing = _transaction_connection.get()
+    if existing is not None:
+        yield existing.cursor()
+        return
     conn = _get_connection()
+    token = _transaction_connection.set(conn)
     try:
         yield conn.cursor()
         conn.commit()
@@ -84,6 +94,7 @@ def _db_cursor():
         conn.rollback()
         raise
     finally:
+        _transaction_connection.reset(token)
         conn.close()
 
 
@@ -680,9 +691,12 @@ def update_document_meta(
     add_field("effective_date", effective_date)
     add_field("expiry_date", expiry_date)
     add_field("confidentiality", confidentiality)
-    add_field("department_restrict", json.dumps(department_restrict or []))
-    add_field("role_restrict", json.dumps(role_restrict or []))
-    add_field("tags", json.dumps(tags or []))
+    if department_restrict is not None:
+        add_field("department_restrict", json.dumps(department_restrict))
+    if role_restrict is not None:
+        add_field("role_restrict", json.dumps(role_restrict))
+    if tags is not None:
+        add_field("tags", json.dumps(tags))
     add_field("description", description)
     add_field("status", status)
     add_field("chunk_count", chunk_count)

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import List, Optional, Dict, Any
 import sqlite3
+from src.storage.relational import connect
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ class VersionDB:
 
     def _init_db(self):
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS document_versions (
                 id              TEXT PRIMARY KEY,
@@ -116,7 +117,7 @@ class VersionDB:
         conn.close()
 
     def get_versions(self, doc_id: str) -> List[DocumentVersion]:
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         rows = conn.execute(
             "SELECT * FROM document_versions WHERE doc_id = ? ORDER BY created_at DESC",
             (doc_id,),
@@ -125,7 +126,7 @@ class VersionDB:
         return [_row_to_version(r) for r in rows]
 
     def get_current_version(self, doc_id: str) -> Optional[DocumentVersion]:
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         row = conn.execute(
             """SELECT * FROM document_versions
                WHERE doc_id = ? AND status IN ('active', 'draft')
@@ -136,7 +137,7 @@ class VersionDB:
         return _row_to_version(row) if row else None
 
     def insert_version(self, v: DocumentVersion):
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         conn.execute(
             """INSERT INTO document_versions
                (id, doc_id, version, effective_date, expiry_date, status,
@@ -157,7 +158,7 @@ class VersionDB:
         status: str,
         superseded_by: Optional[str] = None,
     ):
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         if superseded_by is not None:
             conn.execute(
                 """UPDATE document_versions
@@ -175,7 +176,7 @@ class VersionDB:
 
     def set_current_version(self, doc_id: str, version_id: str):
         """将某版本设为当前版本（其他 active 版本降为 superseded）"""
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         conn.execute(
             "UPDATE document_versions SET status = 'superseded' "
             "WHERE doc_id = ? AND id != ? AND status = 'active'",

@@ -277,6 +277,20 @@ class QwenReranker:
             # 准备文档列表（需要字符串格式）
             doc_texts = [doc.page_content for doc in documents]
 
+            # Cache only scores/positions, never Document objects or ACL metadata.
+            # Every hit is mapped onto this request's freshly authorized candidates.
+            from src.rag.cache import cache, cache_key
+            settings = get_settings()
+            key = cache_key("rerank", ["dashscope", self.model, self.score_threshold,
+                                       top_n, query, doc_texts])
+            hit = cache.get(key)
+            if isinstance(hit, list) and all(
+                isinstance(row, list) and len(row) == 2
+                and isinstance(row[0], int) and 0 <= row[0] < len(documents)
+                and isinstance(row[1], (int, float)) for row in hit
+            ):
+                return [(documents[index], score) for index, score in hit]
+
             # 调用 TextReRank API
             response = TextReRank.call(
                 model=self.model,
@@ -288,14 +302,18 @@ class QwenReranker:
 
             if response.status_code == 200:
                 results = []
+                cached_scores = []
                 for item in response.output['results']:
                     doc_index = item['index']
                     score = item['relevance_score']
                     if score >= self.score_threshold:
                         results.append((documents[doc_index], score))
+                        cached_scores.append([doc_index, score])
 
                 # 按分数降序排序
                 results.sort(key=lambda x: x[1], reverse=True)
+                cached_scores.sort(key=lambda x: x[1], reverse=True)
+                cache.set(key, cached_scores[:top_n], getattr(settings, "rerank_cache_ttl", 600))
                 return results[:top_n]
             else:
                 print(f"Reranker API 错误: {response.message}")
@@ -332,7 +350,8 @@ class BGEHReranker:
         if self._model is None:
             try:
                 from sentence_transformers import CrossEncoder
-                self._model = CrossEncoder(self.model)
+                self._model = CrossEncoder(self.model, device="cpu", local_files_only=True,
+                                           revision=get_settings().local_reranker_revision)
             except ImportError:
                 raise ImportError("请安装 sentence-transformers: pip install sentence-transformers")
         return self._model
@@ -350,17 +369,31 @@ class BGEHReranker:
             # 准备 query-document 对
             pairs = [(query, doc.page_content) for doc in documents]
 
+            from src.rag.cache import cache, cache_key
+            settings = get_settings()
+            key = cache_key("rerank", ["bge", self.model, settings.local_reranker_revision,
+                                       self.score_threshold, top_n, pairs])
+            hit = cache.get(key)
+            if isinstance(hit, list) and all(isinstance(row, list) and len(row) == 2
+                    and isinstance(row[0], int) and 0 <= row[0] < len(documents)
+                    and isinstance(row[1], (int, float)) for row in hit):
+                return [(documents[index], score) for index, score in hit]
+
             # 获取分数
             scores = self.model_instance.predict(pairs)
 
             # 组合结果并按分数降序排序
             results = []
+            cached_scores = []
             for i, doc in enumerate(documents):
                 score = float(scores[i])
                 if score >= self.score_threshold:
                     results.append((doc, score))
+                    cached_scores.append([i, score])
 
             results.sort(key=lambda x: x[1], reverse=True)
+            cached_scores.sort(key=lambda x: x[1], reverse=True)
+            cache.set(key, cached_scores[:top_n], settings.rerank_cache_ttl)
             return results[:top_n]
 
         except Exception as e:

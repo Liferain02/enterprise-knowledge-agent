@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import sqlite3
+from src.storage.relational import connect
 import time
 import uuid
 from contextlib import contextmanager
@@ -39,7 +40,7 @@ class ResearchService:
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         try:

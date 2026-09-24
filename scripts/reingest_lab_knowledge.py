@@ -4,7 +4,7 @@
 默认行为：
 - 仅导入 data/knowledge 下的实验室文本资料（.md/.docx/.txt）
 - 跳过 dicts、archive 等目录
-- 重置现有 lab_knowledge 集合
+- 增量更新当前集合，成功写入后才移除旧分块，不清空集合
 
 可选行为：
 - 通过 --include-pdf 一并导入 papers/ 下的 PDF 论文
@@ -32,7 +32,7 @@ from src.rag.processing.document_loader import get_document_loader_manager
 from src.rag.storage.vectorstore import get_vectorstore_manager
 
 
-EXCLUDE_DIRS = {"dicts", "archive"}
+EXCLUDE_DIRS = {"dicts", "archive", "licenses", "upstream"}
 DEFAULT_EXTS = {".md", ".docx", ".txt"}
 PDF_EXTS = {".pdf"}
 
@@ -107,47 +107,14 @@ def enrich_docs(docs: list[Document], root: Path, path: Path) -> list[Document]:
 
 
 def reingest_lab_knowledge(include_pdf: bool = False) -> int:
-    knowledge_root = ROOT / "data" / "knowledge"
-    if not knowledge_root.exists():
-        raise FileNotFoundError(f"知识目录不存在: {knowledge_root}")
+    from scripts.sync_knowledge_corpus import build_documents, sync
 
-    loader = get_document_loader_manager()
-    splitter = build_splitter()
-    vectorstore = get_vectorstore_manager()
-    vectorstore.reset()
-
-    all_docs: list[Document] = []
-    loaded_files = 0
-    skipped: list[tuple[str, str]] = []
-
-    for path in iter_knowledge_files(knowledge_root, include_pdf=include_pdf):
-        try:
-            docs = loader.load_file(str(path))
-            docs = splitter.split_documents(docs)
-            docs = enrich_docs(docs, knowledge_root, path)
-        except Exception as exc:
-            skipped.append((str(path.relative_to(knowledge_root)), str(exc)))
-            continue
-
-        all_docs.extend(docs)
-        loaded_files += 1
-
-    print(f"loaded_files={loaded_files}")
-    print(f"chunk_count={len(all_docs)}")
-    print(f"skipped_files={len(skipped)}")
-    for rel_path, reason in skipped:
-        print(f"SKIP {rel_path}: {reason}")
-
-    if not all_docs:
-        print("没有可导入的文档，知识库已重置为空集合。")
-        return 0
-
-    ids = vectorstore.add_documents(all_docs)
-    info = vectorstore.get_collection_info()
-
-    print(f"stored_chunks={len(ids)}")
-    print(f"collection={info}")
-    return len(ids)
+    prepared = build_documents()
+    if not include_pdf:
+        prepared = [item for item in prepared if item[0].suffix.lower() != ".pdf"]
+    result = sync(prepared, get_vectorstore_manager())
+    print(f"collection={result['collection']}")
+    return sum(len(docs) for _, docs, _ in prepared)
 
 
 def main() -> int:

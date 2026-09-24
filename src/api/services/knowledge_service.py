@@ -619,9 +619,16 @@ class KnowledgeService:
         user_context: Optional[UserContext] = None,
     ) -> List[Dict[str, Any]]:
         """按来源聚合向量库 chunks，返回适合资料中心展示的文档目录。"""
-        raw = get_vectorstore_manager().list_documents()
+        manager = get_vectorstore_manager()
+        raw = manager.list_documents()
         documents: Dict[str, Dict[str, Any]] = {}
-        metadatas = raw.get("metadatas") or []
+        metadatas = list(raw.get("metadatas") or [])
+        page = raw
+        offset = 1000
+        while len(page.get("metadatas") or []) == 1000:
+            page = manager.list_documents(limit=1000, offset=offset)
+            metadatas.extend(page.get("metadatas") or [])
+            offset += 1000
 
         for metadata in metadatas:
             metadata = metadata or {}
@@ -641,6 +648,9 @@ class KnowledgeService:
                     "visibility": metadata.get("visibility") or "public",
                     "created_at": metadata.get("created_at") or None,
                     "summary": metadata.get("summary") or None,
+                    "source_url": metadata.get("source_url") or None,
+                    "source_kind": metadata.get("source_kind") or "internal_document",
+                    "revision": metadata.get("revision") or None,
                     "chunk_count": 0,
                 }
             documents[source]["chunk_count"] += 1

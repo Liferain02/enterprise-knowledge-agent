@@ -13,6 +13,7 @@ session_id 统一加上 username_ 前缀，实现用户间完全隔离。
 
 import uuid
 import sqlite3
+from src.storage.relational import connect
 import re
 from typing import Dict, Any, List, Optional
 from ..repositories import session_dao, message_dao
@@ -85,7 +86,7 @@ class SessionService:
         raw_id = session_id
 
         db_path = session_dao._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
         cursor.execute(
             "SELECT COUNT(*) FROM messages WHERE session_id = ?",

@@ -41,6 +41,7 @@ _METRIC_KEY_PREFIX = f"lab:metric:{_CACHE_VERSION}:"
 _redis_client: Optional[Redis] = None
 _redis_available: bool = False
 _redis_retry_after: float = 0.0
+_redis_loop = None
 _REDIS_RETRY_COOLDOWN = 30.0
 
 
@@ -52,7 +53,17 @@ async def get_redis_client() -> Optional[Redis]:
         Redis 客户端实例（连接成功时）
         None（Redis 不可用，降级到内存缓存）
     """
-    global _redis_client, _redis_available, _redis_retry_after
+    global _redis_client, _redis_available, _redis_retry_after, _redis_loop
+
+    # redis.asyncio clients are bound to the event loop that first used their
+    # connection pool. Pytest and sync-to-async callers may create short-lived
+    # loops; discard that pool before using the singleton from another loop.
+    loop = asyncio.get_running_loop()
+    if _redis_loop is not None and _redis_loop is not loop:
+        _redis_client = None
+        _redis_available = False
+        _redis_retry_after = 0.0
+    _redis_loop = loop
 
     if _redis_available and _redis_client is not None:
         return _redis_client
@@ -61,6 +72,9 @@ async def get_redis_client() -> Optional[Redis]:
 
     try:
         settings = get_settings()
+        if not getattr(settings, "rag_cache_enabled", False):
+            _redis_available = False
+            return None
         host = getattr(settings, "redis_host", "localhost")
         port = getattr(settings, "redis_port", 6379)
         password = getattr(settings, "redis_password", None)

@@ -4,7 +4,7 @@
 
 ## 核心能力
 
-- ACL 混合检索与 Qwen 重排
+- ACL 混合检索与 Qwen / 本地 BGE 重排
 - CRAG 默认关闭，仅在显式实验配置中启用
 - 普通问答与可选的深度研究模式
 - PDF、Markdown、TXT、DOCX 文档入库
@@ -14,7 +14,9 @@
 
 ## 技术栈
 
-后端采用 Python、FastAPI、LangGraph、SQLite 和 Chroma，前端采用 Vue 3 与 TypeScript。
+后端采用 Python、FastAPI、LangGraph，支持 MySQL、Qdrant 与 Redis 的 Docker 部署；保留 SQLite / Chroma 用于兼容测试。前端采用 Vue 3 与 TypeScript。
+
+存储迁移、代理下载镜像、公开语料扩容及本地模型部署，见[存储升级与离线部署](docs/02-核心实现/04-存储升级与离线部署.md)。
 
 ## 快速开始
 

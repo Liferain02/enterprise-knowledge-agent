@@ -152,6 +152,8 @@ async def lifespan(app: FastAPI):
     print("[Shutdown] 入库 Worker 已停止")
 
     # 4. 关闭 Redis 连接（缓存持久化）
+    from src.agent.checkpointer import close_checkpointer
+    await close_checkpointer()
     try:
         from src.rag.evaluation import grade_cache
         await grade_cache.close_redis()

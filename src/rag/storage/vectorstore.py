@@ -238,8 +238,18 @@ def get_vectorstore_manager(
 ) -> VectorStoreManager:
     """获取向量存储管理器实例"""
     global _vectorstore_manager
-    if _vectorstore_manager is None:
-        _vectorstore_manager = VectorStoreManager(collection_name)
+    settings = get_settings()
+    provider = getattr(settings, "vector_store_provider", "chroma")
+    if provider == "qdrant" and collection_name == DEFAULT_COLLECTION_NAME:
+        collection_name = settings.qdrant_collection
+    if (_vectorstore_manager is None
+            or _vectorstore_manager.collection_name != collection_name
+            or (provider == "qdrant") != (_vectorstore_manager.__class__.__name__ == "QdrantStoreManager")):
+        if provider == "qdrant":
+            from .qdrant_store import QdrantStoreManager
+            _vectorstore_manager = QdrantStoreManager(collection_name)
+        else:
+            _vectorstore_manager = VectorStoreManager(collection_name)
     return _vectorstore_manager
 
 

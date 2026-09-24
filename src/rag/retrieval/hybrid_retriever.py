@@ -10,6 +10,8 @@ bm25s: Rust+Python 实现，比 rank_bm25 快 10 倍，内置中文分词（jieb
 """
 import hashlib
 import json
+import threading
+from functools import wraps
 from typing import List, Optional, Dict, Any, Tuple
 from langchain_core.documents import Document
 import jieba
@@ -70,6 +72,14 @@ def _ensure_jieba_dict():
             _JIEBA_DICT_LOADED = True
 
 
+def _index_locked(method):
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        with self._index_lock:
+            return method(self, *args, **kwargs)
+    return guarded
+
+
 class HybridRetrieverManager:
     """混合检索管理器 - 结合 BM25 和向量检索"""
 
@@ -111,6 +121,8 @@ class HybridRetrieverManager:
         # 预构建 BM25 索引（避免每次 search 重建）
         self._tokenized_corpus: List[List[str]] = []
         self._bm25_index: Optional[Any] = None
+        self._index_lock = threading.RLock()
+        self._corpus_revision = None
 
         # 加载 jieba 用户词典（只需加载一次）
         _ensure_jieba_dict()
@@ -122,6 +134,7 @@ class HybridRetrieverManager:
             self._vectorstore = get_vectorstore(self.collection_name)
         return self._vectorstore
 
+    @_index_locked
     def set_documents(self, documents: List[Document]):
         """
         设置 BM25 使用的文档集合，并预构建索引。
@@ -149,9 +162,19 @@ class HybridRetrieverManager:
                 self._bm25_backend = "rank_bm25"
                 logger.info(f"混合检索 BM25 引擎: rank_bm25 ({len(documents)} 篇文档)")
 
+    @_index_locked
     def _ensure_bm25_index(self) -> None:
         """首次检索时从当前 Chroma snapshot 构建 BM25，避免名义 Hybrid。"""
-        if not self.enable_bm25 or self._bm25_index is not None:
+        if not self.enable_bm25:
+            return
+        if self.enable_vector and getattr(self.settings, "vector_store_provider", "chroma") == "qdrant":
+            from ..storage.vectorstore import get_vectorstore_manager
+            manager = get_vectorstore_manager(self.collection_name)
+            revision = manager.revision()
+            if revision != self._corpus_revision:
+                self.invalidate_bm25_index()
+                self._corpus_revision = revision
+        if self._bm25_index is not None:
             return
         try:
             from ..storage.vectorstore import get_vectorstore_manager
@@ -173,6 +196,7 @@ class HybridRetrieverManager:
         except Exception as exc:
             logger.warning("[Hybrid] BM25 语料加载失败，退化为向量检索: %s", exc)
 
+    @_index_locked
     def invalidate_bm25_index(self) -> None:
         """文档入库或删除后使内存 BM25 snapshot 失效。"""
         self._documents = []
@@ -256,7 +280,11 @@ class HybridRetrieverManager:
         """
         k = k or self.top_k
         candidate_k = k * 2  # 两路各取 2k，留足融合余量
-        self._ensure_bm25_index()
+        with self._index_lock:
+            self._ensure_bm25_index()
+            documents = self._documents
+            bm25_index = self._bm25_index
+            bm25_backend = getattr(self, "_bm25_backend", None)
 
         # 固定使用配置权重。字符长度阈值没有独立消融依据，尤其中文字符数
         # 不能稳定代表查询意图；默认 0.5/0.5 便于复现和解释。
@@ -290,19 +318,19 @@ class HybridRetrieverManager:
 
         # ── 第二路：BM25 检索（返回 rank）─────────────────────────────
         bm25_ranked: Dict[str, Tuple[Document, int]] = {}  # key → (doc, rank)
-        if self.enable_bm25 and self._bm25_index is not None and self._documents:
+        if self.enable_bm25 and bm25_index is not None and documents:
             try:
                 tokens = self._tokenize(query)
                 all_scores: List[float] = []
 
-                if getattr(self, "_bm25_backend", None) == "bm25s":
+                if bm25_backend == "bm25s":
                     # Tier 1: bm25s（Rust 实现，极速）
                     import bm25s
                     import numpy as np
-                    results = self._bm25_index.retrieve(
+                    results = bm25_index.retrieve(
                         [tokens],
                         corpus=None,
-                        k=min(candidate_k * 2, len(self._documents)),
+                        k=min(candidate_k * 2, len(documents)),
                         sorted=True,
                         return_as="tuple",
                         show_progress=False,
@@ -310,16 +338,16 @@ class HybridRetrieverManager:
                     if results is not None and hasattr(results, "documents"):
                         doc_indices = np.asarray(results.documents[0])
                         doc_scores = np.asarray(results.scores[0])
-                        all_scores = [0.0] * len(self._documents)
+                        all_scores = [0.0] * len(documents)
                         for doc_idx, score in zip(doc_indices, doc_scores):
-                            if 0 <= doc_idx < len(self._documents):
+                            if 0 <= doc_idx < len(documents):
                                 all_scores[int(doc_idx)] = float(score)
                 else:
                     # 备用：rank_bm25
-                    all_scores = self._bm25_index.get_scores(tokens)
+                    all_scores = bm25_index.get_scores(tokens)
 
                 if all(s == 0 for s in all_scores):
-                    for i, text in enumerate(self._documents):
+                    for i, text in enumerate(documents):
                         t_lower = text.page_content.lower()
                         all_scores[i] = sum(
                             1 for t in tokens if t in t_lower
@@ -327,7 +355,7 @@ class HybridRetrieverManager:
 
                 scored = [
                     (all_scores[i], doc)
-                    for i, doc in enumerate(self._documents)
+                    for i, doc in enumerate(documents)
                     if all_scores[i] > 0
                     and (not user or check_doc_access(doc.metadata or {}, user))
                 ]

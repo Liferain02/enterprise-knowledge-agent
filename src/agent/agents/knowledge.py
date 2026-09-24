@@ -16,6 +16,7 @@ Knowledge Retrieval Pipeline - 知识检索管线
   Planner → retrieval_agent_node → generation_agent_node → finalize_response → END
 """
 import time
+import asyncio
 from typing import Dict, Any, List, Tuple
 from langchain_core.messages import SystemMessage
 from langchain_core.documents import Document
@@ -245,7 +246,7 @@ async def _retrieve_documents(
 
     from src.rag.retrieval.retriever import get_retriever_manager
 
-    results = get_retriever_manager().search_with_rerank(
+    results = await asyncio.to_thread(get_retriever_manager().search_with_rerank,
         query=query,
         k=top_k,
         user=user_context,

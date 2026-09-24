@@ -131,7 +131,31 @@ class Settings(BaseSettings):
         description="Vision LLM 图片理解提示词"
     )
 
+    # 保留 Chroma 作为兼容/回滚后端，新部署可切换 Qdrant。
+    vector_store_provider: str = Field(default="chroma", pattern="^(chroma|qdrant)$")
+    qdrant_url: str = "http://127.0.0.1:6333"
+    qdrant_api_key: str = ""
+    qdrant_collection: str = "lab_knowledge_v2"
+    embedding_batch_size: int = Field(default=10, ge=1, le=25)
+    local_embedding_path: str = ".run/models/bge-m3"
+    local_embedding_revision: str = "5617a9f61b028005a4858fdac845db406aefb181"
+    local_embedding_device: str = "cpu"
+    local_embedding_threads: int = Field(default=8, ge=1, le=32)
+    local_reranker_revision: str = "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+    embedding_cache_enabled: bool = False
+    embedding_cache_ttl: int = Field(default=604800, ge=1)
+    rerank_cache_ttl: int = Field(default=600, ge=1)
+    rag_cache_enabled: bool = False
+
     # Chroma 向量数据库配置
+    database_provider: str = Field(default="sqlite", pattern="^(sqlite|mysql)$")
+    mysql_host: str = "127.0.0.1"
+    mysql_port: int = 3306
+    mysql_user: str = "eka"
+    mysql_password: str = ""
+    mysql_database_prefix: str = Field(default="eka", pattern="^[a-z][a-z0-9_]{0,30}$")
+    checkpointer_backend: str = Field(default="memory", pattern="^(memory|sqlite|mysql)$")
+
     chroma_persist_directory: str = Field(
         default="./chroma_db",
         description="Chroma数据库持久化目录"

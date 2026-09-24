@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 from pathlib import Path
 import sqlite3
+from src.storage.relational import connect
 
 
 class JobStatus(str, Enum):
@@ -58,7 +59,7 @@ class IngestionJobQueue:
 
     def _init_db(self):
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS ingestion_jobs (
                 job_id TEXT PRIMARY KEY,
@@ -108,7 +109,7 @@ class IngestionJobQueue:
         job_id = uuid.uuid4().hex
         now = time.time()
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = connect(self.db_path)
             conn.execute(
                 """INSERT INTO ingestion_jobs
                    (job_id, file_path, category, metadata, status,
@@ -137,9 +138,10 @@ class IngestionJobQueue:
         多 worker 并发时，不会重复取同一任务。
         """
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = connect(self.db_path)
 
             # 取最早的 pending 任务
+            lock_clause = " FOR UPDATE SKIP LOCKED" if getattr(conn, "dialect", None) == "mysql" else ""
             row = conn.execute(
                 """SELECT job_id, file_path, category, metadata, status,
                           retry_count, max_retries, error,
@@ -147,7 +149,7 @@ class IngestionJobQueue:
                           file_hash, original_filename, result
                    FROM ingestion_jobs
                    WHERE status = 'pending' OR status = 'retrying'
-                   ORDER BY created_at ASC LIMIT 1""",
+                   ORDER BY created_at ASC LIMIT 1""" + lock_clause,
             ).fetchone()
 
             if not row:
@@ -171,7 +173,7 @@ class IngestionJobQueue:
     def complete(self, job_id: str, result: Optional[dict] = None):
         """标记任务为完成"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = connect(self.db_path)
             conn.execute(
                 """UPDATE ingestion_jobs
                    SET status = 'completed', completed_at = ?, result = ?
@@ -184,7 +186,7 @@ class IngestionJobQueue:
     def fail(self, job_id: str, error: str, max_retries: int = 3):
         """任务失败，判断是否重试或标记为失败"""
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = connect(self.db_path)
             row = conn.execute(
                 "SELECT retry_count FROM ingestion_jobs WHERE job_id = ?",
                 (job_id,),
@@ -209,7 +211,7 @@ class IngestionJobQueue:
             conn.close()
 
     def get_job(self, job_id: str) -> Optional[IngestionJob]:
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         row = conn.execute(
             "SELECT * FROM ingestion_jobs WHERE job_id = ?", (job_id,),
         ).fetchone()
@@ -218,7 +220,7 @@ class IngestionJobQueue:
 
     def find_by_file_hash(self, file_hash: str) -> Optional[IngestionJob]:
         """查找相同文件内容最近一次任务，用于避免重复 embedding。"""
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         row = conn.execute(
             """SELECT * FROM ingestion_jobs
                WHERE file_hash = ?
@@ -230,7 +232,7 @@ class IngestionJobQueue:
 
     def list_jobs(self, limit: int = 20) -> List[IngestionJob]:
         """按创建时间倒序返回最近任务。"""
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         rows = conn.execute(
             """SELECT * FROM ingestion_jobs
                ORDER BY created_at DESC LIMIT ?""",
@@ -241,7 +243,7 @@ class IngestionJobQueue:
 
     def get_stats(self) -> dict:
         """获取队列统计"""
-        conn = sqlite3.connect(self.db_path)
+        conn = connect(self.db_path)
         stats = {}
         for status in JobStatus:
             count = conn.execute(
@@ -256,7 +258,7 @@ class IngestionJobQueue:
         """将异常退出后遗留的 running 任务放回重试队列。"""
         cutoff = time.time() - stale_after_seconds
         with self._lock:
-            conn = sqlite3.connect(self.db_path)
+            conn = connect(self.db_path)
             cursor = conn.execute(
                 """UPDATE ingestion_jobs
                    SET status = 'retrying',

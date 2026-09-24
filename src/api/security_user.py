@@ -14,6 +14,7 @@
   role_permissions(id, role_id, resource, action)
 """
 import sqlite3
+from src.storage.relational import connect
 import time
 import logging
 from pathlib import Path
@@ -31,7 +32,7 @@ DB_PATH = DATA_DIR / "users.db"
 LEGACY_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "users.db"
 
 def _get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    conn = connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -159,6 +160,8 @@ def _init_default_roles(cur):
 
 def _merge_legacy_users(cur):
     """增量合并旧路径账号，避免修正数据目录后丢失已有登录用户。"""
+    if getattr(getattr(cur, "connection", None), "dialect", None) == "mysql":
+        return  # Offline migration imports the authoritative local identity DB.
     if not LEGACY_DB_PATH.exists() or LEGACY_DB_PATH.resolve() == DB_PATH.resolve():
         return
 

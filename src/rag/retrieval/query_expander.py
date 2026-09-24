@@ -997,9 +997,9 @@ async def multi_query_retrieve(
 
     async def retrieve_single(query: str) -> List[Tuple[Any, float]]:
         if use_reranker:
-            results = retriever_manager.search_with_rerank(query, k=top_k_per_query, user=user)
+            results = await asyncio.to_thread(retriever_manager.search_with_rerank, query, k=top_k_per_query, user=user)
         else:
-            results = retriever_manager.search_with_score_acl(query, k=top_k_per_query, user=user)
+            results = await asyncio.to_thread(retriever_manager.search_with_score_acl, query, k=top_k_per_query, user=user)
         return results
 
     # 并行检索所有子查询

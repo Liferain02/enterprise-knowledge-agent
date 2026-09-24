@@ -3,6 +3,7 @@
 负责数据库的 CRUD 操作
 """
 import sqlite3
+from src.storage.relational import connect
 import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -68,7 +69,7 @@ class SessionDAO:
     def _init_db(self):
         """初始化数据库"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -103,7 +104,7 @@ class SessionDAO:
     def create_session(self, session_id: str, title: str = None) -> Dict[str, Any]:
         """创建新会话"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
 
         now = datetime.now().isoformat()
@@ -144,7 +145,7 @@ class SessionDAO:
     def update_title(self, session_id: str, title: str):
         """更新会话标题"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
 
         now = datetime.now().isoformat()
@@ -159,7 +160,7 @@ class SessionDAO:
     def update_time(self, session_id: str):
         """更新会话最后活跃时间"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
 
         now = datetime.now().isoformat()
@@ -174,7 +175,7 @@ class SessionDAO:
     def get_by_id(self, session_id: str) -> Optional[Dict[str, Any]]:
         """根据 ID 获取会话"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -198,7 +199,7 @@ class SessionDAO:
     def list_all(self, limit: int = 50) -> List[Dict[str, Any]]:
         """列出所有会话"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -223,7 +224,7 @@ class SessionDAO:
     def update_message_count(self, session_id: str, count: int):
         """直接设置消息数量（用于修复旧数据不一致问题）"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
         now = datetime.now().isoformat()
         cursor.execute(
@@ -236,7 +237,7 @@ class SessionDAO:
     def migrate_messages_only(self, old_id: str, new_id: str):
         """仅迁移 messages 表中的 session_id（不碰 sessions 表）"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE messages SET session_id = ? WHERE session_id = ?",
@@ -248,13 +249,14 @@ class SessionDAO:
     def rename_session_id(self, old_id: str, new_id: str):
         """重命名 session_id（用于修复前缀不一致问题）"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
         now = datetime.now().isoformat()
-        cursor.execute(
-            "UPDATE messages SET session_id = ? WHERE session_id = ?",
-            (new_id, old_id),
-        )
+        if getattr(conn, "dialect", None) != "mysql":
+            cursor.execute(
+                "UPDATE messages SET session_id = ? WHERE session_id = ?",
+                (new_id, old_id),
+            )
         cursor.execute(
             "UPDATE sessions SET session_id = ?, updated_at = ? WHERE session_id = ?",
             (new_id, now, old_id),
@@ -265,7 +267,7 @@ class SessionDAO:
     def delete(self, session_id: str) -> bool:
         """删除会话"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
 
         cursor.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
@@ -291,7 +293,7 @@ class MessageDAO:
     def save(self, session_id: str, role: str, content: str, metadata: Dict = None):
         """保存消息"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
 
         now = datetime.now().isoformat()
@@ -313,7 +315,7 @@ class MessageDAO:
     def get_by_session(self, session_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         """获取会话的所有消息"""
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -350,7 +352,7 @@ class FeedbackDAO:
     def _init_db(self) -> None:
         db_path = self._get_db_path()
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(str(db_path)) as conn:
+        with connect(str(db_path)) as conn:
             _ensure_feedback_schema(conn)
 
     def _get_db_path(self) -> Path:
@@ -367,7 +369,7 @@ class FeedbackDAO:
         comment: Optional[str] = None,
     ) -> int:
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
         now = datetime.now().isoformat()
         cursor.execute("""
@@ -383,7 +385,7 @@ class FeedbackDAO:
 
     def get_stats(self, username: Optional[str] = None) -> Dict[str, int]:
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
 
         if username:
@@ -420,7 +422,7 @@ class FeedbackDAO:
         status: str = "open",
     ) -> List[Dict[str, Any]]:
         db_path = self._get_db_path()
-        conn = sqlite3.connect(str(db_path))
+        conn = connect(str(db_path))
         cursor = conn.cursor()
 
         if status not in {"open", "resolved"}:
@@ -483,7 +485,7 @@ class FeedbackDAO:
             raise ValueError("解决问题时必须填写解决说明")
 
         db_path = self._get_db_path()
-        with sqlite3.connect(str(db_path)) as conn:
+        with connect(str(db_path)) as conn:
             conn.row_factory = sqlite3.Row
             issue = conn.execute(
                 """SELECT id FROM feedback

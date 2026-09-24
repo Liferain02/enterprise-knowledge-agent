@@ -11,6 +11,7 @@ Mem0 记忆管理器
 import os
 import asyncio
 import logging
+import threading
 from typing import Dict, Any, List, Optional
 from config.settings import get_settings
 
@@ -41,6 +42,7 @@ class Mem0MemoryManager:
         self.model = model or self._get_default_model()
         self._client = None
         self._initialized = False
+        self._initialize_lock = threading.Lock()
 
     def _get_default_model(self) -> str:
         """获取默认模型"""
@@ -61,15 +63,24 @@ class Mem0MemoryManager:
         return self.settings.openai_base_url
 
     def _initialize(self):
+        if self._initialized:
+            return
+        lock = getattr(self, "_initialize_lock", None)
+        if lock is None:
+            lock = self._initialize_lock = threading.Lock()
+        with lock:
+            self._initialize_once()
+
+    def _initialize_once(self):
         """初始化 Mem0 客户端"""
         if self._initialized:
             return
         
         try:
+            os.environ.setdefault("MEM0_TELEMETRY", "false")
             from mem0 import Memory
             
             # 设置环境变量（用于 embedding 模型）
-            import os
             os.environ["OPENAI_API_KEY"] = self._get_api_key()
             os.environ["OPENAI_BASE_URL"] = self._get_base_url()
             
@@ -99,7 +110,30 @@ class Mem0MemoryManager:
                 }
             }
             
+            if self.settings.vector_store_provider == "qdrant":
+                from qdrant_client import QdrantClient
+                config_dict["vector_store"] = {"provider": "qdrant", "config": {
+                    "collection_name": "mem0_memories_v2", "embedding_model_dims": 1024,
+                    "client": QdrantClient(url=self.settings.qdrant_url,
+                                           api_key=self.settings.qdrant_api_key or None, trust_env=False),
+                }}
+            if self.settings.embedding_provider == "local":
+                import torch
+                torch.set_num_threads(self.settings.local_embedding_threads)
+                config_dict["embedder"] = {"provider": "huggingface", "config": {
+                    "model": str(self.settings.project_root / self.settings.local_embedding_path),
+                    "embedding_dims": 1024,
+                    "model_kwargs": {"local_files_only": True, "trust_remote_code": False, "device": "cpu"},
+                }}
+            if self.settings.database_provider == "mysql":
+                # Upstream constructs a SQLite history object internally. Keep that
+                # temporary object in memory and replace it before serving any call.
+                config_dict["history_db_path"] = ":memory:"
             self._client = Memory.from_config(config_dict=config_dict)
+            if self.settings.database_provider == "mysql":
+                from src.storage.mem0_history import MySQLMemoryHistory
+                self._client.db.close()
+                self._client.db = MySQLMemoryHistory()
             self._initialized = True
             logger.info(f"Mem0 记忆管理器初始化成功，使用模型: {self.model}")
             
@@ -131,7 +165,7 @@ class Mem0MemoryManager:
         Returns:
             操作结果
         """
-        self._initialize()
+        await asyncio.to_thread(self._initialize)
         
         if self._client is None:
             # 降级模式
@@ -178,7 +212,7 @@ class Mem0MemoryManager:
         Returns:
             记忆列表
         """
-        self._initialize()
+        await asyncio.to_thread(self._initialize)
         
         if self._client is None:
             # 降级模式
@@ -318,7 +352,7 @@ class Mem0MemoryManager:
         Returns:
             记忆列表
         """
-        self._initialize()
+        await asyncio.to_thread(self._initialize)
         
         if self._client is None:
             return []
@@ -356,7 +390,7 @@ class Mem0MemoryManager:
         Returns:
             操作结果
         """
-        self._initialize()
+        await asyncio.to_thread(self._initialize)
         
         if self._client is None:
             return {"success": False, "error": "Mem0 未初始化"}
@@ -393,7 +427,7 @@ class Mem0MemoryManager:
         Returns:
             操作结果
         """
-        self._initialize()
+        await asyncio.to_thread(self._initialize)
         
         if self._client is None:
             return {"success": True}
@@ -422,7 +456,7 @@ class Mem0MemoryManager:
         Returns:
             操作结果
         """
-        self._initialize()
+        await asyncio.to_thread(self._initialize)
         
         if self._client is None:
             return {"success": True}
