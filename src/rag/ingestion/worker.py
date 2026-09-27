@@ -63,50 +63,42 @@ class IngestionWorker:
             # ── 1. 解析文档 ──────────────────────────────────
             docs = self._load_and_chunk(job.file_path, job.category)
 
-            # ── 2. 版本管理（入库前）───────────────────────────
+            # Validate before embedding, publish only after verifying all new vectors.
+            publish = None
             doc_id = job.metadata.get("doc_id")
-            version = job.metadata.get("version", "1.0")
-
             if doc_id:
-                from src.rag.storage.version_manager import (
-                    get_version_manager, DocumentVersion,
-                )
-                import uuid
+                from src.rag.storage.version_manager import get_version_manager, DocumentVersion
+                from uuid import uuid5, NAMESPACE_URL
                 from datetime import datetime
-
                 vm = get_version_manager()
-                new_version_obj = DocumentVersion(
-                    id=str(uuid.uuid4()),
-                    doc_id=doc_id,
-                    version=version,
-                    effective_date=job.metadata.get("effective_date", datetime.now().date().isoformat()),
-                    expiry_date=job.metadata.get("expiry_date"),
-                    status="active",
-                    superseded_by=None,
+                version = str(job.metadata.get("version", "1.0"))
+                effective = job.metadata.get("effective_date", datetime.now().date().isoformat())
+                conflict = vm.detect_conflicts(doc_id, version, effective)
+                if conflict and conflict.suggested_action == "reject":
+                    raise ValueError("版本号低于当前版本，拒绝入库")
+                new_version = DocumentVersion(
+                    id=str(uuid5(NAMESPACE_URL, "eka:ingestion-version:" + job.job_id)),
+                    doc_id=doc_id, version=version, effective_date=effective,
+                    expiry_date=job.metadata.get("expiry_date"), status="active", superseded_by=None,
                     source_system=job.metadata.get("source_system", "manual"),
                     changelog=job.metadata.get("changelog", ""),
-                    uploaded_by=job.metadata.get("uploaded_by", "system"),
-                    created_at=datetime.now().timestamp(),
+                    uploaded_by=job.metadata.get("uploaded_by", "system"), created_at=start,
                 )
-                try:
-                    conflicts = vm.archive_and_replace(
-                        doc_id=doc_id,
-                        new_version_id=new_version_obj.id,
-                        new_version=new_version_obj,
+                job.metadata["job_id"] = job.job_id
+                job.metadata["ingestion_version_id"] = new_version.id
+                def publish(ids):
+                    vm.archive_and_replace(doc_id, new_version.id, new_version)
+                    # The SQL version is visible only after the new vectors have
+                    # been verified. Marking staging chunks active is a second,
+                    # retryable step; retrieval excludes staging chunks.
+                    from src.rag.storage.vectorstore import get_vectorstore_manager
+                    get_vectorstore_manager().update_documents_metadata(
+                        ids, {"ingestion_state": "active", "ingestion_version_id": new_version.id}
                     )
-                    if conflicts:
-                        logger.warning(
-                            f"[{self._worker_id}] 版本替换: doc_id={doc_id} "
-                            f"冲突数量={len(conflicts)}"
-                        )
-                    else:
-                        logger.info(f"[{self._worker_id}] 版本入库: doc_id={doc_id} v{version}")
-                except ValueError as ve:
-                    # 严重冲突拒绝入库
-                    raise RuntimeError(f"版本冲突严重，拒绝入库: {ve}") from ve
-
-            # ── 3. 嵌入 + 入库 ─────────────────────────────
-            stored_chunks = self._embed_and_store(docs, job.metadata)
+            if publish is None:
+                stored_chunks = self._embed_and_store(docs, job.metadata)
+            else:
+                stored_chunks = self._embed_and_store(docs, job.metadata, on_verified=publish)
 
             # ── 4. 标记完成 ──────────────────────────────────
             elapsed = time.time() - start
@@ -144,7 +136,7 @@ class IngestionWorker:
     def _load_and_chunk(self, file_path: str, category: str) -> list:
         """解析文档并切块"""
         from src.rag.processing.document_loader import get_document_loader_manager
-        from src.rag.processing.chunker import get_chunker
+        from src.rag.processing.ingestion_splitter import split_ingestion_documents
 
         loader = get_document_loader_manager()
         docs = loader.load_file(file_path)
@@ -155,29 +147,22 @@ class IngestionWorker:
                 doc.metadata = {}
             doc.metadata["category"] = category
 
-        # 切块
-        chunker = get_chunker()
-        chunks = []
-        for doc in docs:
-            chunked = chunker.chunk([doc])
-            chunks.extend(chunked)
+        return split_ingestion_documents(docs)
 
-        return chunks
-
-    def _embed_and_store(self, docs: list, metadata: dict) -> int:
+    def _embed_and_store(self, docs: list, metadata: dict, on_verified=None) -> int:
         """嵌入并写入向量库"""
         from src.rag.storage.vectorstore import get_vectorstore_manager
 
-        if not docs:
-            return 0
+        if not docs or not any(doc.page_content.strip() for doc in docs):
+            raise ValueError("没有有效分块，拒绝零块成功")
 
         # 补充元数据
         for doc in docs:
             if doc.metadata is None:
                 doc.metadata = {}
             for key, value in metadata.items():
-                if key not in doc.metadata:
-                    doc.metadata[key] = self._metadata_scalar(value)
+                # Server-normalized metadata owns source/ACL; loader only adds parsing fields.
+                doc.metadata[key] = self._metadata_scalar(value)
 
         # 生成 chunk ID
         import hashlib
@@ -189,6 +174,16 @@ class IngestionWorker:
             ).hexdigest()[:12]
             doc.metadata["chunk_hash"] = content_hash
             doc.metadata["chunk_index"] = index
+            if doc_id := metadata.get("doc_id"):
+                from uuid import uuid5, NAMESPACE_URL
+                version_id = str(uuid5(NAMESPACE_URL, "eka:ingestion-version:" + str(metadata.get("job_id", ""))))
+                # The worker supplies the stable version ID explicitly. This
+                # fallback keeps direct callers safe and deterministic.
+                version_id = str(metadata.get("ingestion_version_id") or version_id)
+                doc.metadata["ingestion_state"] = "staging"
+                doc.metadata["ingestion_version_id"] = version_id
+            else:
+                doc.metadata["ingestion_state"] = "active"
             chunk_ids.append(f"{file_hash[:20]}-{index}-{content_hash}")
 
         # 先写新 chunks，再删除同来源旧版本。新向量写入失败时，已有
@@ -197,7 +192,18 @@ class IngestionWorker:
         source = metadata.get("source")
         old_ids = vsm.get_document_ids_by_source(str(source)) if source else []
         ids = vsm.add_documents(docs, ids=chunk_ids)
-        obsolete_ids = [item for item in old_ids if item not in set(ids)]
+        expected = set(chunk_ids)
+        if set(ids) != expected:
+            raise RuntimeError("向量写入返回的 ID 不完整，保留旧块")
+        if source and not expected.issubset(set(vsm.get_document_ids_by_source(str(source)))):
+            raise RuntimeError("新分块验证失败，保留旧块")
+        if on_verified is not None:
+            on_verified(chunk_ids)
+        obsolete_ids = [item for item in old_ids if item not in expected]
+        if obsolete_ids and on_verified is not None:
+            # Retire old generation before physical deletion. If deletion fails,
+            # a retry can clean up safely without serving two versions together.
+            vsm.update_documents_metadata(obsolete_ids, {"ingestion_state": "retired"})
         if obsolete_ids:
             vsm.delete_documents_by_ids(obsolete_ids)
         logger.debug(f"写入 {len(ids)} 个 chunks 到向量库")

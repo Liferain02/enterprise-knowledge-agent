@@ -307,12 +307,14 @@ class KnowledgeService:
             vectorstore_manager = get_vectorstore_manager()
             normalized_metadata = self._normalize_metadata(metadata=metadata)
 
-            doc = Document(
+            # Keep direct text insertion consistent with file ingestion. A
+            # long pasted document must not become one oversized vector.
+            from src.rag.processing.ingestion_splitter import split_ingestion_documents
+            chunks = split_ingestion_documents([Document(
                 page_content=content,
-                metadata=normalized_metadata
-            )
-
-            ids = vectorstore_manager.add_documents([doc])
+                metadata=normalized_metadata,
+            )])
+            ids = vectorstore_manager.add_documents(chunks)
 
             return {
                 "message": "文档添加成功",

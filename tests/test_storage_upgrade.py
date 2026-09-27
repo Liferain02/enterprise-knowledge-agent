@@ -191,3 +191,79 @@ def test_mysql_research_project_acl_and_foreign_keys(mysql_backend):
         with MySQLConnection("research") as conn:
             conn.execute("DELETE FROM research_projects WHERE id=?", (project["id"],))
             assert conn.execute("SELECT COUNT(*) FROM research_experiments WHERE project_id=?", (project["id"],)).fetchone()[0] == 0
+
+
+def test_mysql_version_publish_serializes_competing_writers(mysql_backend):
+    from concurrent.futures import ThreadPoolExecutor
+    from src.rag.storage.version_manager import VersionDB, DocumentVersion
+    from src.storage.relational import MySQLConnection
+    db = VersionDB()
+    doc_id = 'harness-' + uuid4().hex
+    def publish(number):
+        value = DocumentVersion(uuid4().hex, doc_id, str(number), '2026-09-01', None,
+                                'active', None, 'test', '', 'tester', float(number))
+        try:
+            db.publish_version(value)
+            db.publish_version(value)  # Either idempotent or already superseded by another writer.
+        except ValueError:
+            pass
+    try:
+        with ThreadPoolExecutor(4) as pool:
+            list(pool.map(publish, [1, 4, 2, 3]))
+        versions = db.get_versions(doc_id)
+        active = [row for row in versions if row.status == 'active']
+        assert len(active) == 1 and active[0].version == '4'
+        assert all(row.superseded_by is not None for row in versions if row.status == 'superseded')
+    finally:
+        with MySQLConnection('versions') as conn:
+            conn.execute('DELETE FROM document_versions WHERE doc_id=?', (doc_id,))
+
+
+def test_qdrant_staging_chunks_are_hidden_until_published():
+    from qdrant_client import QdrantClient
+    from langchain_core.documents import Document
+    from src.rag.storage.qdrant_store import QdrantStoreManager
+    embedding = Mock()
+    embedding.embed_documents.side_effect = lambda texts: [[1.0, 0.0] for _ in texts]
+    embedding.embed_query.return_value = [1.0, 0.0]
+    manager = QdrantStoreManager('published-generation', client=QdrantClient(':memory:'), embeddings=embedding)
+    manager.add_documents([
+        Document(page_content='old', metadata={'source': 'paper', 'ingestion_state': 'active'}),
+        Document(page_content='new', metadata={'source': 'paper', 'ingestion_state': 'staging'}),
+    ], ids=['old', 'new'])
+    visible = manager.similarity_search('q', 10, {'$or': [{'ingestion_state': 'active'}, {'ingestion_state': {'$exists': False}}]})
+    assert [doc.page_content for doc in visible] == ['old']
+    manager.update_documents_metadata(['new'], {'ingestion_state': 'active'})
+    visible = manager.similarity_search('q', 10, {'$or': [{'ingestion_state': 'active'}, {'ingestion_state': {'$exists': False}}]})
+    assert {doc.page_content for doc in visible} == {'old', 'new'}
+    manager.update_documents_metadata(['old'], {'ingestion_state': 'retired'})
+    visible = manager.similarity_search('q', 10, {'$or': [{'ingestion_state': 'active'}, {'ingestion_state': {'$exists': False}}]})
+    assert [doc.page_content for doc in visible] == ['new']
+    manager.client.close()
+
+
+def test_cache_singleflight_runs_one_loader_for_concurrent_cold_key(monkeypatch):
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    import src.rag.cache as module
+    cache = module.RedisCache()
+    values = {}
+    class Client:
+        def get(self, key): return values.get(key)
+        def setex(self, key, ttl, value): values[key] = value
+    cache._client = Client()
+    monkeypatch.setattr(module, 'get_settings', lambda: SimpleNamespace(rag_cache_enabled=True, redis_host='localhost'))
+    calls = []
+    barrier = threading.Barrier(5)
+    def loader():
+        calls.append(1)
+        time.sleep(.05)
+        return {'vector': [1.0]}
+    def work():
+        barrier.wait()
+        return cache.get_or_set('cold', loader, 60)
+    with ThreadPoolExecutor(5) as pool:
+        result = list(pool.map(lambda _: work(), range(5)))
+    assert result == [{'vector': [1.0]}] * 5
+    assert len(calls) == 1

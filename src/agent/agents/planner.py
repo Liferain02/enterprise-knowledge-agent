@@ -1,4 +1,4 @@
-"""主图唯一的确定性请求路由器。
+"""主图唯一的请求路由器：规则优先，Jev 可选。
 
 它只回答两个产品问题：请求应该进入哪个已存在分支，以及知识查询是否需要
 Query Expansion。不会生成无法执行的计划，也不会触发隐藏的多 Agent fan-out。
@@ -13,52 +13,9 @@ from src.rag.retrieval.query_expander import RuleBasedDecomposer
 
 
 def _quick_route(question: str) -> str:
-    """通过明确意图将请求路由到一个已有产品分支。"""
-    query = question.lower().strip()
-
-    greetings = (
-        "你好", "hello", "hi", "早上好", "下午好", "晚上好",
-        "最近怎样", "在吗", "嗨", "您好",
-    )
-    if any(word in query for word in greetings):
-        return "general_agent"
-
-    time_keywords = (
-        "现在几点", "几点钟", "当前时间", "今天星期几", "几点了", "今天几号",
-    )
-    if any(word in query for word in time_keywords):
-        return "operation_agent"
-
-    # “它/那/上一轮”等资料追问应继续走知识检索，由 StandaloneQueryRewriter
-    # 结合最近一轮补全指代。只有明确询问个人历史或偏好时才走带会话记忆的
-    # General Agent；这类请求不需要文件、时间或计算工具。
-    personal_history_patterns = (
-        r"我(?:之前|刚才|上次).{0,12}(?:关注|偏好|提到|说过|问过|讨论过|研究)",
-        r"(?:还记得|记不记得).{0,8}我",
-    )
-    if any(re.search(pattern, query) for pattern in personal_history_patterns):
-        return "general_agent"
-
-    arithmetic = re.search(
-        r"\d+(?:\.\d+)?\s*(?:[+\-*/×÷%^]|乘以|除以|加上|减去)\s*\d+(?:\.\d+)?",
-        query,
-    )
-    statistics_words = (
-        "均值", "平均值", "中位数", "标准差", "方差", "统计指标",
-        "指标对比", "实验结果对比", "基线对比", "相对提升", "百分比变化",
-    )
-    statistics_intent = re.search(
-        r"(?:比较|对比).{0,20}(?:指标|结果|Recall|准确率|延迟|吞吐|F1|MRR|NDCG)",
-        query,
-        re.IGNORECASE,
-    )
-    if arithmetic or any(word in query for word in ("计算器", "算术")) or statistics_intent or any(
-        word in query for word in statistics_words
-    ):
-        return "operation_agent"
-
-    # 产品默认能力是内部知识问答，未知意图安全降级到检索而非自由生成。
-    return "knowledge_agent"
+    """Compatibility wrapper for the default offline policy."""
+    from src.agent.routing.policy import rules_route
+    return rules_route(question).handler
 
 
 def _get_last_user_message(messages: list) -> str:
@@ -78,9 +35,20 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "plan_steps": [],
             "plan_reasoning": "无用户消息，降级到知识检索",
             "_quick_agent": "knowledge_agent",
+            "route_decision": {},
+            "harness_report": {},
         }
 
-    agent = _quick_route(question)
+    from config.settings import get_settings
+    from src.agent.routing.jev import decide_route
+    from src.agent.routing.policy import RouteDecision
+    if state.get("research_mode", "normal") == "deep":
+        # Explicit mode never triggers an external routing call.
+        decision = RouteDecision(rule_id="explicit_deep", matched=True)
+    else:
+        recent = [str(m.content)[:1000] for m in state.get("messages", []) if isinstance(m, HumanMessage)][-3:-1]
+        decision = await decide_route(question, get_settings(), previous=state.get("route_decision"), recent=recent)
+    agent = decision.handler
     needs_expansion = (
         agent == "knowledge_agent"
         and RuleBasedDecomposer.needs_expansion(question)
@@ -90,9 +58,11 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
         "needs_expansion": needs_expansion,
         "plan_steps": [],
         "plan_reasoning": (
-            "知识查询需要规则分解" if needs_expansion else f"确定性路由: {agent}"
+            "知识查询需要规则分解" if needs_expansion else f"路由({decision.provider}): {agent}"
         ),
         "_quick_agent": agent,
+        "route_decision": decision.to_dict(),
+        "harness_report": {},
     }
 
 

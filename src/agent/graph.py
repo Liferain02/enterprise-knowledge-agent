@@ -66,6 +66,9 @@ class AgentState(MessagesState):
     is_complex: bool               # 是否需要规则 Query Expansion
     plan_steps: list               # 固定为空，兼容已有评测输出
     plan_reasoning: str            # 确定性路由说明
+    route_decision: dict           # Versioned rule/model decision, no raw request bodies
+    harness_report: dict           # Per-turn bounded execution counters and events
+    retrieval_metrics: dict        # Privacy-preserving latency/count trace for retrieval
     _quick_agent: str              # 请求的唯一业务分支
     needs_expansion: bool          # 是否需要 Query Expansion
     # ==================== Retrieval Pipeline 状态 ====================

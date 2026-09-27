@@ -22,6 +22,8 @@ class RedisCache:
         self._client = None
         self._retry_after = 0.0
         self._lock = threading.Lock()
+        self._flight_lock = threading.Lock()
+        self._inflight = {}
         self.hits = 0
         self.misses = 0
         self.errors = 0
@@ -61,6 +63,43 @@ class RedisCache:
             self._failed()
         self.misses += 1
         return None
+
+    def get_or_set(self, key, loader, ttl):
+        """Read-through cache with in-process single-flight protection.
+
+        Concurrent cold requests for the same embedding/rerank input wait for
+        one producer instead of issuing duplicate paid or CPU-heavy work. A
+        failed producer wakes waiters; they may retry locally, so cache failure
+        never becomes a correctness dependency.
+        """
+        hit = self.get(key)
+        if hit is not None:
+            return hit
+        with self._flight_lock:
+            event = self._inflight.get(key)
+            if event is None:
+                event = threading.Event()
+                self._inflight[key] = event
+                owner = True
+            else:
+                owner = False
+        if not owner:
+            event.wait(timeout=30.0)
+            hit = self.get(key)
+            return hit if hit is not None else loader()
+        try:
+            # Double-check after becoming the producer. Another caller may
+            # have populated the value between the first read and lock claim.
+            hit = self.get(key)
+            if hit is not None:
+                return hit
+            value = loader()
+            self.set(key, value, ttl)
+            return value
+        finally:
+            with self._flight_lock:
+                self._inflight.pop(key, None)
+                event.set()
 
     def set(self, key, value, ttl):
         try:

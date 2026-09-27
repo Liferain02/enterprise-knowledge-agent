@@ -171,6 +171,25 @@ class VectorStoreManager:
             offset=offset,
         )
 
+    def update_documents_metadata(self, ids: List[str], updates: Dict[str, Any]) -> int:
+        """Update metadata without re-embedding document text."""
+        if not ids:
+            return 0
+        if not isinstance(updates, dict) or not updates:
+            raise ValueError("metadata updates must be a non-empty mapping")
+        collection = self.raw_collection
+        payload = collection.get(ids=ids, include=["metadatas"])
+        metadatas = payload.get("metadatas") or []
+        if len(metadatas) != len(ids):
+            raise RuntimeError("metadata lookup returned incomplete IDs")
+        by_id = dict(zip(payload.get("ids") or [], metadatas))
+        collection.update(
+            ids=ids,
+            metadatas=[{**(by_id.get(identifier) or {}), **updates} for identifier in ids],
+        )
+        self._invalidate_hybrid_index()
+        return len(ids)
+
     def delete_documents_by_source(self, source: str) -> int:
         """按来源文件删除所有 chunks，返回删除前匹配数量。"""
         ids = self.get_document_ids_by_source(source)

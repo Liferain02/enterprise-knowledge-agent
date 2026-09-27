@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.rag.processing.ingestion_splitter import build_ingestion_splitter
 from src.rag.processing.document_loader import get_document_loader_manager
 from src.rag.storage.vectorstore import get_vectorstore_manager
 
@@ -64,11 +65,7 @@ def infer_doc_type(root: Path, path: Path) -> str:
 
 
 def build_splitter() -> RecursiveCharacterTextSplitter:
-    return RecursiveCharacterTextSplitter(
-        chunk_size=1200,
-        chunk_overlap=150,
-        separators=["\n\n", "\n", "。", "；", " ", ""],
-    )
+    return build_ingestion_splitter()
 
 
 def iter_knowledge_files(root: Path, include_pdf: bool) -> Iterable[Path]:

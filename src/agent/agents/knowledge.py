@@ -17,6 +17,7 @@ Knowledge Retrieval Pipeline - 知识检索管线
 """
 import time
 import asyncio
+import hashlib
 from typing import Dict, Any, List, Tuple
 from langchain_core.messages import SystemMessage
 from langchain_core.documents import Document
@@ -26,6 +27,21 @@ from ._utils import get_last_user_message, inject_user_identity_to_messages
 
 
 logger = logging.getLogger(__name__)
+
+
+def _retrieval_trace(query, started, *, results=None, rewrite_history=None, grade=None, status="ok", error=""):
+    """Small privacy-preserving trace for latency and quality diagnostics."""
+    docs = results or []
+    return {
+        "query_sha256": hashlib.sha256(str(query).encode("utf-8")).hexdigest(),
+        "latency_ms": round((time.time() - started) * 1000, 2),
+        "result_count": len(docs),
+        "rewrite_count": max(0, len(rewrite_history or []) - 1),
+        "grade_decision": getattr(getattr(grade, "decision", None), "value", "") if grade else "",
+        "grade_avg": round(float(getattr(grade, "avg_score", 0.0)), 4) if grade else None,
+        "status": status,
+        "error_type": type(error).__name__ if error else "",
+    }
 
 
 # ============================================================
@@ -59,6 +75,7 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     if not last_user_message:
         return {
             "final_answer": "抱歉，我无法理解您的问题。",
+            "retrieval_metrics": {"status": "empty_query", "result_count": 0},
         }
 
     # Planner 的 expansion 判断（优先使用；若为空则内部判断）
@@ -118,6 +135,10 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
                 "retrieval_rewrite_history": rewrite_history,
                 "conflict_warnings": [],
                 "version_source": "",
+                "retrieval_metrics": _retrieval_trace(
+                    last_user_message, t0, results=results, rewrite_history=rewrite_history,
+                    grade=grade_result, status="no_results"
+                ),
             }
 
         # ── 可选：检测多文档冲突 ──────────────────────────────────────
@@ -135,6 +156,10 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "retrieval_rewrite_history": rewrite_history,
             "conflict_warnings": conflicts,
             "version_source": version_source,
+            "retrieval_metrics": _retrieval_trace(
+                last_user_message, t0, results=results, rewrite_history=rewrite_history,
+                grade=grade_result, status="ok"
+            ),
         }
 
     except Exception as e:
@@ -148,6 +173,9 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             "retrieval_rewrite_history": [],
             "conflict_warnings": [],
             "version_source": "",
+            "retrieval_metrics": _retrieval_trace(
+                last_user_message, t0, results=[], rewrite_history=[], status="error", error=e
+            ),
         }
 
 

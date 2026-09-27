@@ -2012,3 +2012,32 @@ def test_summary():
     print(" 10. 指标驱动对抗评测 (投毒Recall影响/冲突Precision)")
     print("="*60)
     assert True
+
+
+def test_hybrid_search_propagates_base_filter_to_both_entrypoints():
+    from src.rag.retrieval.retriever import RetrieverManager
+    from langchain_core.documents import Document
+    from unittest.mock import MagicMock
+    hybrid = MagicMock()
+    doc = Document(page_content='project', metadata={'doc_type': 'project'})
+    hybrid.search.return_value = [doc]
+    hybrid.search_with_scores.return_value = [(doc, 0.9, 'vector')]
+    manager = RetrieverManager(use_reranker=False, use_hybrid=True)
+    manager._hybrid_manager = hybrid
+    condition = {'doc_type': {'$eq': 'project'}}
+    assert manager.search('q', filter=condition) == [doc]
+    assert manager.search_with_score('q', filter=condition)[0][0] is doc
+    hybrid.search.assert_called_once_with('q', k=5, base_filter=condition)
+    hybrid.search_with_scores.assert_called_once_with('q', k=5, base_filter=condition)
+
+
+def test_hybrid_manager_applies_base_filter_to_bm25_and_vector_results():
+    from src.rag.retrieval.hybrid_retriever import HybridRetrieverManager
+    from langchain_core.documents import Document
+    manager = HybridRetrieverManager(enable_vector=False, enable_bm25=True, top_k=5)
+    manager.set_documents([
+        Document(page_content='RDMA project', metadata={'doc_type': 'project'}),
+        Document(page_content='RDMA policy', metadata={'doc_type': 'policy'}),
+    ])
+    results = manager.search_with_scores('RDMA', k=5, base_filter={'doc_type': 'project'})
+    assert results and all(doc.metadata['doc_type'] == 'project' for doc, _, _ in results)

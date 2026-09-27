@@ -1,0 +1,71 @@
+{
+  "kind": "handwritten_diagnostic_not_independent_benchmark",
+  "cases": [
+    {
+      "query": "你好",
+      "expected": "general_agent",
+      "actual": "general_agent"
+    },
+    {
+      "query": "现在几点",
+      "expected": "operation_agent",
+      "actual": "operation_agent"
+    },
+    {
+      "query": "实验室 RDMA 配置是什么",
+      "expected": "knowledge_agent",
+      "actual": "knowledge_agent"
+    },
+    {
+      "query": "请润色下面这段英文：Our method is fast.",
+      "expected": "operation_agent",
+      "actual": "operation_agent"
+    },
+    {
+      "query": "分析 CSV 的缺失值：a,b\n1,2",
+      "expected": "operation_agent",
+      "actual": "operation_agent"
+    },
+    {
+      "query": "算一下 1 GiB 相当于多少 MiB",
+      "expected": "operation_agent",
+      "actual": "knowledge_agent"
+    },
+    {
+      "query": "把这段改得更学术一些：Our method is fast.",
+      "expected": "operation_agent",
+      "actual": "knowledge_agent"
+    },
+    {
+      "query": "我之前提到的那段摘要，帮我润色",
+      "expected": "operation_agent",
+      "actual": "general_agent"
+    },
+    {
+      "query": "论文里写了 2*3=6，这个结论有证据吗",
+      "expected": "knowledge_agent",
+      "actual": "operation_agent"
+    },
+    {
+      "query": "介绍标准差在实验室评测规范里的要求",
+      "expected": "knowledge_agent",
+      "actual": "operation_agent"
+    },
+    {
+      "query": "帮我回复审稿意见：缺少消融实验。",
+      "expected": "operation_agent",
+      "actual": "operation_agent"
+    },
+    {
+      "query": "根据项目资料生成论文摘要",
+      "expected": "knowledge_agent",
+      "actual": "knowledge_agent"
+    }
+  ],
+  "correct": 7,
+  "total": 12,
+  "warm_latency_ms_p50": 0.007006,
+  "warm_latency_ms_p95": 0.015566,
+  "calls": 1200,
+  "scope": "pure _quick_route only, imports excluded, no LLM/API"
+}

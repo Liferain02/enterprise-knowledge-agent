@@ -1,0 +1,50 @@
+{
+  "scope": "local registry only, excludes MCP, history, user identity and tool schemas; characters are not tokens",
+  "legacy_local_tool_count": 20,
+  "legacy_system_prompt_characters": 3408,
+  "selected": [
+    {
+      "query": "计算 1+1",
+      "skills": [
+        "calculator"
+      ],
+      "tools": [
+        "calculator"
+      ],
+      "tool_count": 1,
+      "system_prompt_characters": 682
+    },
+    {
+      "query": "分析 CSV 缺失值：a,b\n1,2",
+      "skills": [
+        "data_analysis"
+      ],
+      "tools": [
+        "profile_csv",
+        "aggregate_csv"
+      ],
+      "tool_count": 2,
+      "system_prompt_characters": 869
+    },
+    {
+      "query": "帮我回复审稿意见：缺少消融实验。",
+      "skills": [
+        "paper_writing",
+        "text_analysis",
+        "citation_check"
+      ],
+      "tools": [
+        "build_paper_outline",
+        "format_experiment_table",
+        "check_writing_preservation",
+        "build_rebuttal_outline",
+        "compare_texts",
+        "markdown_outline",
+        "extract_research_identifiers",
+        "audit_citation_markers"
+      ],
+      "tool_count": 8,
+      "system_prompt_characters": 2159
+    }
+  ]
+}

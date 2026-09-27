@@ -128,18 +128,17 @@ class SkillLoader:
                     for tool_name in tool_names:
                         if hasattr(module, tool_name):
                             tool_func = getattr(module, tool_name)
-                            # 尝试调用：若是工厂函数（返回 BaseTool），直接使用结果
-                            if callable(tool_func):
-                                try:
-                                    result = tool_func()
-                                    if isinstance(result, BaseTool):
-                                        tools.append(result)
-                                        continue
-                                except TypeError:
-                                    pass
-                                # 普通 LangChain 工具函数 → 创建 StructuredTool
+                            if isinstance(tool_func, BaseTool):
+                                tools.append(tool_func)
+                            elif callable(tool_func):
                                 from langchain_core.tools import StructuredTool
-                                tools.append(StructuredTool.from_function(tool_func))
+                                if tool_config.get("factory", False):
+                                    result = tool_func()
+                                    if not isinstance(result, BaseTool):
+                                        raise TypeError("Skill factory must return BaseTool")
+                                    tools.append(result)
+                                else:
+                                    tools.append(StructuredTool.from_function(tool_func))
             except Exception as e:
                 print(f"加载工具失败 {skill_name}.{module_path}.{tool_names}: {e}")
                 import traceback

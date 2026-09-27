@@ -75,8 +75,9 @@ def test_upload_metadata_tags_are_chroma_compatible(tmp_path, monkeypatch):
 def test_worker_replaces_same_source_chunks():
     worker = IngestionWorker(queue=MagicMock())
     manager = MagicMock()
-    manager.get_document_ids_by_source.return_value = ["old-chunk"]
-    manager.add_documents.return_value = ["chunk-1", "chunk-2"]
+    stored_ids = []
+    manager.get_document_ids_by_source.side_effect = lambda source: ["old-chunk", *stored_ids]
+    manager.add_documents.side_effect = lambda docs, ids: stored_ids.extend(ids) or ids
     docs = [
         MagicMock(page_content="chunk one", metadata={}),
         MagicMock(page_content="chunk two", metadata={}),
@@ -95,7 +96,8 @@ def test_worker_replaces_same_source_chunks():
         vectorstore_module.get_vectorstore_manager = original
 
     assert stored == 2
-    manager.get_document_ids_by_source.assert_called_once_with("notes.md")
+    assert manager.get_document_ids_by_source.call_count == 2
+    manager.get_document_ids_by_source.assert_called_with("notes.md")
     manager.delete_documents_by_ids.assert_called_once_with(["old-chunk"])
     _, kwargs = manager.add_documents.call_args
     assert len(kwargs["ids"]) == 2
@@ -105,8 +107,9 @@ def test_worker_replaces_same_source_chunks():
 def test_worker_converts_structured_metadata_to_scalars():
     worker = IngestionWorker(queue=MagicMock())
     manager = MagicMock()
-    manager.get_document_ids_by_source.return_value = []
-    manager.add_documents.return_value = ["chunk-1"]
+    stored_ids = []
+    manager.get_document_ids_by_source.side_effect = lambda source: stored_ids
+    manager.add_documents.side_effect = lambda docs, ids: stored_ids.extend(ids) or ids
     docs = [MagicMock(page_content="chunk one", metadata={})]
 
     import src.rag.storage.vectorstore as vectorstore_module

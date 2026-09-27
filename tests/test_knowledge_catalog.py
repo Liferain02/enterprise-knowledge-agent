@@ -81,3 +81,14 @@ def test_overview_uses_visible_documents_only(mock_manager):
     assert overview["chunks"] == 2
     assert overview["public_documents"] == 1
     assert overview["restricted_documents"] == 0
+
+@patch("src.api.services.knowledge_service.get_vectorstore_manager")
+def test_direct_text_insert_uses_shared_chunking(mock_manager):
+    service = KnowledgeService()
+    mock_manager.return_value = MagicMock()
+    mock_manager.return_value.add_documents.side_effect = lambda docs: [str(i) for i, _ in enumerate(docs)]
+    result = service.add_document("科研说明。" * 700, {"title": "长文本", "visibility": "public"})
+    chunks = mock_manager.return_value.add_documents.call_args.args[0]
+    assert result["count"] == len(chunks) >= 3
+    assert all(len(chunk.page_content) <= 1200 for chunk in chunks)
+    assert all(chunk.metadata["ingestion_signature"] == "split1200-overlap150-v1" for chunk in chunks)

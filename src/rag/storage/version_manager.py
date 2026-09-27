@@ -83,7 +83,7 @@ def _is_semantic_newer(new_ver: str, old_ver: str) -> bool:
 # ==================== 数据库操作 ====================
 
 class VersionDB:
-    """版本元数据的 SQLite 持久化"""
+    """版本元数据的 MySQL / SQLite 持久化。"""
 
     def __init__(self, db_path: str = None):
         self.db_path = db_path or str(
@@ -188,6 +188,62 @@ class VersionDB:
         )
         conn.commit()
         conn.close()
+
+    def publish_version(self, version: DocumentVersion):
+        """Atomically insert the new version and supersede old ones; retry by ID.
+
+        MySQL uses a per-document advisory lock (also covers the first insert).
+        SQLite serializes writers with BEGIN IMMEDIATE. This is a metadata
+        transaction, not a distributed transaction with the vector store.
+        """
+        import hashlib
+        conn = connect(self.db_path)
+        mysql = hasattr(conn, "raw")
+        lock_name = "eka:version:" + hashlib.sha256(version.doc_id.encode()).hexdigest()[:40]
+        locked = False
+        try:
+            if mysql:
+                row = conn.execute("SELECT GET_LOCK(?, 10)", (lock_name,)).fetchone()
+                if not row or row[0] != 1:
+                    raise RuntimeError("文档版本锁超时")
+                locked = True
+            else:
+                conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute("SELECT * FROM document_versions WHERE doc_id = ?", (version.doc_id,)).fetchall()
+            existing = [_row_to_version(row) for row in rows]
+            same = next((row for row in existing if row.id == version.id), None)
+            if same:
+                if same.status != "active" or same.version != version.version:
+                    raise ValueError("任务版本已失效，拒绝重新发布")
+                conn.commit()
+                return
+            if any(row.status in ("active", "draft") and _is_semantic_newer(row.version, version.version)
+                   for row in existing):
+                raise ValueError("新版本低于当前版本，拒绝发布")
+            conn.execute(
+                """INSERT INTO document_versions
+                (id, doc_id, version, effective_date, expiry_date, status, superseded_by,
+                 source_system, changelog, uploaded_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (version.id, version.doc_id, version.version, version.effective_date,
+                 version.expiry_date, "active", None, version.source_system,
+                 version.changelog, version.uploaded_by, version.created_at),
+            )
+            conn.execute(
+                "UPDATE document_versions SET status='superseded', superseded_by=? "
+                "WHERE doc_id=? AND id!=? AND status IN ('active', 'draft')",
+                (version.id, version.doc_id, version.id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            try:
+                if locked:
+                    conn.execute("SELECT RELEASE_LOCK(?)", (lock_name,))
+            finally:
+                conn.close()
 
 
 def _row_to_version(row) -> DocumentVersion:
@@ -345,22 +401,9 @@ class DocumentVersionManager:
                     f"{[c.description for c in conflict_report.conflicts]}"
                 )
 
-        # 保存新版本
-        self.db.insert_version(new_version)
-
-        # 将旧版本标记为 superseded
-        old = self.db.get_current_version(doc_id)
-        if old:
-            self.db.update_version_status(
-                old.id,
-                status="superseded",
-                superseded_by=new_version_id,
-            )
-
-        logger.info(
-            f"[Version] 版本替换 doc={doc_id}: "
-            f"{old.version if old else 'N/A'} -> {new_version.version}"
-        )
+        if new_version.doc_id != doc_id or new_version.id != new_version_id:
+            raise ValueError("版本身份与文档不匹配")
+        self.db.publish_version(new_version)
 
         return conflict_report.conflicts if conflict_report else None
 

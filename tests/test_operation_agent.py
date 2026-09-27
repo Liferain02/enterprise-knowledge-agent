@@ -12,7 +12,7 @@ async def test_operation_failure_does_not_expose_internal_exception(monkeypatch)
     agent = SimpleNamespace(
         ainvoke=AsyncMock(side_effect=RuntimeError("private recursion trace /srv/secret"))
     )
-    monkeypatch.setattr(operation_module, "get_all_agent_tools", lambda: [])
+    monkeypatch.setattr(operation_module, "get_selected_tools", lambda names: [])
     monkeypatch.setattr(operation_module, "_get_operation_agent", lambda tools: agent)
 
     result = await operation_module.operation_agent_node({

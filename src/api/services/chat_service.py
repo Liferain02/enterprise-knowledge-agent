@@ -209,6 +209,7 @@ class ChatService:
             "metrics": {
                 "research_team": final_state.get("research_team_metrics") or {},
                 "generation": final_state.get("generation_metrics") or {},
+                "retrieval": final_state.get("retrieval_metrics") or {},
             },
         }
 

@@ -16,6 +16,7 @@ def get_llm(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
     provider: Optional[str] = None,
+    max_retries: int = 2,
 ) -> ChatOpenAI:
     """
     获取 LLM 实例（带缓存）
@@ -65,6 +66,7 @@ def get_llm(
         client_options["extra_body"] = {"enable_thinking": False}
 
     return ChatOpenAI(
+        max_retries=max_retries,
         model=model,
         temperature=temperature if temperature is not None else settings.agent_temperature,
         max_tokens=max_tokens or settings.max_token_response,

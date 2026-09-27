@@ -4,9 +4,9 @@
 import os
 import json
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 
 
 # 配置文件路径必须相对本文件解析，不能依赖启动命令所在的当前目录。
@@ -34,6 +34,20 @@ _INSECURE_JWT_SECRETS = frozenset({
 
 class Settings(BaseSettings):
     """应用配置类"""
+
+    routing_provider: Literal["rules", "jev"] = "rules"
+    typesafe_api_key: SecretStr = SecretStr("")
+    jev_model: str = "jev-latest"
+    jev_timeout_seconds: float = Field(default=1.5, gt=0, le=10)
+    jev_min_confidence: float = Field(default=0.8, ge=0, le=1)
+    jev_min_margin: float = Field(default=0.15, ge=0, le=1)
+    operation_max_model_calls: int = Field(default=4, ge=1, le=12)
+    operation_max_tool_calls: int = Field(default=6, ge=0, le=30)
+    operation_deadline_seconds: float = Field(default=90, gt=0, le=180)
+    operation_tool_timeout_seconds: float = Field(default=15, gt=0, le=60)
+    operation_max_input_chars: int = Field(default=60000, ge=1000, le=200000)
+    operation_max_output_chars: int = Field(default=16000, ge=1000, le=40000)
+    operation_max_output_tokens: int = Field(default=2000, ge=100, le=8000)
 
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),

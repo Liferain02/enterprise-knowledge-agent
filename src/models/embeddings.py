@@ -51,22 +51,30 @@ class DashScopeEmbeddings(Embeddings):
                 missing.append(text)
         for start in range(0, len(missing), batch_size):
             batch = missing[start:start + batch_size]
-            for attempt in range(4):
-                response = TextEmbedding.call(model=self.model, input=batch, api_key=self.api_key)
-                if response.status_code == 200:
-                    break
-                if response.status_code not in (429, 500, 502, 503, 504) or attempt == 3:
-                    raise RuntimeError(f"Embedding API error: status={response.status_code}, code={response.code}")
-                time.sleep(2 ** attempt)
-            rows = response.output["embeddings"]
-            ordered = {row["text_index"]: row["embedding"] for row in rows}
-            if (set(ordered) != set(range(len(batch))) or len(rows) != len(batch)
-                    or not all(self._valid_vector(v) for v in ordered.values())):
-                raise ValueError("Invalid/incomplete embedding response")
-            for index, text in enumerate(batch):
-                values[text] = ordered[index]
+
+            def request_batch():
+                for attempt in range(4):
+                    response = TextEmbedding.call(model=self.model, input=batch, api_key=self.api_key)
+                    if response.status_code == 200:
+                        break
+                    if response.status_code not in (429, 500, 502, 503, 504) or attempt == 3:
+                        raise RuntimeError(f"Embedding API error: status={response.status_code}, code={response.code}")
+                    time.sleep(2 ** attempt)
+                rows = response.output["embeddings"]
+                ordered = {row["text_index"]: row["embedding"] for row in rows}
+                if (set(ordered) != set(range(len(batch))) or len(rows) != len(batch)
+                        or not all(self._valid_vector(v) for v in ordered.values())):
+                    raise ValueError("Invalid/incomplete embedding response")
+                return [ordered[index] for index in range(len(batch))]
+
+            batch_key = cache_key("embedding_batch", ["dashscope-native-v1", self.model, purpose, batch])
+            vectors = cache.get_or_set(batch_key, request_batch, settings.embedding_cache_ttl) if use_cache else request_batch()
+            if not isinstance(vectors, list) or len(vectors) != len(batch):
+                raise ValueError("Invalid cached embedding batch")
+            for text, vector in zip(batch, vectors):
+                values[text] = vector
                 if use_cache:
-                    cache.set(keys[text], ordered[index], settings.embedding_cache_ttl)
+                    cache.set(keys[text], vector, settings.embedding_cache_ttl)
         return [values[text] for text in texts]
 
 
@@ -91,18 +99,25 @@ class LocalEmbeddings(Embeddings):
             else:
                 missing.append(text)
         if missing:
-            with self._lock:
-                if self._model is None:
-                    import torch
-                    from sentence_transformers import SentenceTransformer
-                    path = settings.project_root / settings.local_embedding_path
-                    if (path / "REVISION").read_text().strip() != settings.local_embedding_revision:
-                        raise ValueError("Embedding snapshot revision does not match configuration")
-                    torch.set_num_threads(settings.local_embedding_threads)
-                    self._model = SentenceTransformer(str(path), device=settings.local_embedding_device,
-                                                      local_files_only=True, trust_remote_code=False)
-                encoded = self._model.encode(missing, batch_size=settings.embedding_batch_size,
-                                             normalize_embeddings=True, show_progress_bar=False).tolist()
+            def encode_batch():
+                with self._lock:
+                    if self._model is None:
+                        import torch
+                        from sentence_transformers import SentenceTransformer
+                        path = settings.project_root / settings.local_embedding_path
+                        if (path / "REVISION").read_text().strip() != settings.local_embedding_revision:
+                            raise ValueError("Embedding snapshot revision does not match configuration")
+                        torch.set_num_threads(settings.local_embedding_threads)
+                        self._model = SentenceTransformer(str(path), device=settings.local_embedding_device,
+                                                          local_files_only=True, trust_remote_code=False)
+                    return self._model.encode(missing, batch_size=settings.embedding_batch_size,
+                                              normalize_embeddings=True, show_progress_bar=False).tolist()
+            batch_key = cache_key("embedding_batch", ["bge-m3-dense-normalized-v1",
+                                                       settings.local_embedding_revision, purpose, missing])
+            encoded = cache.get_or_set(batch_key, encode_batch, settings.embedding_cache_ttl) \
+                if settings.embedding_cache_enabled else encode_batch()
+            if not isinstance(encoded, list) or len(encoded) != len(missing):
+                raise ValueError("Invalid cached embedding batch")
             for text, vector in zip(missing, encoded):
                 values[text] = vector
                 if settings.embedding_cache_enabled:

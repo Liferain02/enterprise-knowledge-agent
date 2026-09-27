@@ -179,6 +179,31 @@ class QdrantStoreManager:
     def get_document_ids_by_source(self, source):
         return [p.payload["external_id"] for p in self._scroll({"source": source})]
 
+    def update_documents_metadata(self, ids, updates):
+        """Atomically update payload metadata for a set of chunk IDs."""
+        if not ids:
+            return 0
+        if not isinstance(updates, dict) or not updates:
+            raise ValueError("metadata updates must be a non-empty mapping")
+        points = [self.point_id(identifier) for identifier in ids]
+        records = self.client.retrieve(
+            self.collection_name, ids=points, with_payload=True, with_vectors=False
+        )
+        if len(records) != len(points):
+            raise RuntimeError("metadata lookup returned incomplete IDs")
+        by_point = {str(record.id): record for record in records}
+        for identifier, point in zip(ids, points):
+            record = by_point.get(str(point))
+            if record is None or not record.payload:
+                raise RuntimeError("metadata lookup returned an unknown chunk")
+            payload = dict(record.payload)
+            payload["metadata"] = {**(payload.get("metadata") or {}), **updates}
+            self.client.overwrite_payload(
+                self.collection_name, payload=payload, points=[point], wait=True
+            )
+        self._invalidate()
+        return len(ids)
+
     def delete_documents_by_ids(self, ids):
         if ids:
             self.client.delete(self.collection_name,

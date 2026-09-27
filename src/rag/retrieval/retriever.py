@@ -91,14 +91,14 @@ class RetrieverManager:
         
         # 如果启用混合检索，使用混合检索
         if self.use_hybrid and self.hybrid_manager:
-            return self.hybrid_manager.search(query, k=k)
+            return self.hybrid_manager.search(query, k=k, base_filter=filter)
         
         # 否则使用基础向量检索
         vectorstore = get_vectorstore(self.collection_name)
         return vectorstore.similarity_search(
             query,
             k=k,
-            filter=filter
+            filter=self._merge_filters(filter, self._published_filter())
         )
     
     def search_with_score(
@@ -112,7 +112,7 @@ class RetrieverManager:
         
         # 如果启用混合检索
         if self.use_hybrid and self.hybrid_manager:
-            results = self.hybrid_manager.search_with_scores(query, k=k)
+            results = self.hybrid_manager.search_with_scores(query, k=k, base_filter=filter)
             # 转换为 (doc, score) 格式
             return [(doc, score) for doc, score, _ in results]
         
@@ -121,8 +121,20 @@ class RetrieverManager:
         return vectorstore.similarity_search_with_score(
             query,
             k=k,
-            filter=filter
+            filter=self._merge_filters(filter, self._published_filter())
         )
+
+    @staticmethod
+    def _published_filter() -> Dict:
+        """Hide staging chunks while retaining legacy chunks without a state."""
+        return {"$or": [{"ingestion_state": "active"}, {"ingestion_state": {"$exists": False}}]}
+
+    def _merge_filters(self, first: Optional[Dict], second: Optional[Dict]) -> Optional[Dict]:
+        if first is None:
+            return second
+        if second is None:
+            return first
+        return {"$and": [first, second]}
 
     def _build_filter(
         self,
@@ -135,6 +147,8 @@ class RetrieverManager:
         ACL filter 通过 build_acl_filter() 构建，在检索前完成权限过滤。
         """
         acl_filter = build_acl_filter(user=user, include_expired=include_expired)
+        published_filter = self._published_filter()
+        base_filter = self._merge_filters(base_filter, published_filter)
 
         if base_filter is None and acl_filter is None:
             return None
@@ -237,7 +251,7 @@ class RetrieverManager:
 
         # 检索
         if self.use_hybrid and self.hybrid_manager:
-            return self.hybrid_manager.search(query, k=k, user=user)
+            return self.hybrid_manager.search(query, k=k, user=user, base_filter=base_filter)
 
         vectorstore = get_vectorstore(self.collection_name)
         fetch_k = k * 4 if user else k
@@ -269,7 +283,7 @@ class RetrieverManager:
 
         if self.use_hybrid and self.hybrid_manager:
             # base_filter 和 user 的 ACL filter 合并后传给 hybrid manager
-            results = self.hybrid_manager.search_with_scores(query, k=k, user=user)
+            results = self.hybrid_manager.search_with_scores(query, k=k, user=user, base_filter=base_filter)
             # 对 hybrid 结果再做二次 base_filter 过滤（Chroma 不支持 $contains 等复杂操作，
             # 所以在结果层面过滤 base_filter 条件更可靠）
             if base_filter:

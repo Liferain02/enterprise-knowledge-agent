@@ -212,6 +212,7 @@ class HybridRetrieverManager:
         query: str,
         k: Optional[int] = None,
         user: Optional[UserContext] = None,
+        base_filter: Optional[Dict[str, Any]] = None,
     ) -> List[Document]:
         """
         搜索文档（集成 ACL 权限过滤）。
@@ -229,12 +230,53 @@ class HybridRetrieverManager:
         """
         k = k or self.top_k
 
-        results_with_scores = self.search_with_scores(query, k=k, user=user)
+        results_with_scores = self.search_with_scores(query, k=k, user=user, base_filter=base_filter)
         return [doc for doc, _, _ in results_with_scores]
 
+    @staticmethod
+    def _published_filter() -> Dict[str, Any]:
+        """Exclude online staging generations; legacy chunks remain visible."""
+        return {"$or": [{"ingestion_state": "active"}, {"ingestion_state": {"$exists": False}}]}
+
+    @staticmethod
+    def _merge_filters(first: Optional[Dict[str, Any]], second: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        if first is None:
+            return second
+        if second is None:
+            return first
+        return {"$and": [first, second]}
+
+    @staticmethod
+    def _matches_filter(doc: Document, condition: Optional[Dict[str, Any]]) -> bool:
+        """Apply the small base-filter subset supported by retrieval callers."""
+        if not condition:
+            return True
+        metadata = doc.metadata or {}
+        for key, expected in condition.items():
+            if key == "$and":
+                if not all(HybridRetrieverManager._matches_filter(doc, item) for item in expected):
+                    return False
+                continue
+            if key == "$or":
+                if not any(HybridRetrieverManager._matches_filter(doc, item) for item in expected):
+                    return False
+                continue
+            value = metadata.get(key)
+            tests = expected.items() if isinstance(expected, dict) else [("$eq", expected)]
+            for operator, operand in tests:
+                if operator == "$eq" and value != operand: return False
+                if operator == "$ne" and value == operand: return False
+                if operator == "$in" and value not in operand: return False
+                if operator == "$nin" and value in operand: return False
+                if operator == "$exists" and ((key in metadata) != operand): return False
+                if operator == "$contains" and (not isinstance(value, (list, str)) or operand not in value): return False
+        return True
+
     def _build_acl_filter(self, user: Optional[UserContext]) -> Optional[Dict[str, Any]]:
-        """构建 ACL filter"""
-        return build_acl_filter(user=user, include_expired=False) if user else None
+        """构建 ACL filter，并默认只返回已发布分块。"""
+        acl = build_acl_filter(user=user, include_expired=False) if user else None
+        published = self._published_filter()
+        return {"$and": [acl, published]} if acl else published
 
     def _acl_filter_results(
         self,
@@ -259,6 +301,7 @@ class HybridRetrieverManager:
         query: str,
         k: Optional[int] = None,
         user: Optional[UserContext] = None,
+        base_filter: Optional[Dict[str, Any]] = None,
     ) -> List[Tuple[Document, float, str]]:
         """
         带分数的混合搜索（集成 ACL 权限过滤）。
@@ -296,7 +339,7 @@ class HybridRetrieverManager:
         vector_ranked: Dict[str, Tuple[Document, int]] = {}  # key → (doc, rank)
         if self.enable_vector:
             try:
-                final_filter = self._build_acl_filter(user)
+                final_filter = self._merge_filters(self._build_acl_filter(user), base_filter)
                 # Chroma 只能预过滤密级/可见性；适度 over-fetch 后在进入候选
                 # 排名之前完成部门、角色和日期检查，避免无权限结果占满 top-k。
                 vector_fetch_k = candidate_k * 4 if user else candidate_k
@@ -358,6 +401,7 @@ class HybridRetrieverManager:
                     for i, doc in enumerate(documents)
                     if all_scores[i] > 0
                     and (not user or check_doc_access(doc.metadata or {}, user))
+                    and self._matches_filter(doc, base_filter)
                 ]
                 scored.sort(key=lambda x: x[0], reverse=True)
 
@@ -412,6 +456,8 @@ class HybridRetrieverManager:
 
         # ── ACL 二次过滤（防止 filter 绕过）──────────────────────
         results = self._acl_filter_results(results, user)
+        if base_filter:
+            results = [row for row in results if self._matches_filter(row[0], base_filter)]
 
         return results[:k]
 

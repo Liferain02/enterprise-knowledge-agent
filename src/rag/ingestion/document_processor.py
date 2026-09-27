@@ -32,8 +32,8 @@ class DocumentProcessor:
     @property
     def chunker(self):
         if self._chunker is None:
-            from src.rag.processing.chunker import get_chunker
-            self._chunker = get_chunker()
+            from src.rag.processing.ingestion_splitter import build_ingestion_splitter
+            self._chunker = build_ingestion_splitter()
         return self._chunker
 
     @property
@@ -75,7 +75,9 @@ class DocumentProcessor:
         logger.info(f"[Processor] 解析完成，{len(docs)} 个文档片段")
 
         # 3. 切块
-        chunks = self.chunker.chunk(docs)
+        chunks = self.chunker.split_documents(docs)
+        if not chunks or not any(chunk.page_content.strip() for chunk in chunks):
+            raise ValueError("文件未解析出有效文本")
         logger.info(f"[Processor] 切块完成，{len(chunks)} 个 chunks")
 
         # 4. 去重检测（基于内容 hash）
