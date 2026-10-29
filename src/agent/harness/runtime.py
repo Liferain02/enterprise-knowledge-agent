@@ -17,6 +17,13 @@ class BudgetExceeded(RuntimeError):
     pass
 
 
+class HarnessViolation(ValueError):
+    """Code-owned failure reason; never includes raw tool args or model text."""
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(reason)
+
+
 @dataclass
 class ExecutionRun:
     model_limit: int
@@ -44,9 +51,12 @@ class ExecutionRun:
 
     def report(self, status):
         return {"run_id": self.run_id, "status": status, "model_calls": self.model_calls,
-                "tool_calls": self.tool_calls, "usage": self.usage, "events": self.events,
+                "tool_calls": self.tool_calls, "usage": dict(self.usage), "events": list(self.events),
+                "stop_reason": next((event["reason"] for event in reversed(self.events)
+                                     if "reason" in event), status),
                 "limits": {"model_calls": self.model_limit, "tool_calls": self.tool_limit,
-                           "deadline_seconds": self.deadline_seconds}}
+                           "deadline_seconds": self.deadline_seconds, "tool_timeout_seconds": self.tool_timeout,
+                           "input_characters": self.input_limit, "output_characters": self.output_limit}}
 
 
 def create_run(settings):
@@ -85,33 +95,37 @@ class BoundedToolAgent:
             run.event("model_started", call=run.model_calls)
             reply = await asyncio.wait_for(self.model.ainvoke(messages), timeout=run.remaining())
             if not isinstance(reply, AIMessage):
-                raise ValueError("Invalid model response")
+                raise HarnessViolation("invalid_model_response")
             for key in run.usage:
                 value = (reply.usage_metadata or {}).get(key, 0)
                 if isinstance(value, int) and value >= 0:
                     run.usage[key] += value
             run.event("model_completed", call=run.model_calls)
             if getattr(reply, "invalid_tool_calls", []):
-                raise ValueError("Invalid tool arguments")
+                raise HarnessViolation("invalid_tool_arguments")
             messages.append(reply)
             calls = reply.tool_calls or []
             if not calls:
                 if not isinstance(reply.content, str) or not reply.content.strip():
-                    raise ValueError("Empty model output")
+                    raise HarnessViolation("empty_model_output")
                 if len(reply.content) > run.output_limit:
                     raise BudgetExceeded("output_characters")
-                run.event("completed")
+                # The caller still needs to validate task-specific output (e.g. citations).
+                run.event("model_finished")
                 return {"messages": messages, "harness_report": run.report("completed")}
             # Validate the entire proposed batch before any tool is run.
             if run.tool_calls + len(calls) > run.tool_limit:
                 raise BudgetExceeded("tool_calls")
             ids = [call.get("id") for call in calls]
             if any(not isinstance(i, str) or not i for i in ids) or len(ids) != len(set(ids)) or executed_call_ids.intersection(ids):
-                raise ValueError("Duplicate or missing tool call ID")
+                raise HarnessViolation("invalid_tool_call_id")
             for call in calls:
                 if call.get("name") not in self.tools:
-                    raise ValueError("Tool is outside selected capabilities")
-                self.tools[call['name']].get_input_schema().model_validate(call.get('args'))
+                    raise HarnessViolation("tool_not_allowed")
+                try:
+                    self.tools[call['name']].get_input_schema().model_validate(call.get('args'))
+                except ValueError as exc:
+                    raise HarnessViolation("invalid_tool_arguments") from exc
             for call in calls:
                 run.remaining()
                 name = call['name']

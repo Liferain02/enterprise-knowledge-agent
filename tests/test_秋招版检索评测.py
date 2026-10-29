@@ -7,15 +7,21 @@ from tests.eval.run_秋招版检索评测 import _metrics
 
 
 def test_benchmark_has_frozen_size_and_category_distribution():
-    assert len(RETRIEVAL_BENCHMARK_CASES) == 28
+    assert len(RETRIEVAL_BENCHMARK_CASES) == 88
     assert Counter(case.category for case in RETRIEVAL_BENCHMARK_CASES) == {
         "simple_factual": 8,
         "technical_exact_token": 6,
         "paraphrase": 5,
         "distractor_heavy": 5,
         "multi_document": 4,
+        "synthetic_rdma": 10,
+        "synthetic_numa": 10,
+        "synthetic_retrieval": 10,
+        "synthetic_systems": 10,
+        "synthetic_experiments": 10,
+        "synthetic_paper_writing": 10,
     }
-    assert len({case.case_id for case in RETRIEVAL_BENCHMARK_CASES}) == 28
+    assert len({case.case_id for case in RETRIEVAL_BENCHMARK_CASES}) == 88
 
 
 def test_benchmark_gold_is_document_level_and_paraphrase_cases_are_explicit():
@@ -27,7 +33,7 @@ def test_benchmark_gold_is_document_level_and_paraphrase_cases_are_explicit():
         for case in RETRIEVAL_BENCHMARK_CASES
         if case.category == "distractor_heavy"
     )
-    assert sum(bool(case.paraphrase_queries) for case in RETRIEVAL_BENCHMARK_CASES) == 5
+    assert sum(bool(case.paraphrase_queries) for case in RETRIEVAL_BENCHMARK_CASES) == 65
 
 
 def test_metrics_report_hit_mrr_coverage_and_distractor_top1():

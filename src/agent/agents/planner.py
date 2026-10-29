@@ -4,7 +4,6 @@
 Query Expansion。不会生成无法执行的计划，也不会触发隐藏的多 Agent fan-out。
 Deep Research 仅由调用方显式选择。
 """
-import re
 from typing import Any, Dict
 
 from langchain_core.messages import HumanMessage
@@ -28,8 +27,24 @@ def _get_last_user_message(messages: list) -> str:
 async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """产生唯一业务路由，并为知识查询标记是否需要查询扩展。"""
     question = _get_last_user_message(state.get("messages", []))
+    # Checkpoints keep prior turns; evidence must belong to this request.
+    clean_outputs = {
+        "retrieved_docs": [], "retrieval_context": "", "retrieval_decision": "",
+        "retrieval_metrics": {}, "generation_metrics": {}, "sources": "",
+        "version_source": "", "conflict_warnings": [], "final_answer": "",
+        "used_agent": "", "mem0_memories": "", "retrieval_decision_reason": "",
+        "retrieval_avg_score": 0.0, "retrieval_rewrite_history": [],
+    }
+    # Research artifacts belong to a deep turn. Do not leak them into a later
+    # normal response; deep-to-deep evidence reuse retains its existing rules.
+    if state.get("research_mode", "normal") != "deep":
+        clean_outputs.update(
+            evidence_package={}, analysis_report={}, review_report={}, research_trace={},
+            research_team_metrics={}, research_revision_count=0, research_question="",
+        )
     if not question:
         return {
+            **clean_outputs,
             "is_complex": False,
             "needs_expansion": False,
             "plan_steps": [],
@@ -54,6 +69,7 @@ async def planner_node(state: Dict[str, Any]) -> Dict[str, Any]:
         and RuleBasedDecomposer.needs_expansion(question)
     )
     return {
+        **clean_outputs,
         "is_complex": needs_expansion,
         "needs_expansion": needs_expansion,
         "plan_steps": [],

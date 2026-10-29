@@ -165,10 +165,10 @@ async def retrieval_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         logger.exception("检索出错: %s", e)
         return {
-            "retrieval_context": f"【知识库检索出错】{str(e)}",
+            "retrieval_context": "【知识库检索出错】资料检索服务暂时不可用。",
             "retrieved_docs": [],
             "retrieval_decision": "error",
-            "retrieval_decision_reason": str(e),
+            "retrieval_decision_reason": "retrieval_failed",
             "retrieval_avg_score": 0.0,
             "retrieval_rewrite_history": [],
             "conflict_warnings": [],
@@ -377,6 +377,24 @@ async def generation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
             ),
             "sources": "knowledge_base",
             "used_agent": "knowledge_agent",
+            "generation_metrics": {"llm_calls": 0},
+        }
+
+    # Knowledge tasks can need calculations/writing too. Reuse the same
+    # bounded tools only after this turn's authorized retrieval, with no extra
+    # agent loop or second generation call.
+    decision = state.get("route_decision") or {}
+    if decision.get("handler") == "knowledge_agent" and decision.get("skills"):
+        from .operation import knowledge_tool_agent_node
+        return await knowledge_tool_agent_node(state)
+
+    if retrieval_decision == "error":
+        # A backend outage is not an empty knowledge base. No generation call
+        # should turn an exception into an invented evidence-based answer.
+        return {
+            "final_answer": "资料检索暂时不可用，本次未生成基于知识库的答案。请稍后重试。",
+            "used_agent": "knowledge_agent", "sources": "", "retrieved_docs": [], "version_source": "",
+            "generation_metrics": {"llm_calls": 0},
         }
 
     try:
@@ -436,7 +454,7 @@ async def generation_agent_node(state: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         logger.exception("生成出错: %s", e)
         return {
-            "final_answer": f"生成答案时出错: {str(e)}",
+            "final_answer": "生成答案暂时失败，请稍后重试。",
             "sources": "",
             "used_agent": "knowledge_agent",
         }

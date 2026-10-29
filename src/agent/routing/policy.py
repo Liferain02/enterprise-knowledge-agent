@@ -2,7 +2,7 @@
 import re
 from dataclasses import asdict, dataclass
 
-POLICY_VERSION = "research-routing-v1"
+POLICY_VERSION = "research-routing-v2"
 ALLOWED_SKILLS = frozenset({
     "datetime", "calculator", "statistics", "data_analysis", "unit_conversion",
     "text_analysis", "citation_check", "rag_evaluation", "paper_writing",
@@ -35,14 +35,42 @@ def rules_route(question: str, previous: dict | None = None) -> RouteDecision:
         return RouteDecision("general_agent", rule_id="greeting", matched=True)
     # Restrict intent matching to the instruction preceding a pasted payload.
     instruction = re.split(r"[:：\n]", query, maxsplit=1)[0]
-    if re.search(r"(?:根据|结合|检索|读取).{0,16}(?:知识库|项目资料|实验记录|内部论文)", instruction) or re.search(
-        r"有.{0,5}证据|(?:实验室|项目|评测).{0,12}(?:规范|制度|要求|规定|流程)|(?:规范|制度).{0,8}(?:要求|是什么)", query
-    ):
-        return RouteDecision(rule_id="evidence_or_policy", matched=True)
+    explicit_retrieval = bool(re.search(
+        r"(?:根据|结合|依据|检索|查阅|查找|查询|查一下|读取|从).{0,32}"
+        r"(?:知识库|项目资料|实验记录|内部论文|论文|文献|资料|报告|记录|规范)", instruction))
+    # "根据下面内容生成论文摘要" already supplies its material: do not
+    # interpret the output word "论文" as a request to search for papers.
+    provided_material = re.search(
+        r"(?:根据|结合|依据|使用|从)\s*(?:下面|以下|这段|上述|我提供的|给定的|粘贴的)", instruction)
+    if provided_material and not re.search(r"检索|查找|查阅|查询|查一下|读取", instruction):
+        explicit_retrieval = False
+    needs_evidence = explicit_retrieval or bool(re.search(
+        r"有.{0,5}证据|(?:实验室|项目|评测).{0,12}(?:规范|制度|要求|规定|流程)|(?:规范|制度).{0,8}(?:要求|是什么)", query))
+    if needs_evidence:
+        # Quoted arithmetic in an evidence question does not request execution.
+        requested_action = re.search(
+            r"计算|算出|求(?:平均|均值|中位数|标准差|和)|统计|汇总|换算|转换|估算|比较|对比|生成|整理|制作|"
+            r"润色|改写|翻译|压缩|提取|检查|核对|拟定|设计|回复|回应", instruction)
+        skills = operation_skills(question) if requested_action else ()
+        return RouteDecision("knowledge_agent", skills,
+                             "evidence_with_tools" if skills else "evidence_or_policy", True)
     if re.fullmatch(r"(?:请)?(?:继续|再试一次|换成英文|再润色一下)[。！!？? ]*", query) and previous:
         skills = tuple(s for s in previous.get("skills", ()) if s in ALLOWED_SKILLS)
         if previous.get("handler") == "operation_agent" and skills:
             return RouteDecision("operation_agent", skills, "continue_operation", True)
+        if previous.get("handler") == "knowledge_agent" and skills:
+            return RouteDecision("knowledge_agent", skills, "continue_evidence_with_tools", True)
+    skills = operation_skills(question)
+    if skills:
+        return RouteDecision("operation_agent", tuple(skills), "writing" if "paper_writing" in skills else "explicit_operation", True)
+    if re.search(r"我(?:之前|刚才|上次).{0,12}(?:关注|偏好|提到|说过|问过|讨论过|研究)|(?:还记得|记不记得).{0,8}我", query):
+        return RouteDecision("general_agent", rule_id="personal_history", matched=True)
+    return RouteDecision()
+
+
+def operation_skills(question: str) -> tuple[str, ...]:
+    """Choose capabilities from user instructions, never from retrieved text."""
+    instruction = re.split(r"[:：\n]", question.lower().strip(), maxsplit=1)[0]
     writing = bool(re.search(
         r"(?:生成|拟定|设计|列出|写|拟).{0,16}(?:论文提纲|论文大纲|论文摘要|审稿回复|rebuttal)|"
         r"(?:润色|改写|压缩|翻译).{0,20}(?:论文|摘要|学术|段落|英文|中文|abstract)|"
@@ -66,14 +94,10 @@ def rules_route(question: str, previous: dict | None = None) -> RouteDecision:
             r"(?:预览|模拟).{0,12}(?:分块|切块|chunk)",
         "statistics": r"(?:计算|求|统计|分析).{0,16}(?:均值|平均值|平均|中位数|标准差|方差)|"
             r"(?:比较|对比).{0,20}(?:指标|结果|recall|准确率|延迟|吞吐|f1|mrr|ndcg)|"
-            r"指标对比|实验结果对比|基线对比|相对提升|百分比变化",
+            r"指标对比|实验结果对比|基线对比|相对提升|百分比变化|(?:计算|算出).{0,16}(?:提升率|提升幅度|降幅)",
         "calculator": r"计算器|算术|\d+(?:\.\d+)?\s*(?:[+\-*/×÷%^]|乘以|除以|加上|减去)\s*\d+(?:\.\d+)?",
     }
     for skill, pattern in patterns.items():
         if re.search(pattern, instruction) and skill not in skills:
             skills.append(skill)
-    if skills:
-        return RouteDecision("operation_agent", tuple(skills), "writing" if writing else "explicit_operation", True)
-    if re.search(r"我(?:之前|刚才|上次).{0,12}(?:关注|偏好|提到|说过|问过|讨论过|研究)|(?:还记得|记不记得).{0,8}我", query):
-        return RouteDecision("general_agent", rule_id="personal_history", matched=True)
-    return RouteDecision()
+    return tuple(skills)

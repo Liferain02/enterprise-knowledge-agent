@@ -76,9 +76,40 @@ RETRIEVAL_BENCHMARK_CASES = (
     _case("multi-04", "从组会汇报到论文投稿要查阅哪些材料？", "multi_document", ("分布式NUMA课题组会模板", "论文阅读与实验记录要求", "论文投稿与对外汇报流程")),
 )
 
+# Synthetic public-style expansion: one anchored query per generated source.
+# These cases exercise category balance and do not claim independent quality.
+_SYNTHETIC_TOPICS = {
+    "rdma": ("RDMA_queue_pair", "completion_polling", "memory_registration", "RoCE_congestion", "NUMA_NIC_affinity", "ib_write_bw_benchmarking"),
+    "numa": ("remote_memory", "first-touch_placement", "page_migration", "socket_locality", "cache_coherence", "tail_latency"),
+    "retrieval": ("BM25_fusion", "vector_recall", "reranking", "ACL_filtering", "query_rewriting", "chunk_overlap"),
+    "systems": ("Linux_perf", "CPU_pinning", "huge_pages", "container_limits", "thread_pools", "checkpoint_recovery"),
+    "experiments": ("ablation_design", "warm_cache_latency", "throughput_measurement", "failure_injection", "confidence_intervals", "reproducibility"),
+    "paper_writing": ("method_section", "experiment_table", "rebuttal_response", "citation_audit", "limitation_statement", "abstract_structure"),
+}
 
-assert len(RETRIEVAL_BENCHMARK_CASES) == 28
+
+def _synthetic_case(category, index):
+    topic = _SYNTHETIC_TOPICS[category][(index - 1) % len(_SYNTHETIC_TOPICS[category])]
+    return _case(
+        f"synthetic-{category}-{index:03d}",
+        f"请查找合成笔记中关于{topic.replace('_', ' ')}的实验方法、复现条件和限制。",
+        "synthetic_" + category,
+        (f"{category}_{index:03d}_{topic}",),
+        paraphrases=(f"{topic}需要记录哪些实验变量？", f"如何复现{topic}这个合成案例？"),
+    )
+
+
+_SYNTHETIC_CASES = tuple(_synthetic_case(category, index)
+                         for category in _SYNTHETIC_TOPICS
+                         for index in range(1, 11))
+
+RETRIEVAL_BENCHMARK_CASES = RETRIEVAL_BENCHMARK_CASES + _SYNTHETIC_CASES
+
+
+assert len(RETRIEVAL_BENCHMARK_CASES) == 88
 assert {case.category for case in RETRIEVAL_BENCHMARK_CASES} == {
     "simple_factual", "technical_exact_token", "paraphrase", "distractor_heavy", "multi_document",
+    "synthetic_rdma", "synthetic_numa", "synthetic_retrieval", "synthetic_systems",
+    "synthetic_experiments", "synthetic_paper_writing",
 }
 assert all(case.gold_level == "document" for case in RETRIEVAL_BENCHMARK_CASES)

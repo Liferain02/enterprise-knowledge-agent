@@ -1,0 +1,824 @@
+{
+  "scope": "scripted_model_and_retrieval_real_graph_and_tools",
+  "live_model_evaluated": false,
+  "external_service_requests": 0,
+  "passed": 7,
+  "total": 7,
+  "source_sha256": {
+    "scripts/replay_agent_main_flow.py": "2ea2e67108a9b69d8a256c674942e7c597e9fac3fe936d0d7ec6015c73a4272c",
+    "src/agent/graph.py": "c384446fa222397e40d658a3dcc2379a7cc8c66b6121b5246c02b9c3ff7ba4a3",
+    "src/agent/agents/planner.py": "8459fe85be490f874b529dea381fbfafc1b78b18f97a8ea33ce953e62c5c8ff5",
+    "src/agent/routing/policy.py": "87ef9717b51b2babb10a86f9fdd87e2182ebf8e2cde0f365957722d29046d469",
+    "src/agent/agents/knowledge.py": "d5c733a52a2c86668d4d73ed811f20bc9604f5ad50ff028552781624f57dc196",
+    "src/agent/agents/operation.py": "b79e89dbee16ec4887277f23bf103573d981218247c4afbc9dd2cf5f49590254",
+    "src/agent/harness/runtime.py": "2de817f758664399e664c749eadc0ae4e8a3fe0567332b7bb006a10b225fad0d",
+    "src/agent/prompts.py": "c39d8f78b613c9ed5f5af4491715a6e87c34d6990c79bb2e1e8991ff62a85052",
+    "src/agent/skills/registry.py": "784befd91db69a44f5f615dfdde8ba2eaa5ef8841242e30b7a9a03ed3c2f18e7",
+    "src/agent/skills/skill_loader.py": "52f113dee45f59ebc435f3ea02d6a4afb9441eebc17f8824b3b70341483b2173",
+    "src/agent/skills/statistics/Skill.md": "e854a70a644f7fac3b8eb1412ca40185c9d66977ad9e29d3e6a4693189da2e00",
+    "src/agent/skills/statistics/scripts/tools.py": "1921bb532ee255e271670798b9c1cb1e96f162fcb418f8552641b7d3a10f91ea"
+  },
+  "cases": [
+    {
+      "case_id": "grounded_statistics",
+      "checks": {
+        "expected_status_reason_counts": true,
+        "real_main_graph_path": true,
+        "one_final_message": true,
+        "allowed_tools_only": true,
+        "rejected_output_not_completed": true,
+        "real_tool_result": true,
+        "denied_sources_removed": true
+      },
+      "passed": true,
+      "route": {
+        "handler": "knowledge_agent",
+        "skills": [
+          "statistics"
+        ],
+        "rule_id": "evidence_with_tools",
+        "matched": true,
+        "provider": "rules",
+        "policy_version": "research-routing-v2",
+        "confidence": null,
+        "probabilities": null,
+        "fallback_reason": null,
+        "model_version": null
+      },
+      "node_path": [
+        "planner",
+        "maybe_summarize",
+        "retrieve_mem0_memories",
+        "retrieval_agent",
+        "generation_agent",
+        "finalize_response"
+      ],
+      "harness": {
+        "run_id": "e7b119711b3d43b48b2e24286fa357f7",
+        "status": "completed",
+        "model_calls": 2,
+        "tool_calls": 1,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "events": [
+          {
+            "sequence": 0,
+            "kind": "evidence_loaded",
+            "elapsed_ms": 8.987,
+            "documents": 1
+          },
+          {
+            "sequence": 1,
+            "kind": "started",
+            "elapsed_ms": 9.064,
+            "tools": [
+              "analyze_metrics",
+              "compare_metrics"
+            ]
+          },
+          {
+            "sequence": 2,
+            "kind": "model_started",
+            "elapsed_ms": 9.11,
+            "call": 1
+          },
+          {
+            "sequence": 3,
+            "kind": "model_completed",
+            "elapsed_ms": 9.161,
+            "call": 1
+          },
+          {
+            "sequence": 4,
+            "kind": "tool_started",
+            "elapsed_ms": 9.181,
+            "tool": "analyze_metrics",
+            "call": 1
+          },
+          {
+            "sequence": 5,
+            "kind": "tool_completed",
+            "elapsed_ms": 10.235,
+            "tool": "analyze_metrics",
+            "result_sha256": "5473e9bf23d67d955d3188479b3ce6ebf9107ade8f409b528de73e6ccde4aefa",
+            "result_characters": 87
+          },
+          {
+            "sequence": 6,
+            "kind": "model_started",
+            "elapsed_ms": 10.329,
+            "call": 2
+          },
+          {
+            "sequence": 7,
+            "kind": "model_completed",
+            "elapsed_ms": 10.391,
+            "call": 2
+          },
+          {
+            "sequence": 8,
+            "kind": "model_finished",
+            "elapsed_ms": 10.396
+          },
+          {
+            "sequence": 9,
+            "kind": "completed",
+            "elapsed_ms": 10.51
+          }
+        ],
+        "stop_reason": "completed",
+        "limits": {
+          "model_calls": 4,
+          "tool_calls": 6,
+          "deadline_seconds": 90,
+          "tool_timeout_seconds": 15,
+          "input_characters": 60000,
+          "output_characters": 16000
+        }
+      },
+      "observed_mean": 15,
+      "final_answer": "均值 15 ms。[文档1]"
+    },
+    {
+      "case_id": "forbidden_tool",
+      "checks": {
+        "expected_status_reason_counts": true,
+        "real_main_graph_path": true,
+        "one_final_message": true,
+        "allowed_tools_only": true,
+        "rejected_output_not_completed": true,
+        "real_tool_result": true,
+        "denied_sources_removed": true
+      },
+      "passed": true,
+      "route": {
+        "handler": "knowledge_agent",
+        "skills": [
+          "statistics"
+        ],
+        "rule_id": "evidence_with_tools",
+        "matched": true,
+        "provider": "rules",
+        "policy_version": "research-routing-v2",
+        "confidence": null,
+        "probabilities": null,
+        "fallback_reason": null,
+        "model_version": null
+      },
+      "node_path": [
+        "planner",
+        "maybe_summarize",
+        "retrieve_mem0_memories",
+        "retrieval_agent",
+        "generation_agent",
+        "finalize_response"
+      ],
+      "harness": {
+        "run_id": "9e628892b4b24983a01ed4d3b8657506",
+        "status": "failed",
+        "model_calls": 1,
+        "tool_calls": 0,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "events": [
+          {
+            "sequence": 0,
+            "kind": "evidence_loaded",
+            "elapsed_ms": 3.059,
+            "documents": 1
+          },
+          {
+            "sequence": 1,
+            "kind": "started",
+            "elapsed_ms": 3.124,
+            "tools": [
+              "analyze_metrics",
+              "compare_metrics"
+            ]
+          },
+          {
+            "sequence": 2,
+            "kind": "model_started",
+            "elapsed_ms": 3.161,
+            "call": 1
+          },
+          {
+            "sequence": 3,
+            "kind": "model_completed",
+            "elapsed_ms": 3.204,
+            "call": 1
+          },
+          {
+            "sequence": 4,
+            "kind": "rejected",
+            "elapsed_ms": 3.23,
+            "reason": "tool_not_allowed"
+          }
+        ],
+        "stop_reason": "tool_not_allowed",
+        "limits": {
+          "model_calls": 4,
+          "tool_calls": 6,
+          "deadline_seconds": 90,
+          "tool_timeout_seconds": 15,
+          "input_characters": 60000,
+          "output_characters": 16000
+        }
+      },
+      "observed_mean": null,
+      "final_answer": "本次工具调用或结果未通过校验，未返回未经验证的结论。请补充或调整任务后重试。"
+    },
+    {
+      "case_id": "invalid_arguments",
+      "checks": {
+        "expected_status_reason_counts": true,
+        "real_main_graph_path": true,
+        "one_final_message": true,
+        "allowed_tools_only": true,
+        "rejected_output_not_completed": true,
+        "real_tool_result": true,
+        "denied_sources_removed": true
+      },
+      "passed": true,
+      "route": {
+        "handler": "knowledge_agent",
+        "skills": [
+          "statistics"
+        ],
+        "rule_id": "evidence_with_tools",
+        "matched": true,
+        "provider": "rules",
+        "policy_version": "research-routing-v2",
+        "confidence": null,
+        "probabilities": null,
+        "fallback_reason": null,
+        "model_version": null
+      },
+      "node_path": [
+        "planner",
+        "maybe_summarize",
+        "retrieve_mem0_memories",
+        "retrieval_agent",
+        "generation_agent",
+        "finalize_response"
+      ],
+      "harness": {
+        "run_id": "2e5aea7685ea446f96f337eb18eb4c60",
+        "status": "failed",
+        "model_calls": 1,
+        "tool_calls": 0,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "events": [
+          {
+            "sequence": 0,
+            "kind": "evidence_loaded",
+            "elapsed_ms": 2.94,
+            "documents": 1
+          },
+          {
+            "sequence": 1,
+            "kind": "started",
+            "elapsed_ms": 2.998,
+            "tools": [
+              "analyze_metrics",
+              "compare_metrics"
+            ]
+          },
+          {
+            "sequence": 2,
+            "kind": "model_started",
+            "elapsed_ms": 3.035,
+            "call": 1
+          },
+          {
+            "sequence": 3,
+            "kind": "model_completed",
+            "elapsed_ms": 3.081,
+            "call": 1
+          },
+          {
+            "sequence": 4,
+            "kind": "rejected",
+            "elapsed_ms": 3.134,
+            "reason": "invalid_tool_arguments"
+          }
+        ],
+        "stop_reason": "invalid_tool_arguments",
+        "limits": {
+          "model_calls": 4,
+          "tool_calls": 6,
+          "deadline_seconds": 90,
+          "tool_timeout_seconds": 15,
+          "input_characters": 60000,
+          "output_characters": 16000
+        }
+      },
+      "observed_mean": null,
+      "final_answer": "本次工具调用或结果未通过校验，未返回未经验证的结论。请补充或调整任务后重试。"
+    },
+    {
+      "case_id": "citation_out_of_range",
+      "checks": {
+        "expected_status_reason_counts": true,
+        "real_main_graph_path": true,
+        "one_final_message": true,
+        "allowed_tools_only": true,
+        "rejected_output_not_completed": true,
+        "real_tool_result": true,
+        "denied_sources_removed": true
+      },
+      "passed": true,
+      "route": {
+        "handler": "knowledge_agent",
+        "skills": [
+          "statistics"
+        ],
+        "rule_id": "evidence_with_tools",
+        "matched": true,
+        "provider": "rules",
+        "policy_version": "research-routing-v2",
+        "confidence": null,
+        "probabilities": null,
+        "fallback_reason": null,
+        "model_version": null
+      },
+      "node_path": [
+        "planner",
+        "maybe_summarize",
+        "retrieve_mem0_memories",
+        "retrieval_agent",
+        "generation_agent",
+        "finalize_response"
+      ],
+      "harness": {
+        "run_id": "be248723109e4682979f3adb0fa44027",
+        "status": "failed",
+        "model_calls": 2,
+        "tool_calls": 1,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "events": [
+          {
+            "sequence": 0,
+            "kind": "evidence_loaded",
+            "elapsed_ms": 3.02,
+            "documents": 1
+          },
+          {
+            "sequence": 1,
+            "kind": "started",
+            "elapsed_ms": 3.077,
+            "tools": [
+              "analyze_metrics",
+              "compare_metrics"
+            ]
+          },
+          {
+            "sequence": 2,
+            "kind": "model_started",
+            "elapsed_ms": 3.112,
+            "call": 1
+          },
+          {
+            "sequence": 3,
+            "kind": "model_completed",
+            "elapsed_ms": 3.15,
+            "call": 1
+          },
+          {
+            "sequence": 4,
+            "kind": "tool_started",
+            "elapsed_ms": 3.165,
+            "tool": "analyze_metrics",
+            "call": 1
+          },
+          {
+            "sequence": 5,
+            "kind": "tool_completed",
+            "elapsed_ms": 3.848,
+            "tool": "analyze_metrics",
+            "result_sha256": "5473e9bf23d67d955d3188479b3ce6ebf9107ade8f409b528de73e6ccde4aefa",
+            "result_characters": 87
+          },
+          {
+            "sequence": 6,
+            "kind": "model_started",
+            "elapsed_ms": 3.918,
+            "call": 2
+          },
+          {
+            "sequence": 7,
+            "kind": "model_completed",
+            "elapsed_ms": 3.966,
+            "call": 2
+          },
+          {
+            "sequence": 8,
+            "kind": "model_finished",
+            "elapsed_ms": 3.969
+          },
+          {
+            "sequence": 9,
+            "kind": "rejected",
+            "elapsed_ms": 4.012,
+            "reason": "invalid_evidence_citations"
+          }
+        ],
+        "stop_reason": "invalid_evidence_citations",
+        "limits": {
+          "model_calls": 4,
+          "tool_calls": 6,
+          "deadline_seconds": 90,
+          "tool_timeout_seconds": 15,
+          "input_characters": 60000,
+          "output_characters": 16000
+        }
+      },
+      "observed_mean": 15,
+      "final_answer": "本次工具调用或结果未通过校验，未返回未经验证的结论。请补充或调整任务后重试。"
+    },
+    {
+      "case_id": "missing_citation",
+      "checks": {
+        "expected_status_reason_counts": true,
+        "real_main_graph_path": true,
+        "one_final_message": true,
+        "allowed_tools_only": true,
+        "rejected_output_not_completed": true,
+        "real_tool_result": true,
+        "denied_sources_removed": true
+      },
+      "passed": true,
+      "route": {
+        "handler": "knowledge_agent",
+        "skills": [
+          "statistics"
+        ],
+        "rule_id": "evidence_with_tools",
+        "matched": true,
+        "provider": "rules",
+        "policy_version": "research-routing-v2",
+        "confidence": null,
+        "probabilities": null,
+        "fallback_reason": null,
+        "model_version": null
+      },
+      "node_path": [
+        "planner",
+        "maybe_summarize",
+        "retrieve_mem0_memories",
+        "retrieval_agent",
+        "generation_agent",
+        "finalize_response"
+      ],
+      "harness": {
+        "run_id": "57a5af82f61b460d949e44f6d67f2e88",
+        "status": "failed",
+        "model_calls": 2,
+        "tool_calls": 1,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "events": [
+          {
+            "sequence": 0,
+            "kind": "evidence_loaded",
+            "elapsed_ms": 2.914,
+            "documents": 1
+          },
+          {
+            "sequence": 1,
+            "kind": "started",
+            "elapsed_ms": 2.97,
+            "tools": [
+              "analyze_metrics",
+              "compare_metrics"
+            ]
+          },
+          {
+            "sequence": 2,
+            "kind": "model_started",
+            "elapsed_ms": 3.008,
+            "call": 1
+          },
+          {
+            "sequence": 3,
+            "kind": "model_completed",
+            "elapsed_ms": 3.047,
+            "call": 1
+          },
+          {
+            "sequence": 4,
+            "kind": "tool_started",
+            "elapsed_ms": 3.061,
+            "tool": "analyze_metrics",
+            "call": 1
+          },
+          {
+            "sequence": 5,
+            "kind": "tool_completed",
+            "elapsed_ms": 3.673,
+            "tool": "analyze_metrics",
+            "result_sha256": "5473e9bf23d67d955d3188479b3ce6ebf9107ade8f409b528de73e6ccde4aefa",
+            "result_characters": 87
+          },
+          {
+            "sequence": 6,
+            "kind": "model_started",
+            "elapsed_ms": 3.741,
+            "call": 2
+          },
+          {
+            "sequence": 7,
+            "kind": "model_completed",
+            "elapsed_ms": 3.788,
+            "call": 2
+          },
+          {
+            "sequence": 8,
+            "kind": "model_finished",
+            "elapsed_ms": 3.791
+          },
+          {
+            "sequence": 9,
+            "kind": "rejected",
+            "elapsed_ms": 3.822,
+            "reason": "invalid_evidence_citations"
+          }
+        ],
+        "stop_reason": "invalid_evidence_citations",
+        "limits": {
+          "model_calls": 4,
+          "tool_calls": 6,
+          "deadline_seconds": 90,
+          "tool_timeout_seconds": 15,
+          "input_characters": 60000,
+          "output_characters": 16000
+        }
+      },
+      "observed_mean": 15,
+      "final_answer": "本次工具调用或结果未通过校验，未返回未经验证的结论。请补充或调整任务后重试。"
+    },
+    {
+      "case_id": "model_loop_budget",
+      "checks": {
+        "expected_status_reason_counts": true,
+        "real_main_graph_path": true,
+        "one_final_message": true,
+        "allowed_tools_only": true,
+        "rejected_output_not_completed": true,
+        "real_tool_result": true,
+        "denied_sources_removed": true
+      },
+      "passed": true,
+      "route": {
+        "handler": "knowledge_agent",
+        "skills": [
+          "statistics"
+        ],
+        "rule_id": "evidence_with_tools",
+        "matched": true,
+        "provider": "rules",
+        "policy_version": "research-routing-v2",
+        "confidence": null,
+        "probabilities": null,
+        "fallback_reason": null,
+        "model_version": null
+      },
+      "node_path": [
+        "planner",
+        "maybe_summarize",
+        "retrieve_mem0_memories",
+        "retrieval_agent",
+        "generation_agent",
+        "finalize_response"
+      ],
+      "harness": {
+        "run_id": "32501b4e26a546ffa13fc7109e2fc542",
+        "status": "budget_exceeded",
+        "model_calls": 4,
+        "tool_calls": 4,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "events": [
+          {
+            "sequence": 0,
+            "kind": "evidence_loaded",
+            "elapsed_ms": 2.908,
+            "documents": 1
+          },
+          {
+            "sequence": 1,
+            "kind": "started",
+            "elapsed_ms": 2.962,
+            "tools": [
+              "analyze_metrics",
+              "compare_metrics"
+            ]
+          },
+          {
+            "sequence": 2,
+            "kind": "model_started",
+            "elapsed_ms": 2.996,
+            "call": 1
+          },
+          {
+            "sequence": 3,
+            "kind": "model_completed",
+            "elapsed_ms": 3.032,
+            "call": 1
+          },
+          {
+            "sequence": 4,
+            "kind": "tool_started",
+            "elapsed_ms": 3.047,
+            "tool": "analyze_metrics",
+            "call": 1
+          },
+          {
+            "sequence": 5,
+            "kind": "tool_completed",
+            "elapsed_ms": 3.606,
+            "tool": "analyze_metrics",
+            "result_sha256": "5473e9bf23d67d955d3188479b3ce6ebf9107ade8f409b528de73e6ccde4aefa",
+            "result_characters": 87
+          },
+          {
+            "sequence": 6,
+            "kind": "model_started",
+            "elapsed_ms": 3.671,
+            "call": 2
+          },
+          {
+            "sequence": 7,
+            "kind": "model_completed",
+            "elapsed_ms": 3.713,
+            "call": 2
+          },
+          {
+            "sequence": 8,
+            "kind": "tool_started",
+            "elapsed_ms": 3.726,
+            "tool": "analyze_metrics",
+            "call": 2
+          },
+          {
+            "sequence": 9,
+            "kind": "tool_completed",
+            "elapsed_ms": 4.184,
+            "tool": "analyze_metrics",
+            "result_sha256": "5473e9bf23d67d955d3188479b3ce6ebf9107ade8f409b528de73e6ccde4aefa",
+            "result_characters": 87
+          },
+          {
+            "sequence": 10,
+            "kind": "model_started",
+            "elapsed_ms": 4.25,
+            "call": 3
+          },
+          {
+            "sequence": 11,
+            "kind": "model_completed",
+            "elapsed_ms": 4.294,
+            "call": 3
+          },
+          {
+            "sequence": 12,
+            "kind": "tool_started",
+            "elapsed_ms": 4.306,
+            "tool": "analyze_metrics",
+            "call": 3
+          },
+          {
+            "sequence": 13,
+            "kind": "tool_completed",
+            "elapsed_ms": 4.749,
+            "tool": "analyze_metrics",
+            "result_sha256": "5473e9bf23d67d955d3188479b3ce6ebf9107ade8f409b528de73e6ccde4aefa",
+            "result_characters": 87
+          },
+          {
+            "sequence": 14,
+            "kind": "model_started",
+            "elapsed_ms": 4.821,
+            "call": 4
+          },
+          {
+            "sequence": 15,
+            "kind": "model_completed",
+            "elapsed_ms": 4.87,
+            "call": 4
+          },
+          {
+            "sequence": 16,
+            "kind": "tool_started",
+            "elapsed_ms": 4.88,
+            "tool": "analyze_metrics",
+            "call": 4
+          },
+          {
+            "sequence": 17,
+            "kind": "tool_completed",
+            "elapsed_ms": 5.315,
+            "tool": "analyze_metrics",
+            "result_sha256": "5473e9bf23d67d955d3188479b3ce6ebf9107ade8f409b528de73e6ccde4aefa",
+            "result_characters": 87
+          },
+          {
+            "sequence": 18,
+            "kind": "stopped",
+            "elapsed_ms": 5.348,
+            "reason": "model_calls"
+          }
+        ],
+        "stop_reason": "model_calls",
+        "limits": {
+          "model_calls": 4,
+          "tool_calls": 6,
+          "deadline_seconds": 90,
+          "tool_timeout_seconds": 15,
+          "input_characters": 60000,
+          "output_characters": 16000
+        }
+      },
+      "observed_mean": 15,
+      "final_answer": "本次任务已达到执行预算或超时，请缩小输入范围后重试。已有原始材料不会被修改。"
+    },
+    {
+      "case_id": "denied_evidence",
+      "checks": {
+        "expected_status_reason_counts": true,
+        "real_main_graph_path": true,
+        "one_final_message": true,
+        "allowed_tools_only": true,
+        "rejected_output_not_completed": true,
+        "real_tool_result": true,
+        "denied_sources_removed": true
+      },
+      "passed": true,
+      "route": {
+        "handler": "knowledge_agent",
+        "skills": [
+          "statistics"
+        ],
+        "rule_id": "evidence_with_tools",
+        "matched": true,
+        "provider": "rules",
+        "policy_version": "research-routing-v2",
+        "confidence": null,
+        "probabilities": null,
+        "fallback_reason": null,
+        "model_version": null
+      },
+      "node_path": [
+        "planner",
+        "maybe_summarize",
+        "retrieve_mem0_memories",
+        "retrieval_agent",
+        "generation_agent",
+        "finalize_response"
+      ],
+      "harness": {
+        "run_id": "72808e143f1e4ba6b4413c4f60d9d6a1",
+        "status": "no_evidence",
+        "model_calls": 0,
+        "tool_calls": 0,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        },
+        "events": [
+          {
+            "sequence": 0,
+            "kind": "stopped",
+            "elapsed_ms": 0.088,
+            "reason": "no_authorized_evidence"
+          }
+        ],
+        "stop_reason": "no_authorized_evidence",
+        "limits": {
+          "model_calls": 4,
+          "tool_calls": 6,
+          "deadline_seconds": 90,
+          "tool_timeout_seconds": 15,
+          "input_characters": 60000,
+          "output_characters": 16000
+        }
+      },
+      "observed_mean": null,
+      "final_answer": "本轮没有可用的授权证据，无法据此计算或改写。请补充资料或缩小查询范围。"
+    }
+  ]
+}

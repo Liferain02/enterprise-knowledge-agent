@@ -322,6 +322,9 @@ class HybridRetrieverManager:
             仅包含用户有权限访问的文档
         """
         k = k or self.top_k
+        # Publication status applies to BM25 and vector candidates alike,
+        # before ranking/top-k. Legacy chunks without a state remain visible.
+        base_filter = self._merge_filters(self._published_filter(), base_filter)
         candidate_k = k * 2  # 两路各取 2k，留足融合余量
         with self._index_lock:
             self._ensure_bm25_index()
@@ -348,6 +351,8 @@ class HybridRetrieverManager:
                 )
                 authorized_rank = 0
                 for doc, _raw_score in results:
+                    if not self._matches_filter(doc, base_filter):
+                        continue
                     if user and not check_doc_access(doc.metadata or {}, user):
                         continue
                     authorized_rank += 1

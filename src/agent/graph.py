@@ -1,6 +1,6 @@
 """实验室科研智能助手的 LangGraph。
 
-当前架构：摘要 → 可选记忆检索 → Planner 唯一路由 → 普通 RAG / 工具 /
+当前架构：Planner 唯一路由 → 按需摘要/记忆 → 普通 RAG / 工具 /
 通用分支 → deterministic Finalizer。显式 deep 模式进入固定 Researcher → Analyst
 → Reviewer → 最多一次修订 → 既有 Generation Agent。生产图不包含 Supervisor、
 动态 Worker、Send fan-out 或 Reviewer 回环。
@@ -19,6 +19,9 @@ from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 logger = logging.getLogger(__name__)
 
 _background_memory_tasks: set[asyncio.Task] = set()
+
+# Optional context must not prevent the main task from proceeding.
+_AUXILIARY_TIMEOUT_SECONDS = 10.0
 
 from .agents.knowledge import retrieval_agent_node, generation_agent_node
 from .agents.research_team import (
@@ -92,6 +95,7 @@ class AgentState(MessagesState):
     research_team_metrics: dict
     research_trace: dict
     generation_metrics: dict
+    evidence_gate: dict
     answer_format_instructions: str
     max_answer_chars: int
 
@@ -107,7 +111,7 @@ async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
     并从 state 中移除旧消息，只保留最近 N 条原始消息。
     摘要会滚动累积：新摘要 = 旧摘要 + 本批旧消息的总结。
 
-    本节点在每轮对话开始时运行（入口节点），轻量无副作用。
+    本节点在 Planner 之后运行；摘要不可用时保留原消息继续任务。
     当消息数量未超过阈值时，直接透传不做任何操作。
     """
     from config.settings import get_settings
@@ -171,9 +175,15 @@ async def maybe_summarize_node(state: AgentState) -> Dict[str, Any]:
         f"\n\n摘要："
     )
 
-    llm = get_llm()
-    response = await llm.ainvoke(prompt)
-    new_summary = response.content.strip()
+    try:
+        llm = get_llm(max_retries=0)
+        response = await asyncio.wait_for(llm.ainvoke(prompt), timeout=_AUXILIARY_TIMEOUT_SECONDS)
+        if not isinstance(response.content, str) or not response.content.strip():
+            return {}
+        new_summary = response.content.strip()
+    except Exception as exc:
+        logger.warning("摘要不可用，保留原消息继续主流程: %s", type(exc).__name__)
+        return {}
 
     # 用 RemoveMessage 删除旧消息（LangGraph add_messages reducer 支持）
     remove_ops = [RemoveMessage(id=m.id) for m in old_messages if getattr(m, "id", None)]
@@ -202,94 +212,80 @@ async def retrieve_mem0_memories_node(state: AgentState) -> Dict[str, Any]:
 
     settings = get_settings()
 
-    # 检查是否启用 Mem0
+    # Explicitly overwrite checkpoint memory on *every* path, including
+    # disabled/empty/failure. Returning {} would keep yesterday's evidence.
+    empty = {"mem0_memories": ""}
     if not getattr(settings, "mem0_enabled", False):
-        logger.debug("Mem0 未启用，跳过检索")
-        return {}
+        return empty
 
-    # 问候语跳过（无上下文可关联，且节省一次 LLM 检索开销）
-    _GREETING_PATTERNS = (
-        r"^(你好|hi|hello|您好|早上好|下午好|晚上好|在吗|嗨|你好！|你好。|hi！|hi。|hello！|hello。)"
-    )
+    from .agents._utils import get_last_user_message
+    current_query = get_last_user_message(state.get("messages", []))
+    if not current_query:
+        return empty
+    decision = state.get("route_decision") or {}
+    if decision.get("rule_id") == "greeting":
+        return empty
+
+    # Use the planner's existing decision; do not run a second router. Explicit
+    # arithmetic/time/conversion without a history reference needs no Mem0.
     import re
-    messages = state.get("messages", [])
-    last_msg = ""
-    for msg in reversed(messages):
-        msg_type = getattr(msg, "type", None) or type(msg).__name__
-        if msg_type in ("human", "HumanMessage"):
-            last_msg = getattr(msg, "content", "")
-            break
-    if last_msg and re.match(_GREETING_PATTERNS, last_msg.strip(), re.IGNORECASE):
-        logger.debug("Mem0 问候语，跳过检索")
-        return {}
+    skills = set(decision.get("skills", ()))
+    if (decision.get("handler") == "operation_agent"
+            and decision.get("rule_id") == "explicit_operation"
+            and skills and skills <= {"calculator", "datetime", "unit_conversion"}
+            and not re.search(r"之前|上次|刚才|记得|偏好|习惯|继续", current_query)):
+        return empty
 
     try:
         from .memory import get_mem0_manager
-
-        if not messages:
-            logger.debug("Mem0 无消息，跳过检索")
-            return {}
-
-        logger.debug("Mem0 开始检索，消息数量: %d", len(messages))
-        t0 = _time.time()
-
-        # 提取当前用户问题
-        current_query = ""
-        for msg in reversed(messages):
-            msg_type = getattr(msg, "type", None) or type(msg).__name__
-            if msg_type in ("human", "HumanMessage"):
-                current_query = getattr(msg, "content", "")
-                break
-
-        if not current_query:
-            return {}
-
-        # 获取用户ID和会话ID
-        session_id = state.get("session_id", "default")
-        user_id = state.get("user_id", "default_user")
-
-        # 只做一次用户级检索。session_id 已作为记忆元数据保存，跨会话
-        # 查询会自然覆盖当前会话，没必要为同一个问题重复向量检索两次。
         mem0_manager = get_mem0_manager()
-        memories = await mem0_manager.search(
+        memories = await asyncio.wait_for(mem0_manager.search(
             query=current_query,
-            user_id=user_id,
+            user_id=state.get("user_id", "default_user"),
             session_id=None,
             limit=5,
-        )
-
+        ), timeout=_AUXILIARY_TIMEOUT_SECONDS)
         if not memories:
-            logger.debug("Mem0 无相关记忆，耗时 %.2fs", _time.time()-t0)
-            return {}
-
+            return empty
         memories, memory_stats = mem0_manager.filter_memories_for_current_user(
-            memories,
-            state.get("user_context"),
-        )
+            memories, state.get("user_context"))
         if not memories:
-            logger.debug(
-                "Mem0 候选全部被 Recall Gate 过滤: %s",
-                memory_stats,
-            )
-            return {}
+            return empty
+        formatted = mem0_manager.format_memories_for_context(
+            memories, max_chars=getattr(settings, "mem0_max_context_chars", 500))
+        logger.debug("Mem0 允许注入 %d 条记忆，统计=%s", len(memories), memory_stats)
+        return {"mem0_memories": formatted}
+    except Exception as exc:
+        logger.warning("Mem0 不可用，清空本轮记忆继续主流程: %s", type(exc).__name__)
+        return empty
 
-        # 格式化记忆
-        formatted_memories = mem0_manager.format_memories_for_context(
-            memories,
-            max_chars=getattr(settings, "mem0_max_context_chars", 500)
-        )
 
-        logger.debug(
-            "Mem0 允许注入 %d 条记忆，耗时 %.2fs，统计=%s",
-            len(memories), _time.time()-t0, memory_stats,
-        )
+# ==================== Evidence Gate ====================
 
-        return {"mem0_memories": formatted_memories}
 
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Mem0 记忆检索失败: {e}")
-        return {}
+async def evidence_gate_node(state: AgentState) -> Dict[str, Any]:
+    """Deterministic gate before generation or retrieval-grounded tools."""
+    decision = state.get("retrieval_decision", "")
+    docs = list(state.get("retrieved_docs", []) or [])
+    user = state.get("user_context")
+    if user is not None:
+        from src.rag.retrieval.acl_filter import check_doc_access
+        docs = [doc for doc in docs if check_doc_access(getattr(doc, "metadata", {}) or {}, user)]
+    docs = [doc for doc in docs if (getattr(doc, "metadata", {}) or {}).get("ingestion_state", "active") == "active"]
+    if decision == "error":
+        return {"evidence_gate": {"status": "blocked", "reason": "retrieval_failed", "document_count": 0},
+                "retrieved_docs": [], "final_answer": "资料检索暂时不可用，本次未生成基于知识库的答案。请稍后重试。",
+                "used_agent": "knowledge_agent", "sources": "", "generation_metrics": {"llm_calls": 0}}
+    if decision == "no_results" or not docs:
+        return {"evidence_gate": {"status": "blocked", "reason": "no_authorized_evidence", "document_count": 0},
+                "retrieved_docs": [], "final_answer": "抱歉，知识库中没有找到关于您所提问题的相关文档。建议补充资料或调整问题表述。",
+                "used_agent": "knowledge_agent", "sources": "", "generation_metrics": {"llm_calls": 0}}
+    return {"evidence_gate": {"status": "approved", "reason": "authorized_evidence", "document_count": len(docs)},
+            "retrieved_docs": docs}
+
+
+def route_after_evidence_gate(state: AgentState) -> str:
+    return "finalize_response" if state.get("evidence_gate", {}).get("status") == "blocked" else "generation_agent"
 
 
 # ==================== 图创建函数 ====================
@@ -301,7 +297,7 @@ def create_multi_agent_graph() -> StateGraph:
     工作流程：
     1. 接收用户消息
     2. Planner 作为唯一入口路由器
-       - 普通知识任务（含一般对比/列举）→ ACL 感知的 Retrieval → Generation
+       - 普通知识任务 → ACL Retrieval → Generation（有工具需求时复用有界 Harness）
        - 复杂科研综合任务 → Researcher → Analyst → Reviewer → 最多一次修订
        - 工具任务 → Operation Agent
        - 通用对话 → General Agent
@@ -309,15 +305,16 @@ def create_multi_agent_graph() -> StateGraph:
     """
     workflow = StateGraph(AgentState)
 
-    # 语义摘要节点（入口）
+    # 可选的语义摘要节点（路由之后）
     workflow.add_node("maybe_summarize", maybe_summarize_node)
 
     # Mem0 记忆检索节点
     workflow.add_node("retrieve_mem0_memories", retrieve_mem0_memories_node)
 
     # Worker Agent 节点
-    workflow.add_node("retrieval_agent", retrieval_agent_node)   # 新增：检索阶段
-    workflow.add_node("generation_agent", generation_agent_node) # 新增：生成阶段
+    workflow.add_node("retrieval_agent", retrieval_agent_node)   # 检索阶段
+    workflow.add_node("evidence_gate", evidence_gate_node)       # 证据门
+    workflow.add_node("generation_agent", generation_agent_node)  # 生成阶段
     workflow.add_node("operation_agent", operation_agent_node)
     workflow.add_node("general_agent", general_agent_node)
     workflow.add_node("research_agent", research_agent_node)
@@ -330,14 +327,14 @@ def create_multi_agent_graph() -> StateGraph:
     # 确定性请求路由节点
     workflow.add_node("planner", planner_node)
 
-    # 入口：maybe_summarize → retrieve_mem0_memories → planner
-    workflow.set_entry_point("maybe_summarize")
+    # Decide once before optional context so cheap tool tasks can skip Mem0.
+    workflow.set_entry_point("planner")
+    workflow.add_edge("planner", "maybe_summarize")
     workflow.add_edge("maybe_summarize", "retrieve_mem0_memories")
-    workflow.add_edge("retrieve_mem0_memories", "planner")
 
     # Planner 是唯一入口路由器，不再叠加 Supervisor 或多 Agent Send 分支。
     workflow.add_conditional_edges(
-        "planner",
+        "retrieve_mem0_memories",
         route_from_planner,
         {
             "retrieval_agent": "retrieval_agent",
@@ -347,8 +344,12 @@ def create_multi_agent_graph() -> StateGraph:
         }
     )
 
-    # retrieval_agent → generation_agent（检索完成后生成）
-    workflow.add_edge("retrieval_agent", "generation_agent")
+    # Retrieval must pass the deterministic evidence gate before generation/tools.
+    workflow.add_edge("retrieval_agent", "evidence_gate")
+    workflow.add_conditional_edges(
+        "evidence_gate", route_after_evidence_gate,
+        {"generation_agent": "generation_agent", "finalize_response": "finalize_response"},
+    )
     workflow.add_edge("research_agent", "analyst_agent")
     workflow.add_edge("analyst_agent", "reviewer_agent")
     workflow.add_conditional_edges(
@@ -576,6 +577,9 @@ def _extract_result(result: Dict[str, Any]) -> Dict[str, Any]:
         "research_trace": result.get("research_trace", {}),
         "research_team_metrics": result.get("research_team_metrics", {}),
         "generation_metrics": result.get("generation_metrics", {}),
+        "route_decision": result.get("route_decision", {}),
+        "harness_report": result.get("harness_report", {}),
+        "retrieval_metrics": result.get("retrieval_metrics", {}),
     }
 
 
